@@ -1,12 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {
-  getUsers,
-  createUser,
-  getUser,
-  updateUser,
-  deleteUser,
-} = require('../controllers/userController');
+const { getUsers, createUser, getUser, updateUser, deleteUser } = require('../controllers/user');
 const validateRequest = require('../config/middleware/validateRequest');
 const {
   createUser: createUserSchema,

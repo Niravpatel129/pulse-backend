@@ -35,9 +35,7 @@ class AuthService {
 
   async register(userData) {
     try {
-      console.log('🚀 userData:', userData);
       const user = await User.create(userData);
-      console.log('🚀 user:', user);
       const token = this.generateToken(user._id);
 
       return {
