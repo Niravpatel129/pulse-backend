@@ -13,6 +13,8 @@ export const createProject = async (req, res, next) => {
       status = 'planning',
     } = req.body;
 
+    const userId = req.user._id;
+
     const projectData = {
       name,
       projectType,
@@ -20,6 +22,7 @@ export const createProject = async (req, res, next) => {
       stage,
       description,
       status,
+      createdBy: userId,
     };
 
     const project = await Project.create(projectData);
