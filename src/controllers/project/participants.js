@@ -3,7 +3,12 @@ import Project from '../../models/Project.js';
 export const addParticipant = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { userId } = req.body;
+    const { participantId } = req.body;
+    const userId = participantId;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
 
     const project = await Project.findById(projectId);
     if (!project) {
