@@ -1,6 +1,6 @@
-import Project from '../../models/project.js';
-import { ApiError } from '../../utils/ApiError.js';
-import { ApiResponse } from '../../utils/ApiResponse.js';
+import Project from '../../models/Project.js';
+import ApiError from '../../utils/apiError.js';
+import ApiResponse from '../../utils/apiResponse.js';
 
 // Get all projects
 export const getProjects = async (req, res, next) => {

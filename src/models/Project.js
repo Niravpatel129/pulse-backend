@@ -7,27 +7,33 @@ const projectSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    description: {
+    projectType: {
       type: String,
       required: true,
+    },
+    leadSource: {
+      type: String,
+    },
+    stage: {
+      type: String,
+      required: true,
+      default: 'Initial Contact',
     },
     status: {
       type: String,
       required: true,
-      enum: ['planning', 'in-progress', 'completed', 'on-hold'],
       default: 'planning',
-    },
-    startDate: {
-      type: Date,
-      required: true,
-    },
-    endDate: {
-      type: Date,
     },
     isActive: {
       type: Boolean,
       default: true,
     },
+    participants: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
   },
   {
     timestamps: true,
