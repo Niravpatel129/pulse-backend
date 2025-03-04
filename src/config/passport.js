@@ -32,19 +32,33 @@ passport.use(
 
 // JWT Strategy
 const options = {
-  jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+  jwtFromRequest: ExtractJwt.fromExtractors([
+    ExtractJwt.fromAuthHeaderAsBearerToken(),
+    (req) => {
+      let token = null;
+      if (req && req.cookies) {
+        token = req.cookies.jwt;
+        console.log('Passport - Extracted token from cookie:', token);
+      }
+      return token;
+    },
+  ]),
   secretOrKey: process.env.JWT_SECRET || 'your-secret-key',
 };
 
 passport.use(
   new JwtStrategy(options, async (payload, done) => {
     try {
+      console.log('Passport - JWT Payload:', payload);
       const user = await User.findById(payload.id);
       if (user) {
+        console.log('Passport - Found user:', user._id);
         return done(null, user);
       }
+      console.log('Passport - No user found for payload:', payload);
       return done(null, false);
     } catch (error) {
+      console.log('Passport - Error finding user:', error);
       return done(error, false);
     }
   }),

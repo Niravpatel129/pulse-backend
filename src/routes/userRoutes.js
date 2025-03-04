@@ -4,13 +4,11 @@ import {
   createUser as createUserSchema,
   updateUser as updateUserSchema,
 } from '../config/validators/userValidators.js';
-import {
-  createUser,
-  deleteUser,
-  getUser,
-  getUsers,
-  updateUser,
-} from '../controllers/user/index.js';
+import { createUser } from '../controllers/user/createUserController.js';
+import { deleteUser } from '../controllers/user/deleteUserController.js';
+import { getUser } from '../controllers/user/getUserController.js';
+import { getUsers } from '../controllers/user/getUsersController.js';
+import { updateUser } from '../controllers/user/updateUserController.js';
 
 const router = express.Router();
 

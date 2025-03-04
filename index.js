@@ -4,6 +4,7 @@ import express from 'express';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import authRoutes from './src/routes/authRoutes.js';
+import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import AppError from './src/utils/AppError.js';
 
@@ -49,7 +50,7 @@ app.use(passport.initialize());
 // Mount routers
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
-
+app.use('/api/projects', projectRoutes);
 // Handle 404 routes
 app.use((req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
