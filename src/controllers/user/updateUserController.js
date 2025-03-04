@@ -1,10 +1,10 @@
-const userService = require('../../services/userService');
-const AppError = require('../../utils/AppError');
+import userService from '../../services/userService.js';
+import AppError from '../../utils/AppError.js';
 
 // @desc    Update user
 // @route   PUT /api/users/:id
 // @access  Public
-exports.updateUser = async (req, res, next) => {
+export const updateUser = async (req, res, next) => {
   try {
     const user = await userService.updateUser(req.params.id, req.body);
     if (!user) {

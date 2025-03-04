@@ -1,11 +1,18 @@
-const express = require('express');
+import express from 'express';
+import validateRequest from '../config/middleware/validateRequest.js';
+import {
+  createUser as createUserSchema,
+  updateUser as updateUserSchema,
+} from '../config/validators/userValidators.js';
+import {
+  createUser,
+  deleteUser,
+  getUser,
+  getUsers,
+  updateUser,
+} from '../controllers/user/index.js';
+
 const router = express.Router();
-const { getUsers, createUser, getUser, updateUser, deleteUser } = require('../controllers/user');
-const validateRequest = require('../config/middleware/validateRequest');
-const {
-  createUser: createUserSchema,
-  updateUser: updateUserSchema,
-} = require('../config/validators/userValidators');
 
 router.route('/').get(getUsers).post(validateRequest(createUserSchema), createUser);
 
@@ -15,4 +22,4 @@ router
   .put(validateRequest(updateUserSchema), updateUser)
   .delete(deleteUser);
 
-module.exports = router;
+export default router;

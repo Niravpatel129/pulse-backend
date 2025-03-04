@@ -1,9 +1,20 @@
-const passport = require('passport');
-const AppError = require('../../utils/AppError');
+import passport from 'passport';
+import AppError from '../../utils/AppError.js';
 
-exports.protect = passport.authenticate('jwt', { session: false });
+export const protect = (req, res, next) => {
+  passport.authenticate('jwt', { session: false }, (err, user, info) => {
+    if (err) {
+      return next(err);
+    }
+    if (!user) {
+      return next(new AppError('Not authorized to access this route', 401));
+    }
+    req.user = user;
+    next();
+  })(req, res, next);
+};
 
-exports.restrictTo = (...roles) => {
+export const restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return next(new AppError('You do not have permission to perform this action', 403));

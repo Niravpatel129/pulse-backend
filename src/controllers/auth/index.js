@@ -1,9 +1,5 @@
-const { register } = require('./registerController');
-const { login } = require('./loginController');
-const { getMe } = require('./getMeController');
+import { getMe } from './getMeController.js';
+import { login } from './loginController.js';
+import { register } from './registerController.js';
 
-module.exports = {
-  register,
-  login,
-  getMe,
-};
+export { getMe, login, register };

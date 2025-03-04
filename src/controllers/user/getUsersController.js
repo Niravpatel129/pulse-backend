@@ -1,10 +1,10 @@
-const userService = require('../../services/userService');
-const AppError = require('../../utils/AppError');
+import userService from '../../services/userService.js';
+import AppError from '../../utils/AppError.js';
 
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Public
-exports.getUsers = async (req, res, next) => {
+export const getUsers = async (req, res, next) => {
   try {
     const users = await userService.getAllUsers();
     res.status(200).json({

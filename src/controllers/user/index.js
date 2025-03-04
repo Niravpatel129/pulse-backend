@@ -1,13 +1,7 @@
-const { getUsers } = require('./getUsersController');
-const { createUser } = require('./createUserController');
-const { getUser } = require('./getUserController');
-const { updateUser } = require('./updateUserController');
-const { deleteUser } = require('./deleteUserController');
+import { createUser } from './createUserController.js';
+import { deleteUser } from './deleteUserController.js';
+import { getUser } from './getUserController.js';
+import { getUsers } from './getUsersController.js';
+import { updateUser } from './updateUserController.js';
 
-module.exports = {
-  getUsers,
-  createUser,
-  getUser,
-  updateUser,
-  deleteUser,
-};
+export { createUser, deleteUser, getUser, getUsers, updateUser };

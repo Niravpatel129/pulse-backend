@@ -1,9 +1,7 @@
-const passport = require('passport');
-const LocalStrategy = require('passport-local').Strategy;
-const JwtStrategy = require('passport-jwt').Strategy;
-const ExtractJwt = require('passport-jwt').ExtractJwt;
-const User = require('../models/User');
-const bcrypt = require('bcryptjs');
+import passport from 'passport';
+import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
+import { Strategy as LocalStrategy } from 'passport-local';
+import User from '../models/User.js';
 
 // Local Strategy
 passport.use(
@@ -14,14 +12,14 @@ passport.use(
     },
     async (email, password, done) => {
       try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email }).select('+password');
         if (!user) {
-          return done(null, false, { message: 'Incorrect email.' });
+          return done(null, false, { message: 'Invalid credentials' });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
+        const isMatch = await user.matchPassword(password);
         if (!isMatch) {
-          return done(null, false, { message: 'Incorrect password.' });
+          return done(null, false, { message: 'Invalid credentials' });
         }
 
         return done(null, user);
@@ -39,9 +37,9 @@ const options = {
 };
 
 passport.use(
-  new JwtStrategy(options, async (jwt_payload, done) => {
+  new JwtStrategy(options, async (payload, done) => {
     try {
-      const user = await User.findById(jwt_payload.id);
+      const user = await User.findById(payload.id);
       if (user) {
         return done(null, user);
       }
@@ -52,4 +50,4 @@ passport.use(
   }),
 );
 
-module.exports = passport;
+export default passport;

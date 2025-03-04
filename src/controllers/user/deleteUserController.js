@@ -1,10 +1,10 @@
-const userService = require('../../services/userService');
-const AppError = require('../../utils/AppError');
+import userService from '../../services/userService.js';
+import AppError from '../../utils/AppError.js';
 
 // @desc    Delete user
 // @route   DELETE /api/users/:id
 // @access  Public
-exports.deleteUser = async (req, res, next) => {
+export const deleteUser = async (req, res, next) => {
   try {
     const user = await userService.deleteUser(req.params.id);
     if (!user) {

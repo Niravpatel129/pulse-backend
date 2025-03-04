@@ -1,10 +1,10 @@
-const userService = require('../../services/userService');
-const AppError = require('../../utils/AppError');
+import userService from '../../services/userService.js';
+import AppError from '../../utils/AppError.js';
 
 // @desc    Create a user
 // @route   POST /api/users
 // @access  Public
-exports.createUser = async (req, res, next) => {
+export const createUser = async (req, res, next) => {
   try {
     const user = await userService.createUser(req.body);
     res.status(201).json({

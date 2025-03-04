@@ -1,12 +1,12 @@
-const User = require('../models/User');
+import User from '../models/User.js';
 
 class UserService {
   async getAllUsers() {
-    return await User.find().select('-password');
+    return await User.find();
   }
 
   async getUserById(id) {
-    return await User.findById(id).select('-password');
+    return await User.findById(id);
   }
 
   async createUser(userData) {
@@ -17,7 +17,7 @@ class UserService {
     return await User.findByIdAndUpdate(id, userData, {
       new: true,
       runValidators: true,
-    }).select('-password');
+    });
   }
 
   async deleteUser(id) {
@@ -25,4 +25,4 @@ class UserService {
   }
 }
 
-module.exports = new UserService();
+export default new UserService();

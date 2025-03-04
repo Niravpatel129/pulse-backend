@@ -1,10 +1,10 @@
-const authService = require('../../services/authService');
-const AppError = require('../../utils/AppError');
+import authService from '../../services/authService.js';
+import AppError from '../../utils/AppError.js';
 
 // @desc    Register user
 // @route   POST /api/auth/register
 // @access  Public
-exports.register = async (req, res, next) => {
+export const register = async (req, res, next) => {
   try {
     const result = await authService.register(req.body);
     res.status(201).json({

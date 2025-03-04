@@ -1,9 +1,9 @@
-const AppError = require('../../utils/AppError');
+import AppError from '../../utils/AppError.js';
 
 // @desc    Get current user
 // @route   GET /api/auth/me
 // @access  Private
-exports.getMe = async (req, res, next) => {
+export const getMe = async (req, res, next) => {
   try {
     res.status(200).json({
       status: 'success',
