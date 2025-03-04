@@ -34,18 +34,25 @@ class AuthService {
   }
 
   async register(userData) {
-    const user = await User.create(userData);
-    const token = this.generateToken(user._id);
+    try {
+      console.log('🚀 userData:', userData);
+      const user = await User.create(userData);
+      console.log('🚀 user:', user);
+      const token = this.generateToken(user._id);
 
-    return {
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    };
+      return {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      };
+    } catch (error) {
+      console.log('🚀 error:', error);
+      throw error;
+    }
   }
 }
 

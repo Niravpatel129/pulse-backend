@@ -12,7 +12,15 @@ exports.register = async (req, res, next) => {
       data: result,
     });
   } catch (error) {
-    next(new AppError(error.message, 400));
+    if (error.code === 11000) {
+      // Handle duplicate key error
+      const field = Object.keys(error.keyValue)[0];
+      const value = error.keyValue[field];
+      const message = `Duplicate field value: ${field}. Please use another value!`;
+      next(new AppError(message, 400));
+    } else {
+      next(new AppError(error.message, 400));
+    }
   }
 };
 
