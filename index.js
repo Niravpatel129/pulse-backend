@@ -19,7 +19,29 @@ const app = express();
 app.use(express.json());
 
 // Enable CORS
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        /^https?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
+        /^http:\/\/localhost(?::\d+)?$/,
+        /^https:\/\/toastify-.*\.vercel\.app$/,
+      ];
+      if (
+        !origin ||
+        allowedOrigins.some((pattern) =>
+          typeof pattern === 'string' ? pattern === origin : pattern.test(origin),
+        )
+      ) {
+        callback(null, true);
+      } else {
+        console.log(`Blocked by CORS: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  }),
+);
 
 // Passport middleware
 app.use(passport.initialize());
