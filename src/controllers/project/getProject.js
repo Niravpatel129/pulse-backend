@@ -5,23 +5,31 @@ import ApiResponse from '../../utils/apiResponse.js';
 export const getProject = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const workspaceId = req.workspace._id;
-    const userId = req.user._id;
 
     const project = await Project.findOne({
       _id: id,
-      workspace: workspaceId,
-      isActive: true,
-      $or: [{ createdBy: userId }, { 'participants.user': userId }],
     })
       .populate('createdBy', 'name email')
-      .populate('participants.user', 'name email');
+      .populate('participants.participant', 'name email')
+      .populate('manager', 'name email');
 
     if (!project) {
       throw new ApiError(404, 'Project not found');
     }
 
-    return res.status(200).json(new ApiResponse(200, project));
+    // Transform the project data to spread participants
+    const formattedProject = project.toObject();
+
+    // Spread the participant data to avoid nested participant structure
+    if (formattedProject.participants && formattedProject.participants.length > 0) {
+      formattedProject.participants = formattedProject.participants.map((item) => ({
+        ...item,
+        ...item.participant,
+        participant: undefined, // Remove the nested participant object
+      }));
+    }
+
+    return res.status(200).json(new ApiResponse(200, formattedProject));
   } catch (error) {
     next(error);
   }

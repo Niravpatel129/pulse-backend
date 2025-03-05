@@ -17,10 +17,13 @@ const projectSchema = new mongoose.Schema(
     },
     leadSource: {
       type: String,
+      enum: ['Instagram', 'Referral', 'Website', 'Social Media', 'Other'],
+      default: 'Other',
     },
     stage: {
       type: String,
       required: true,
+      enum: ['Initial Contact', 'Follow Up', 'Proposal', 'Negotiation', 'Closed'],
       default: 'Initial Contact',
     },
     status: {
@@ -39,14 +42,55 @@ const projectSchema = new mongoose.Schema(
     },
     participants: [
       {
-        user: {
+        participant: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: 'User',
+          ref: 'Participant',
+          required: true,
         },
         role: {
           type: String,
           required: true,
-          default: 'participant',
+          default: 'client',
+        },
+      },
+    ],
+    tasks: [
+      {
+        title: {
+          type: String,
+          required: true,
+        },
+        description: {
+          type: String,
+        },
+        dueDate: {
+          type: Date,
+        },
+        status: {
+          type: String,
+          enum: ['pending', 'in-progress', 'completed'],
+          default: 'pending',
+        },
+        assignedTo: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+      },
+    ],
+    notes: [
+      {
+        content: {
+          type: String,
+          required: true,
+        },
+        createdBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
         },
       },
     ],

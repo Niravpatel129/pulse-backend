@@ -3,11 +3,10 @@ import Project from '../../models/Project.js';
 export const addParticipant = async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { participantId } = req.body;
-    const userId = participantId;
+    const { participantId, role = 'client' } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
+    if (!participantId) {
+      return res.status(400).json({ message: 'Participant ID is required' });
     }
 
     const project = await Project.findById(projectId);
@@ -15,13 +14,21 @@ export const addParticipant = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // Check if user is already a participant
-    if (project.participants.includes(userId)) {
-      return res.status(400).json({ message: 'User is already a participant in this project' });
+    // Check if participant is already in the project
+    const existingParticipant = project.participants.find(
+      (p) => p.participant.toString() === participantId,
+    );
+
+    if (existingParticipant) {
+      return res.status(400).json({ message: 'Participant is already in this project' });
     }
 
-    // Add user to participants array
-    project.participants.push(userId);
+    // Add participant with role to participants array
+    project.participants.push({
+      participant: participantId,
+      role,
+    });
+
     await project.save();
 
     res.status(200).json({ message: 'Participant added successfully', project });
