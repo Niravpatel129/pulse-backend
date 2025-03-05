@@ -4,6 +4,8 @@ import { deleteProject } from '../../controllers/project/deleteProject.js';
 import { getProject } from '../../controllers/project/getProject.js';
 import { getProjects } from '../../controllers/project/getProjects.js';
 import { addParticipant } from '../../controllers/project/participants.js';
+import { patchProject } from '../../controllers/project/patchProject.js';
+import { updateProject } from '../../controllers/project/updateProject.js';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 
@@ -19,7 +21,12 @@ router.get('/', getProjects);
 
 router.get('/:id', getProject);
 
+router.put('/:id', updateProject);
+
+router.patch('/:id', patchProject);
+
 router.delete('/:id', deleteProject);
+
 router.post('/:projectId/participants', addParticipant);
 
 export default router;

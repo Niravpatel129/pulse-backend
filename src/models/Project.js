@@ -22,13 +22,11 @@ const projectSchema = new mongoose.Schema(
     },
     leadSource: {
       type: String,
-      enum: ['Instagram', 'Referral', 'Website', 'Social Media', 'Other'],
       default: 'Other',
     },
     stage: {
       type: String,
       required: true,
-      enum: ['Initial Contact', 'Follow Up', 'Proposal', 'Negotiation', 'Closed'],
       default: 'Initial Contact',
     },
     status: {
