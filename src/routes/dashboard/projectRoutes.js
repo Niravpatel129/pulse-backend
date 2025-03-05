@@ -3,10 +3,13 @@ import { createProject } from '../../controllers/project/createProject.js';
 import { getProject, getProjects } from '../../controllers/project/index.js';
 import { addParticipant } from '../../controllers/project/participants.js';
 import { authenticate } from '../../middleware/auth.js';
+import { extractWorkspace } from '../../middleware/workspace.js';
 
 const router = express.Router();
 
+// All routes require authentication and workspace context
 router.use(authenticate);
+router.use(extractWorkspace);
 
 router.post('/', createProject);
 

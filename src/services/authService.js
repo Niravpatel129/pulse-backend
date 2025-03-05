@@ -4,7 +4,7 @@ import AppError from '../utils/AppError.js';
 
 class AuthService {
   generateToken(id) {
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key');
+    return jwt.sign({ id, userId: id }, process.env.JWT_SECRET || 'your-secret-key');
   }
 
   async login(email, password) {
@@ -23,7 +23,7 @@ class AuthService {
     return {
       token,
       user: {
-        id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -39,7 +39,7 @@ class AuthService {
       return {
         token,
         user: {
-          id: user._id,
+          _id: user._id,
           name: user.name,
           email: user.email,
           role: user.role,

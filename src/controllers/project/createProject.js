@@ -13,7 +13,8 @@ export const createProject = async (req, res, next) => {
       status = 'planning',
     } = req.body;
 
-    const userId = req.user._id;
+    const userId = req.user.userId;
+    const workspaceId = req.workspace._id;
 
     const projectData = {
       name,
@@ -22,6 +23,7 @@ export const createProject = async (req, res, next) => {
       stage,
       description,
       status,
+      workspace: workspaceId,
       createdBy: userId,
     };
 

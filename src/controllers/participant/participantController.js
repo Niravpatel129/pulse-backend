@@ -1,10 +1,17 @@
 import Participant from '../../models/Participant.js';
+import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
 // Get all participants
 export const getAllParticipants = async (req, res, next) => {
   try {
-    const participants = await Participant.find().sort({ createdAt: -1 });
+    // Check if workspace exists in request
+    if (!req.workspace || !req.workspace._id) {
+      throw new ApiError(400, 'Workspace not found in request');
+    }
+
+    const workspaceId = req.workspace._id;
+    const participants = await Participant.find({ workspace: workspaceId }).sort({ createdAt: -1 });
     return res.status(200).json(new ApiResponse(200, participants));
   } catch (error) {
     next(error);
@@ -14,10 +21,24 @@ export const getAllParticipants = async (req, res, next) => {
 // Get single participant
 export const getParticipant = async (req, res, next) => {
   try {
-    const participant = await Participant.findById(req.params.id);
-    if (!participant) {
-      return res.status(404).json(new ApiResponse(404, null, 'Participant not found'));
+    const { id } = req.params;
+
+    // Check if workspace exists in request
+    if (!req.workspace || !req.workspace._id) {
+      throw new ApiError(400, 'Workspace not found in request');
     }
+
+    const workspaceId = req.workspace._id;
+
+    const participant = await Participant.findOne({
+      _id: id,
+      workspace: workspaceId,
+    });
+
+    if (!participant) {
+      throw new ApiError(404, 'Participant not found');
+    }
+
     return res.status(200).json(new ApiResponse(200, participant));
   } catch (error) {
     next(error);
@@ -30,6 +51,14 @@ export const createParticipant = async (req, res, next) => {
     const { name, email, phone, website, jobTitle, mailingAddress, comments, customFields } =
       req.body;
 
+    // Check if workspace exists in request
+    if (!req.workspace || !req.workspace._id) {
+      throw new ApiError(400, 'Workspace not found in request');
+    }
+
+    const userId = req.user.userId;
+    const workspaceId = req.workspace._id;
+
     const participantData = {
       name,
       email,
@@ -39,6 +68,8 @@ export const createParticipant = async (req, res, next) => {
       mailingAddress,
       comments,
       customFields,
+      workspace: workspaceId,
+      createdBy: userId,
     };
 
     const participant = await Participant.create(participantData);
@@ -51,12 +82,24 @@ export const createParticipant = async (req, res, next) => {
 // Update participant
 export const updateParticipant = async (req, res, next) => {
   try {
+    const { id } = req.params;
+
+    // Check if workspace exists in request
+    if (!req.workspace || !req.workspace._id) {
+      throw new ApiError(400, 'Workspace not found in request');
+    }
+
+    const workspaceId = req.workspace._id;
     const { name, email, phone, website, jobTitle, mailingAddress, comments, customFields } =
       req.body;
 
-    const participant = await Participant.findById(req.params.id);
+    const participant = await Participant.findOne({
+      _id: id,
+      workspace: workspaceId,
+    });
+
     if (!participant) {
-      return res.status(404).json(new ApiResponse(404, null, 'Participant not found'));
+      throw new ApiError(404, 'Participant not found');
     }
 
     participant.name = name || participant.name;
@@ -78,9 +121,22 @@ export const updateParticipant = async (req, res, next) => {
 // Delete participant
 export const deleteParticipant = async (req, res, next) => {
   try {
-    const participant = await Participant.findById(req.params.id);
+    const { id } = req.params;
+
+    // Check if workspace exists in request
+    if (!req.workspace || !req.workspace._id) {
+      throw new ApiError(400, 'Workspace not found in request');
+    }
+
+    const workspaceId = req.workspace._id;
+
+    const participant = await Participant.findOne({
+      _id: id,
+      workspace: workspaceId,
+    });
+
     if (!participant) {
-      return res.status(404).json(new ApiResponse(404, null, 'Participant not found'));
+      throw new ApiError(404, 'Participant not found');
     }
 
     await participant.deleteOne();

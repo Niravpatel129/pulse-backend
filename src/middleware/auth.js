@@ -11,6 +11,7 @@ export const authenticate = (req, res, next) => {
   try {
     // Get token from authorization header
     const authHeader = req.headers.authorization;
+    console.log('🚀 authHeader:', authHeader);
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return next(new AppError('Not authorized, no token provided', 401));
@@ -20,6 +21,7 @@ export const authenticate = (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('🚀 decoded:', decoded);
 
     // Add user from payload to request object
     req.user = decoded;
