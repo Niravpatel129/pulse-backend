@@ -6,6 +6,7 @@ import Meeting from '../../models/Meeting.js';
 // @access  Private
 export const deleteMeeting = asyncHandler(async (req, res) => {
   const meeting = await Meeting.findById(req.params.id);
+  const userId = req.user.userId;
 
   if (!meeting) {
     res.status(404);
@@ -13,7 +14,8 @@ export const deleteMeeting = asyncHandler(async (req, res) => {
   }
 
   // Check if user is the organizer
-  if (meeting.organizer.toString() !== req.user._id.toString()) {
+  // Add null checks to prevent "Cannot read properties of undefined" error
+  if (!meeting.organizer || !userId || meeting.organizer.toString() !== userId) {
     res.status(401);
     throw new Error('Not authorized to delete this meeting');
   }
