@@ -8,7 +8,6 @@ const meetingSchema = new mongoose.Schema(
     },
     description: {
       type: String,
-      required: [true, 'Please add a meeting description'],
     },
     date: {
       type: Date,
@@ -50,21 +49,14 @@ const meetingSchema = new mongoose.Schema(
     },
     participants: [
       {
-        user: {
+        participant: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: 'User',
-        },
-        email: {
-          type: String,
-          required: true,
-        },
-        name: {
-          type: String,
-          required: true,
+          ref: 'Participant',
         },
         type: {
           type: String,
-          enum: ['client', 'team'],
+          default: 'client',
+          enum: ['client', 'team', 'external'],
           required: true,
         },
       },

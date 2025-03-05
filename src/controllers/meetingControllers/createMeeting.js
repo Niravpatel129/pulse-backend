@@ -1,6 +1,5 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import Meeting from '../../models/Meeting.js';
-import User from '../../models/User.js';
 
 // @desc    Create new meeting
 // @route   POST /api/meetings
@@ -15,23 +14,25 @@ export const createMeeting = asyncHandler(async (req, res) => {
     endTime,
     location,
     status,
-    teamMembers,
+    participants,
     type,
     typeDetails,
   } = meeting;
+  const userId = req.user.userId;
 
-  // Fetch team members' full details from the database
-  const teamMemberDetails = await User.find({
-    _id: { $in: teamMembers },
-  }).select('name email');
+  if (!userId) return res.status(401).json({ message: 'No user found' });
 
-  // Transform team members into participants format with full details
-  const participants = teamMemberDetails.map((member) => ({
-    user: member._id,
-    email: member.email,
-    name: member.name,
-    type: 'team',
-  }));
+  // Format participants properly - ensure each participant is an object with participant field
+  const formattedParticipants = Array.isArray(participants)
+    ? participants.map((participant) => {
+        // If participant is already an object with the correct structure, use it
+        if (participant && typeof participant === 'object' && participant.participant) {
+          return participant;
+        }
+        // Otherwise, create the proper structure
+        return { participant: participant };
+      })
+    : [];
 
   const newMeeting = await Meeting.create({
     title,
@@ -44,14 +45,14 @@ export const createMeeting = asyncHandler(async (req, res) => {
     type,
     typeDetails,
     project: projectId,
-    organizer: req.user._id,
-    participants,
+    organizer: userId,
+    participants: formattedParticipants,
   });
 
   // Populate the response with user details
   const populatedMeeting = await Meeting.findById(newMeeting._id)
     .populate('organizer', 'name email')
-    .populate('participants.user', 'name email')
+    .populate('participants.participant', 'name email') // Changed from participants.user to participants.participant
     .populate('project', 'name');
 
   res.status(201).json(populatedMeeting);

@@ -1,5 +1,4 @@
 import express from 'express';
-import { protect } from '../config/middleware/auth.js';
 import {
   createMeeting,
   deleteMeeting,
@@ -8,11 +7,13 @@ import {
   updateMeeting,
   updateMeetingStatus,
 } from '../controllers/meetingControllers/index.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // All routes are protected and require authentication
-router.use(protect);
+// router.use(protect);
+router.use(authenticate);
 
 router.route('/').get(getMeetings).post(createMeeting);
 
