@@ -9,6 +9,7 @@ export const getProjects = async (req, res, next) => {
       workspace: workspaceId,
     })
       .populate('createdBy', 'name email')
+      .populate('manager', 'name email')
       .populate('participants.participant', 'name email');
 
     return res.status(200).json(new ApiResponse(200, projects));
