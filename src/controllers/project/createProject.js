@@ -20,6 +20,7 @@ export const createProject = async (req, res, next) => {
       name,
       projectType,
       leadSource,
+      manager: userId,
       stage,
       description,
       status,

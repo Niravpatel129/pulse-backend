@@ -22,6 +22,8 @@ export const getProjects = async (req, res, next) => {
     }
 
     const projects = await Project.find(query)
+      .populate('createdBy', 'name email')
+      .populate('participants.user', 'name email')
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
@@ -43,7 +45,9 @@ export const getProjects = async (req, res, next) => {
 // Get single project
 export const getProject = async (req, res, next) => {
   try {
-    const project = await Project.findById(req.params.id);
+    const project = await Project.findById(req.params.id)
+      .populate('createdBy', 'name email')
+      .populate('participants.user', 'name email');
 
     if (!project) {
       throw new ApiError(404, 'Project not found');
@@ -62,7 +66,9 @@ export const updateProject = async (req, res, next) => {
       req.params.id,
       { $set: req.body },
       { new: true, runValidators: true },
-    );
+    )
+      .populate('createdBy', 'name email')
+      .populate('participants.user', 'name email');
 
     if (!project) {
       throw new ApiError(404, 'Project not found');

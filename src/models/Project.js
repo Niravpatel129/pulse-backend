@@ -11,6 +11,10 @@ const projectSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    manager: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
     leadSource: {
       type: String,
     },
