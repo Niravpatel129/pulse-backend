@@ -7,6 +7,11 @@ const projectSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    workspace: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: true,
+    },
     projectType: {
       type: String,
       required: true,
