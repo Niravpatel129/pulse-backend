@@ -5,6 +5,7 @@ import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import authRoutes from './src/routes/authRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
+import elementRoutes from './src/routes/elementRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
@@ -59,6 +60,8 @@ app.use('/api/participants', participantRoutes);
 app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/modules', moduleRoutes);
+app.use('/api/elements', elementRoutes);
+
 // Handle 404 routes
 app.use((req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
