@@ -1,5 +1,6 @@
 import express from 'express';
 import createFileElement from '../controllers/elements/createFileElement.js';
+import deleteFileElement from '../controllers/elements/deleteFileElement.js';
 import getElementsByModuleId from '../controllers/elements/getElementsByModuleId.js';
 import { authenticate } from '../middleware/auth.js';
 import upload from '../middleware/upload.js';
@@ -16,5 +17,6 @@ router.use(extractWorkspace);
 // Element routes
 router.post('/modules/file-element/:moduleId', upload('files'), createFileElement);
 router.get('/modules/:moduleId', getElementsByModuleId);
+router.delete('/:id', deleteFileElement);
 
 export default router;

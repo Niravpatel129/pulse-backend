@@ -19,6 +19,10 @@ const fileSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  version: {
+    type: Number,
+    default: 1,
+  },
   storagePath: {
     type: String,
     required: true, // Firebase storage path for deletion

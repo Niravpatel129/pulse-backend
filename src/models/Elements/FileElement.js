@@ -6,6 +6,10 @@ const fileElementSchema = new mongoose.Schema({
     ref: 'Module',
     required: true,
   },
+  elementType: {
+    type: String,
+    default: 'file',
+  },
   name: {
     type: String,
     required: true,
@@ -24,8 +28,30 @@ const fileElementSchema = new mongoose.Schema({
   },
   files: [
     {
-      type: String,
-      required: true,
+      url: {
+        type: String,
+        required: true,
+      },
+      originalName: {
+        type: String,
+        required: true,
+      },
+      mimeType: {
+        type: String,
+        required: true,
+      },
+      size: {
+        type: Number,
+        required: true,
+      },
+      storagePath: {
+        type: String,
+        required: true,
+      },
+      uploadedAt: {
+        type: Date,
+        default: Date.now,
+      },
     },
   ],
   createdAt: {

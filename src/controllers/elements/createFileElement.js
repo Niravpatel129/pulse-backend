@@ -35,14 +35,22 @@ const createFileElement = async (req, res) => {
         return fileUtils.createFileObject(file, firebaseUrl, storagePath);
       }),
     );
+    console.log('🚀 uploadedFiles:', uploadedFiles);
 
     // Create the file element with required fields
     const element = new FileElement({
-      name: req.body.name,
-      description: req.body.description,
+      name: req.body.name || 'Untitled File',
+      description: req.body.description || '',
       moduleId,
       addedBy: req.user.userId,
-      files: uploadedFiles.map((file) => file.firebaseUrl),
+      files: uploadedFiles.map((firebaseFile) => ({
+        url: firebaseFile.firebaseUrl,
+        originalName: firebaseFile.name || '', // Ensure originalName is provided
+        mimeType: firebaseFile.contentType || 'application/octet-stream', // Ensure mimeType is provided
+        size: firebaseFile.size,
+        storagePath: firebaseFile.storagePath,
+        uploadedAt: new Date(),
+      })),
       createdAt: new Date(),
     });
 
