@@ -38,6 +38,8 @@ const createFileElement = async (req, res) => {
 
     // Create the file element with required fields
     const element = new FileElement({
+      name: req.body.name,
+      description: req.body.description,
       moduleId,
       addedBy: req.user.userId,
       files: uploadedFiles.map((file) => file.firebaseUrl),

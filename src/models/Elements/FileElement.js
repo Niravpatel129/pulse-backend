@@ -6,6 +6,17 @@ const fileElementSchema = new mongoose.Schema({
     ref: 'Module',
     required: true,
   },
+  name: {
+    type: String,
+    required: true,
+  },
+  description: {
+    type: String,
+  },
+  uploadedAt: {
+    type: Date,
+    default: Date.now,
+  },
   addedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
