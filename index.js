@@ -7,6 +7,7 @@ import authRoutes from './src/routes/authRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
+import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
@@ -61,6 +62,7 @@ app.use('/api/workspaces', workspaceRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/modules', moduleRoutes);
 app.use('/api/elements', elementRoutes);
+app.use('/api/module-emails', moduleEmailRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
