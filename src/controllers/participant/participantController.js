@@ -48,9 +48,6 @@ export const getParticipant = async (req, res, next) => {
 // Create participant
 export const createParticipant = async (req, res, next) => {
   try {
-    const { name, email, phone, website, jobTitle, mailingAddress, comments, customFields } =
-      req.body;
-
     // Check if workspace exists in request
     if (!req.workspace || !req.workspace._id) {
       throw new ApiError(400, 'Workspace not found in request');
@@ -59,21 +56,24 @@ export const createParticipant = async (req, res, next) => {
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
 
+    // Extract data from the new payload structure
+    const { participant, projectId } = req.body;
+    const { name, email, phone, dateAdded, notes, customFields } = participant;
+
     const participantData = {
       name,
       email,
       phone,
-      website,
-      jobTitle,
-      mailingAddress,
-      comments,
+      dateAdded,
+      comments: notes, // Map notes to comments field
       customFields,
       workspace: workspaceId,
       createdBy: userId,
+      project: projectId, // Add project reference if provided
     };
 
-    const participant = await Participant.create(participantData);
-    return res.status(201).json(new ApiResponse(201, participant));
+    const newParticipant = await Participant.create(participantData);
+    return res.status(201).json(new ApiResponse(201, newParticipant));
   } catch (error) {
     next(error);
   }
