@@ -1,7 +1,10 @@
 import express from 'express';
+import { addCollaborator } from '../../controllers/project/addCollaborator.js';
 import { createProject } from '../../controllers/project/createProject.js';
+import { deleteCollaborator } from '../../controllers/project/deleteCollaborator.js';
 import { deleteParticipant } from '../../controllers/project/deleteParticipant.js';
 import { deleteProject } from '../../controllers/project/deleteProject.js';
+import { getCollaborators } from '../../controllers/project/getCollaborators.js';
 import { getParticipants } from '../../controllers/project/getParticipants.js';
 import { getProject } from '../../controllers/project/getProject.js';
 import { getProjects } from '../../controllers/project/getProjects.js';
@@ -13,7 +16,6 @@ import { extractWorkspace } from '../../middleware/workspace.js';
 
 const router = express.Router();
 
-// All routes require authentication and workspace context
 router.use(authenticate);
 router.use(extractWorkspace);
 
@@ -34,5 +36,11 @@ router.post('/:projectId/participants', addParticipant);
 router.get('/:projectId/participants', getParticipants);
 
 router.delete('/:projectId/participants/:participantId', deleteParticipant);
+
+router.post('/:projectId/collaborator', addCollaborator);
+
+router.get('/:projectId/collaborators', getCollaborators);
+
+router.delete('/:projectId/collaborators/:collaboratorId', deleteCollaborator);
 
 export default router;

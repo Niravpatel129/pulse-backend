@@ -43,6 +43,56 @@ const projectSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    collaborators: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        id: {
+          type: String,
+        },
+        name: {
+          type: String,
+          trim: true,
+        },
+        role: {
+          type: String,
+          required: true,
+        },
+        email: {
+          type: String,
+          trim: true,
+        },
+        phone: {
+          type: String,
+        },
+        mailingAddress: {
+          type: String,
+        },
+        companyName: {
+          type: String,
+        },
+        companyType: {
+          type: String,
+        },
+        companyWebsite: {
+          type: String,
+        },
+        status: {
+          type: String,
+          default: 'pending',
+        },
+        permissions: {
+          type: Array,
+          default: [],
+        },
+        dateAdded: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     participants: [
       {
         participant: {
