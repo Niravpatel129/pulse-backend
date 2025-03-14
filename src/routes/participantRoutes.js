@@ -1,4 +1,5 @@
 import express from 'express';
+import { addExistingParticipantToProject } from '../controllers/participant/addExistingParticipantToProject.js';
 import {
   createParticipant,
   deleteParticipant,
@@ -20,6 +21,8 @@ router.get('/', getAllParticipants);
 
 // Get single participant
 router.get('/:id', getParticipant);
+
+router.post('/existing', addExistingParticipantToProject);
 
 // Create participant
 router.post('/', createParticipant);
