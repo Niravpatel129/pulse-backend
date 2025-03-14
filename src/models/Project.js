@@ -50,11 +50,6 @@ const projectSchema = new mongoose.Schema(
           ref: 'Participant',
           required: true,
         },
-        role: {
-          type: String,
-          required: true,
-          default: 'client',
-        },
       },
     ],
     tasks: [

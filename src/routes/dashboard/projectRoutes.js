@@ -1,6 +1,8 @@
 import express from 'express';
 import { createProject } from '../../controllers/project/createProject.js';
+import { deleteParticipant } from '../../controllers/project/deleteParticipant.js';
 import { deleteProject } from '../../controllers/project/deleteProject.js';
+import { getParticipants } from '../../controllers/project/getParticipants.js';
 import { getProject } from '../../controllers/project/getProject.js';
 import { getProjects } from '../../controllers/project/getProjects.js';
 import { addParticipant } from '../../controllers/project/participants.js';
@@ -28,5 +30,9 @@ router.patch('/:id', patchProject);
 router.delete('/:id', deleteProject);
 
 router.post('/:projectId/participants', addParticipant);
+
+router.get('/:projectId/participants', getParticipants);
+
+router.delete('/:projectId/participants/:participantId', deleteParticipant);
 
 export default router;
