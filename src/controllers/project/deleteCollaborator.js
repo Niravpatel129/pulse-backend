@@ -5,6 +5,7 @@ import ApiResponse from '../../utils/apiResponse.js';
 export const deleteCollaborator = async (req, res, next) => {
   try {
     const { projectId, collaboratorId } = req.params;
+    console.log('🚀 collaboratorId:', collaboratorId);
 
     if (!projectId || !collaboratorId) {
       throw new ApiError(400, 'Project ID and Collaborator ID are required');
@@ -24,6 +25,7 @@ export const deleteCollaborator = async (req, res, next) => {
     const collaboratorIndex = project.collaborators.findIndex(
       (c) => c._id.toString() === collaboratorId,
     );
+    console.log('🚀 project:', project);
 
     if (collaboratorIndex === -1) {
       throw new ApiError(404, 'Collaborator not found in this project');

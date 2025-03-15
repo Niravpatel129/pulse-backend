@@ -102,6 +102,14 @@ const projectSchema = new mongoose.Schema(
         },
       },
     ],
+    team: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+      },
+    ],
     tasks: [
       {
         title: {

@@ -1,13 +1,16 @@
 import express from 'express';
 import { addCollaborator } from '../../controllers/project/addCollaborator.js';
+import { addTeamMember } from '../../controllers/project/addTeamMember.js';
 import { createProject } from '../../controllers/project/createProject.js';
 import { deleteCollaborator } from '../../controllers/project/deleteCollaborator.js';
 import { deleteParticipant } from '../../controllers/project/deleteParticipant.js';
 import { deleteProject } from '../../controllers/project/deleteProject.js';
+import { deleteTeamMember } from '../../controllers/project/deleteTeamMember.js';
 import { getCollaborators } from '../../controllers/project/getCollaborators.js';
 import { getParticipants } from '../../controllers/project/getParticipants.js';
 import { getProject } from '../../controllers/project/getProject.js';
 import { getProjects } from '../../controllers/project/getProjects.js';
+import { getTeam } from '../../controllers/project/getTeam.js';
 import { addParticipant } from '../../controllers/project/participants.js';
 import { patchProject } from '../../controllers/project/patchProject.js';
 import { updateProject } from '../../controllers/project/updateProject.js';
@@ -42,5 +45,11 @@ router.post('/:projectId/collaborator', addCollaborator);
 router.get('/:projectId/collaborators', getCollaborators);
 
 router.delete('/:projectId/collaborators/:collaboratorId', deleteCollaborator);
+
+router.get('/:projectId/team', getTeam);
+
+router.post('/:projectId/team', addTeamMember);
+
+router.delete('/:projectId/team/:teamMemberId', deleteTeamMember);
 
 export default router;
