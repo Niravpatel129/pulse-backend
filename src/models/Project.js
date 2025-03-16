@@ -43,6 +43,20 @@ const projectSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    sharing: {
+      accessType: {
+        type: String,
+        default: 'email_restricted',
+      },
+      passwordProtected: {
+        type: Boolean,
+        default: false,
+      },
+      password: {
+        type: String,
+        select: false,
+      },
+    },
     collaborators: [
       {
         user: {

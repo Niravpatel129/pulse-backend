@@ -17,3 +17,13 @@ export const updateProjectSchema = Joi.object({
   endDate: Joi.date().min(Joi.ref('startDate')).allow(null),
   isActive: Joi.boolean(),
 });
+
+export const projectSharingSchema = Joi.object({
+  accessType: Joi.string().valid('public', 'signup_required', 'email_restricted').required(),
+  passwordProtected: Joi.boolean().required(),
+  password: Joi.when('passwordProtected', {
+    is: true,
+    then: Joi.string().required().min(1),
+    otherwise: Joi.string().allow(null, ''),
+  }),
+});
