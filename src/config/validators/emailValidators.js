@@ -26,18 +26,7 @@ export const sendEmail = Joi.object({
     'string.empty': 'Project ID is required',
     'any.required': 'Project ID is required',
   }),
-  attachments: Joi.array()
-    .items(
-      Joi.object({
-        name: Joi.string().required(),
-        size: Joi.number().required(),
-        type: Joi.string().required(),
-        url: Joi.string().required(),
-      }),
-    )
-    .allow(null, '')
-    .default([]),
-});
+}).unknown(true); // Allow unknown fields to pass through
 
 export const saveTemplate = Joi.object({
   name: Joi.string().required().messages({

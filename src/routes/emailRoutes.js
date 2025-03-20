@@ -25,7 +25,7 @@ router.use(authenticate);
 router.use(extractWorkspace);
 
 // Email sending routes
-router.post('/send', upload.none(), validateRequest(sendEmailSchema), sendEmail);
+router.post('/send', upload.array('attachments'), validateRequest(sendEmailSchema), sendEmail);
 
 // Email history routes
 router.get('/history/:projectId', getEmailHistory);

@@ -1,5 +1,15 @@
 import mongoose from 'mongoose';
 
+const attachmentSchema = new mongoose.Schema(
+  {
+    name: String,
+    size: Number,
+    type: String,
+    url: String,
+  },
+  { _id: false },
+);
+
 const emailSchema = new mongoose.Schema(
   {
     projectId: {
@@ -31,14 +41,7 @@ const emailSchema = new mongoose.Schema(
         type: String,
       },
     ],
-    attachments: [
-      {
-        name: String,
-        size: Number,
-        type: String,
-        url: String,
-      },
-    ],
+    attachments: [attachmentSchema],
     sentBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

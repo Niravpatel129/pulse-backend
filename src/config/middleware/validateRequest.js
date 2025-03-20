@@ -3,18 +3,18 @@ const validateRequest = (schema) => {
     console.log('Raw request body:', req.body);
     console.log('Content-Type:', req.headers['content-type']);
 
+    // Create a copy of the request body for validation
+    const validationBody = { ...req.body };
+
     // Parse form data arrays if they exist
-    if (req.body && typeof req.body === 'object') {
-      Object.keys(req.body).forEach((key) => {
-        console.log(`Processing key: ${key}, value:`, req.body[key]);
+    if (validationBody && typeof validationBody === 'object') {
+      Object.keys(validationBody).forEach((key) => {
         try {
           // Try to parse if it looks like a JSON string
-          if (typeof req.body[key] === 'string') {
-            // Remove any whitespace and try to parse
-            const trimmedValue = req.body[key].trim();
+          if (typeof validationBody[key] === 'string') {
+            const trimmedValue = validationBody[key].trim();
             if (trimmedValue.startsWith('[') || trimmedValue.startsWith('{')) {
-              req.body[key] = JSON.parse(trimmedValue);
-              console.log(`Parsed ${key}:`, req.body[key]);
+              validationBody[key] = JSON.parse(trimmedValue);
             }
           }
         } catch (e) {
@@ -24,13 +24,20 @@ const validateRequest = (schema) => {
       });
     }
 
-    const { error } = schema.validate(req.body);
+    // Remove file-related fields from validation if this is a multipart request
+    if (req.headers['content-type']?.includes('multipart/form-data')) {
+      delete validationBody.attachments;
+    }
+
+    // Validate the processed body
+    const { error } = schema.validate(validationBody);
     if (error) {
       return res.status(400).json({
         message: 'Validation Error',
         errors: error.details.map((detail) => detail.message),
       });
     }
+
     next();
   };
 };
