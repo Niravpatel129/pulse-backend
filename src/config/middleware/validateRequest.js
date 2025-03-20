@@ -24,8 +24,6 @@ const validateRequest = (schema) => {
       });
     }
 
-    console.log('Final request body:', req.body);
-
     const { error } = schema.validate(req.body);
     if (error) {
       return res.status(400).json({
