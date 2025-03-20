@@ -1,12 +1,14 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import multer from 'multer';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
+import emailRoutes from './src/routes/emailRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
@@ -25,6 +27,10 @@ const app = express();
 
 // Body parser
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Configure multer for handling multipart/form-data
+const upload = multer({ dest: 'uploads/' });
 
 // Enable CORS
 app.use(
@@ -65,6 +71,7 @@ app.use('/api/modules', moduleRoutes);
 app.use('/api/elements', elementRoutes);
 app.use('/api/module-emails', moduleEmailRoutes);
 app.use('/api/activities', activityRoutes);
+app.use('/api/emails', emailRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {

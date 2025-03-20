@@ -12,6 +12,11 @@ const activitySchema = new mongoose.Schema(
       ref: 'Workspace',
       required: true,
     },
+    project: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Project',
+      required: true,
+    },
     type: {
       type: String,
       required: true,

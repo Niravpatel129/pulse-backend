@@ -14,6 +14,6 @@ router.use(extractWorkspace);
 router.post('/', createActivity);
 
 // Get recent activities for a user
-router.get('/recent/:userId', getRecentActivities);
+router.get('/recent/:projectId', getRecentActivities);
 
 export default router;

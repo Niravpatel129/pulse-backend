@@ -12,7 +12,6 @@ import { getParticipants } from '../../controllers/project/getParticipants.js';
 import { getProject } from '../../controllers/project/getProject.js';
 import { getProjects } from '../../controllers/project/getProjects.js';
 import { getTeam } from '../../controllers/project/getTeam.js';
-import { setupProjectActivities } from '../../controllers/project/middleware/projectSetup.js';
 import { addParticipant } from '../../controllers/project/participants.js';
 import { patchProject } from '../../controllers/project/patchProject.js';
 import { getProjectSharing, updateProjectSharing } from '../../controllers/project/sharing.js';
@@ -35,7 +34,7 @@ router.put(
 );
 
 // Project CRUD routes
-router.post('/', setupProjectActivities, createProject);
+router.post('/', createProject);
 router.get('/', getProjects);
 router.get('/:id', getProject);
 router.put('/:id', updateProject);

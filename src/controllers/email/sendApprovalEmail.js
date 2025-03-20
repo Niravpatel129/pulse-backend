@@ -54,7 +54,6 @@ export const sendApprovalEmail = async (req, res) => {
         message: 'Workspace not found',
       });
     }
-    console.log('🚀 workspace:', workspace);
 
     // Find client members in the workspace
     const clientMembers = workspace.members.filter(

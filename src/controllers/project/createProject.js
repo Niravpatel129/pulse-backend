@@ -1,5 +1,6 @@
 import Project from '../../models/Project.js';
 import ApiResponse from '../../utils/apiResponse.js';
+import { setupProjectActivities } from './middleware/projectSetup.js';
 
 // Create project
 export const createProject = async (req, res, next) => {
@@ -29,6 +30,8 @@ export const createProject = async (req, res, next) => {
     };
 
     const project = await Project.create(projectData);
+    await setupProjectActivities(project, userId, workspaceId);
+
     return res.status(201).json(new ApiResponse(201, project));
   } catch (error) {
     next(error);

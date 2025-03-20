@@ -14,7 +14,6 @@ export const getWorkspaceMembers = async (req, res, next) => {
     console.log('🚀 Request user:', req.user);
 
     const workspaceId = req.workspace._id;
-    console.log('🚀 workspaceId:', workspaceId);
 
     // Find the workspace and populate user data for each member
     console.log('🚀 Finding workspace in database...');
@@ -24,7 +23,6 @@ export const getWorkspaceMembers = async (req, res, next) => {
       console.log('❌ Workspace not found for ID:', workspaceId);
       throw new ApiError(404, 'Workspace not found or you do not have access');
     }
-    console.log('🚀 workspace:', workspace);
     console.log('🚀 Total members found:', workspace.members.length);
     console.log(
       '🚀 Member roles distribution:',

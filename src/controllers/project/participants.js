@@ -6,10 +6,10 @@ import ApiResponse from '../../utils/apiResponse.js';
 export const addParticipant = async (req, res, next) => {
   try {
     const { projectId } = req.params;
-    const { participant } = req.body;
+    const { participant, participantId } = req.body;
 
-    if (!participant) {
-      throw new ApiError(400, 'Participant data is required');
+    if (!participant && !participantId) {
+      throw new ApiError(400, 'Either participant data or participantId is required');
     }
 
     const project = await Project.findById(projectId);
@@ -25,50 +25,65 @@ export const addParticipant = async (req, res, next) => {
     const workspaceId = req.workspace._id;
     const userId = req.user.userId;
 
-    // Check if a participant with the same email already exists
-    let existingParticipant = null;
-    if (participant.email) {
-      existingParticipant = await Participant.findOne({
-        email: participant.email,
+    let finalParticipantId;
+
+    // If participantId is provided, use it directly
+    if (participantId) {
+      // Verify the participant exists
+      const existingParticipant = await Participant.findOne({
+        _id: participantId,
         workspace: workspaceId,
       });
+
+      if (!existingParticipant) {
+        throw new ApiError(404, 'Participant not found');
+      }
+
+      finalParticipantId = participantId;
+    } else {
+      // Check if a participant with the same email already exists
+      let existingParticipant = null;
+      if (participant.email) {
+        existingParticipant = await Participant.findOne({
+          email: participant.email,
+          workspace: workspaceId,
+        });
+      }
+
+      if (existingParticipant) {
+        finalParticipantId = existingParticipant._id;
+      } else {
+        // Create a new participant
+        const { name, email, phone, dateAdded, notes, customFields } = participant;
+
+        const newParticipant = await Participant.create({
+          name,
+          email,
+          phone,
+          dateAdded,
+          comments: notes,
+          customFields,
+          workspace: workspaceId,
+          createdBy: userId,
+          project: projectId,
+        });
+
+        finalParticipantId = newParticipant._id;
+      }
     }
 
-    let participantId;
+    // Check if participant is already in the project
+    const alreadyInProject = project.participants.find(
+      (p) => p.participant.toString() === finalParticipantId.toString(),
+    );
 
-    if (existingParticipant) {
-      participantId = existingParticipant._id;
-
-      // Check if participant is already in the project
-      const alreadyInProject = project.participants.find(
-        (p) => p.participant.toString() === participantId.toString(),
-      );
-
-      if (alreadyInProject) {
-        throw new ApiError(400, 'Participant is already in this project');
-      }
-    } else {
-      // Create a new participant
-      const { name, email, phone, dateAdded, notes, customFields } = participant;
-
-      const newParticipant = await Participant.create({
-        name,
-        email,
-        phone,
-        dateAdded,
-        comments: notes,
-        customFields,
-        workspace: workspaceId,
-        createdBy: userId,
-        project: projectId,
-      });
-
-      participantId = newParticipant._id;
+    if (alreadyInProject) {
+      throw new ApiError(400, 'Participant is already in this project');
     }
 
     // Add participant to project
     project.participants.push({
-      participant: participantId,
+      participant: finalParticipantId,
     });
 
     await project.save();

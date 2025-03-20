@@ -2,55 +2,70 @@ import Activity from '../../../models/Activity.js';
 import ApiError from '../../../utils/apiError.js';
 
 /**
- * Middleware to set up initial activities for a newly created project
- * This middleware should be used after a project is successfully created
+ * Utility function to set up initial activities for a newly created project
+ * This function should be called after a project is successfully created
  */
-export const setupProjectActivities = async (req, res, next) => {
+export const setupProjectActivities = async (project, userId, workspaceId) => {
   try {
-    // Check if project exists in response
-    const project = res.locals.project || (res.statusCode === 201 && res.locals.data);
+    console.log('🔍 setupProjectActivities: Starting execution');
 
     if (!project || !project._id) {
-      return next();
+      console.log('⚠️ No valid project provided, skipping activity creation');
+      return;
     }
 
-    const userId = req.user._id || req.user.userId;
-    const workspaceId = req.workspace._id;
+    console.log(
+      '🔍 Project:',
+      project ? { id: project._id, name: project.name } : 'No project found',
+    );
+    console.log('🔍 User ID:', userId);
+    console.log('🔍 Workspace ID:', workspaceId);
 
     // Create project creation activity
-    await Activity.create({
+    console.log('🔍 Creating project creation activity');
+    const creationActivity = await Activity.create({
       user: userId,
       workspace: workspaceId,
       type: 'project',
-      action: 'create',
+      action: 'created',
       description: `Project "${project.name}" was created`,
       entityId: project._id,
       entityType: 'Project',
+      project: project._id,
       metadata: {
         projectType: project.projectType,
         stage: project.stage,
         status: project.status,
       },
     });
+    console.log('✅ Project creation activity created:', creationActivity._id);
 
     // Create project manager assignment activity if manager exists
     if (project.manager) {
-      await Activity.create({
+      console.log('🔍 Creating project manager assignment activity');
+      const assignmentActivity = await Activity.create({
         user: userId,
         workspace: workspaceId,
         type: 'project',
-        action: 'assign',
+        action: 'assigned',
         description: `Project manager was assigned to "${project.name}"`,
         entityId: project._id,
         entityType: 'Project',
+        project: project._id,
         metadata: {
           managerId: project.manager,
         },
       });
+      console.log('✅ Project manager assignment activity created:', assignmentActivity._id);
+    } else {
+      console.log('ℹ️ No project manager assigned, skipping assignment activity');
     }
 
-    return next();
+    console.log('🔍 setupProjectActivities: Execution completed successfully');
+    return { success: true };
   } catch (error) {
-    return next(new ApiError(500, 'Error setting up project activities'));
+    console.error('❌ Error in setupProjectActivities:', error);
+    console.error('❌ Error stack:', error.stack);
+    throw new ApiError(500, 'Error setting up project activities');
   }
 };
