@@ -4,6 +4,7 @@ import express from 'express';
 import multer from 'multer';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
+import { initializeEmailListener } from './src/init/emailListener.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
@@ -22,6 +23,9 @@ dotenv.config();
 
 // Connect to database
 connectDB();
+
+// Initialize email listener
+initializeEmailListener();
 
 const app = express();
 
