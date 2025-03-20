@@ -9,7 +9,7 @@ export const sendEmail = async (req, res) => {
 
     // Send email using the email service
     const emailResult = await emailService.sendEmail({
-      from: req.user.email,
+      from: process.env.EMAIL_FROM,
       to: to.join(', '),
       cc: cc?.join(', '),
       bcc: bcc?.join(', '),
