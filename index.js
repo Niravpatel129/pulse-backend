@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
+import activityRoutes from './src/routes/activityRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
@@ -63,6 +64,7 @@ app.use('/api/meetings', meetingRoutes);
 app.use('/api/modules', moduleRoutes);
 app.use('/api/elements', elementRoutes);
 app.use('/api/module-emails', moduleEmailRoutes);
+app.use('/api/activities', activityRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
