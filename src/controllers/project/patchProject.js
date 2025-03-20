@@ -16,6 +16,8 @@ export const patchProject = async (req, res, next) => {
       'description',
       'status',
       'manager',
+      'projectType',
+      'projectStatus',
     ];
 
     allowedFields.forEach((field) => {
