@@ -24,6 +24,17 @@ class EmailListenerService {
   }
 
   /**
+   * Helper to normalize message IDs by ensuring they have angle brackets
+   */
+  normalizeMessageId(messageId) {
+    if (!messageId) return null;
+    messageId = messageId.trim();
+    if (!messageId.startsWith('<')) messageId = '<' + messageId;
+    if (!messageId.endsWith('>')) messageId = messageId + '>';
+    return messageId;
+  }
+
+  /**
    * Extract tracking data from email address
    * Format: support+p{projectId}t{threadId}u{userId}@domain.com
    */
@@ -67,7 +78,25 @@ class EmailListenerService {
 
     for (const header of importantHeaders) {
       if (mail.headers[header]) {
-        headers.set(header, mail.headers[header]);
+        // Normalize message IDs in headers
+        if (['message-id', 'in-reply-to'].includes(header)) {
+          headers.set(header, this.normalizeMessageId(mail.headers[header]));
+        } else if (header === 'references') {
+          // Handle references as an array
+          let refs = mail.headers[header];
+          if (typeof refs === 'string') {
+            refs = refs.split(/\s+/);
+          }
+          // Ensure refs is an array and normalize each reference
+          headers.set(
+            header,
+            Array.isArray(refs)
+              ? refs.map((ref) => this.normalizeMessageId(ref)).filter(Boolean)
+              : [],
+          );
+        } else {
+          headers.set(header, mail.headers[header]);
+        }
       }
     }
 
@@ -134,14 +163,24 @@ class EmailListenerService {
 
     // Try using In-Reply-To header
     if (mail.headers['in-reply-to']) {
-      console.log('Trying in-reply-to match:', mail.headers['in-reply-to']);
+      const normalizedInReplyTo = this.normalizeMessageId(mail.headers['in-reply-to']);
+      console.log('Trying in-reply-to match:', normalizedInReplyTo);
 
       const byReplyTo = await Email.findOne({
-        messageId: mail.headers['in-reply-to'],
+        messageId: normalizedInReplyTo,
       });
       if (byReplyTo) {
         console.log('Found by in-reply-to');
         return byReplyTo;
+      }
+
+      // Try without angle brackets as fallback
+      const byReplyToNoAngles = await Email.findOne({
+        messageId: normalizedInReplyTo.replace(/[<>]/g, ''),
+      });
+      if (byReplyToNoAngles) {
+        console.log('Found by in-reply-to without angles');
+        return byReplyToNoAngles;
       }
     }
 
@@ -152,10 +191,13 @@ class EmailListenerService {
           ? mail.headers.references.split(/\s+/)
           : mail.headers.references;
 
-      console.log('Trying references match:', references);
+      const normalizedRefs = references.map((ref) => this.normalizeMessageId(ref));
+      console.log('Trying references match:', normalizedRefs);
 
       const byReference = await Email.findOne({
-        messageId: { $in: references },
+        messageId: {
+          $in: [...normalizedRefs, ...normalizedRefs.map((ref) => ref.replace(/[<>]/g, ''))],
+        },
       });
       if (byReference) {
         console.log('Found by references');
@@ -222,9 +264,17 @@ class EmailListenerService {
         status: 'received',
         direction: 'inbound',
         headers: processedHeaders,
-        messageId: headers['message-id'],
-        inReplyTo: headers['in-reply-to'],
-        references: headers['references'] ? headers['references'].split(/\s+/) : [],
+        messageId: this.normalizeMessageId(headers['message-id']),
+        inReplyTo: headers['in-reply-to'] ? this.normalizeMessageId(headers['in-reply-to']) : null,
+        references: (() => {
+          let refs = headers.references;
+          if (typeof refs === 'string') {
+            refs = refs.split(/\s+/);
+          }
+          return Array.isArray(refs)
+            ? refs.map((ref) => this.normalizeMessageId(ref)).filter(Boolean)
+            : [];
+        })(),
         unmatched: !originalEmail, // Mark as unmatched if no original email found
       };
 
@@ -239,6 +289,13 @@ class EmailListenerService {
         emailData.threadId = originalEmail.threadId;
       }
 
+      console.log('Creating email with data:', {
+        messageId: emailData.messageId,
+        inReplyTo: emailData.inReplyTo,
+        references: emailData.references,
+        originalFound: !!originalEmail,
+      });
+
       // Store the email
       const email = await Email.create(emailData);
 
@@ -247,6 +304,8 @@ class EmailListenerService {
         // Implementation for moving to processed folder would go here
         // Depends on the mail-listener2 capabilities
       }
+
+      return email;
     } catch (error) {
       console.error('Failed to process incoming email:', error);
       throw error;

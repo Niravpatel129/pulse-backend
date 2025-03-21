@@ -25,7 +25,7 @@ const generateShortId = (objectId) => {
 // Generate a unique message ID for email tracking
 const generateMessageId = (projectId, threadId) => {
   const timestamp = Date.now().toString(36);
-  return `${timestamp}.${projectId}.${threadId}@${process.env.EMAIL_DOMAIN}`;
+  return `<${timestamp}.${projectId}.${threadId}@${process.env.EMAIL_DOMAIN}>`;
 };
 
 export const sendEmail = async (req, res) => {

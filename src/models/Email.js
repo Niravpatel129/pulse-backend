@@ -107,7 +107,7 @@ const emailSchema = new mongoose.Schema(
     },
     headers: {
       type: Map,
-      of: String,
+      of: mongoose.Schema.Types.Mixed,
     },
     unmatched: {
       type: Boolean,
