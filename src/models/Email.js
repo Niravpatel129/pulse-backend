@@ -15,7 +15,13 @@ const emailSchema = new mongoose.Schema(
     projectId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
-      required: true,
+      required: function () {
+        return this.direction === 'outbound';
+      },
+    },
+    threadId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Thread',
     },
     subject: {
       type: String,
@@ -24,6 +30,9 @@ const emailSchema = new mongoose.Schema(
     body: {
       type: String,
       required: true,
+    },
+    bodyText: {
+      type: String,
     },
     to: [
       {
@@ -41,11 +50,17 @@ const emailSchema = new mongoose.Schema(
         type: String,
       },
     ],
+    from: {
+      type: String,
+      required: true,
+    },
     attachments: [attachmentSchema],
     sentBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: function () {
+        return this.direction === 'outbound';
+      },
     },
     sentAt: {
       type: Date,
@@ -53,8 +68,50 @@ const emailSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['sent', 'failed', 'draft'],
+      enum: ['sent', 'failed', 'draft', 'received'],
       default: 'sent',
+    },
+    messageId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    inReplyTo: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    references: [
+      {
+        type: String,
+      },
+    ],
+    trackingAddress: {
+      type: String,
+    },
+    trackingData: {
+      shortProjectId: String,
+      shortThreadId: String,
+      shortUserId: String,
+    },
+    direction: {
+      type: String,
+      enum: ['outbound', 'inbound'],
+      required: true,
+      default: 'outbound',
+    },
+    openedAt: Date,
+    openCount: {
+      type: Number,
+      default: 0,
+    },
+    headers: {
+      type: Map,
+      of: String,
+    },
+    unmatched: {
+      type: Boolean,
+      default: false,
     },
   },
   {
@@ -65,6 +122,13 @@ const emailSchema = new mongoose.Schema(
 // Add indexes for common queries
 emailSchema.index({ projectId: 1, sentAt: -1 });
 emailSchema.index({ sentBy: 1, sentAt: -1 });
+emailSchema.index({ threadId: 1, sentAt: -1 });
+emailSchema.index({ messageId: 1 });
+emailSchema.index({ trackingAddress: 1 });
+emailSchema.index({ 'trackingData.shortProjectId': 1 });
+emailSchema.index({ 'trackingData.shortThreadId': 1 });
+emailSchema.index({ 'trackingData.shortUserId': 1 });
+emailSchema.index({ unmatched: 1, createdAt: -1 });
 
 const Email = mongoose.model('Email', emailSchema);
 

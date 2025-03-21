@@ -39,6 +39,21 @@ class EmailService {
   }
 
   /**
+   * Add tracking pixel to HTML content if enabled
+   * @param {string} html - Original HTML content
+   * @param {string} messageId - Unique message ID for tracking
+   * @returns {string} - HTML content with tracking pixel
+   */
+  addTrackingPixel(html, messageId) {
+    if (process.env.EMAIL_PIXEL_TRACKING_ENABLED !== 'true') return html;
+
+    const trackingUrl = `${process.env.EMAIL_PIXEL_TRACKING_URL}/${messageId}`;
+    const trackingPixel = `<img src="${trackingUrl}" width="1" height="1" style="display:none" alt="" />`;
+
+    return html + trackingPixel;
+  }
+
+  /**
    * Send an email using the configured transporter
    * @param {Object} options - Email options
    * @param {string} options.from - Sender email address
@@ -48,21 +63,31 @@ class EmailService {
    * @param {string} options.subject - Email subject
    * @param {string} options.html - Email content in HTML format
    * @param {Array} options.attachments - Email attachments
+   * @param {Object} options.headers - Custom email headers
    * @returns {Promise} - Resolves with the send result
    */
-  async sendEmail({ from, to, cc, bcc, subject, html, attachments }) {
+  async sendEmail({ from, to, cc, bcc, subject, html, attachments, headers = {} }) {
     try {
       const emailContent = {
         from: from || process.env.EMAIL_FROM,
-        to: 'mrmapletv@gmail.com' || to,
+        to,
         subject,
-        html,
+        html: headers['Message-ID'] ? this.addTrackingPixel(html, headers['Message-ID']) : html,
+        headers: {
+          ...headers,
+          'X-Email-Client': 'HourBlock-CRM',
+        },
       };
 
       // Add optional fields if provided
       if (cc) emailContent.cc = cc;
       if (bcc) emailContent.bcc = bcc;
       if (attachments) emailContent.attachments = attachments;
+
+      // If Reply-To is provided in headers, set it in the email content
+      if (headers['Reply-To']) {
+        emailContent.replyTo = headers['Reply-To'];
+      }
 
       console.log('Sending email with content:', JSON.stringify(emailContent, null, 2));
       const result = await this.transporter.sendMail(emailContent);

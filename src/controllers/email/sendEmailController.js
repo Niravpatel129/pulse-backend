@@ -1,13 +1,45 @@
+import mongoose from 'mongoose';
 import Email from '../../models/Email.js';
 import emailService from '../../services/emailService.js';
 import { handleError } from '../../utils/errorHandler.js';
 import { fileUtils, firebaseStorage } from '../../utils/firebase.js';
 
+// Base62 characters for short ID generation
+const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+// Convert MongoDB ObjectId to short base62 ID (8 characters)
+const generateShortId = (objectId) => {
+  const hex = objectId.toString();
+  const dec = BigInt('0x' + hex.slice(0, 12));
+  let shortId = '';
+  let num = dec;
+
+  while (shortId.length < 8) {
+    shortId = BASE62[Number(num % 62n)] + shortId;
+    num = num / 62n;
+  }
+
+  return shortId;
+};
+
+// Generate a unique message ID for email tracking
+const generateMessageId = (projectId, threadId) => {
+  const timestamp = Date.now().toString(36);
+  return `${timestamp}.${projectId}.${threadId}@${process.env.EMAIL_DOMAIN}`;
+};
+
 export const sendEmail = async (req, res) => {
   try {
-    const { to, cc, bcc, subject, body, projectId } = req.body;
+    const { to, cc, bcc, subject, body, projectId, threadId } = req.body;
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
+
+    // Generate short IDs
+    const shortProjectId = generateShortId(projectId);
+    const shortUserId = generateShortId(userId);
+    const shortThreadId = threadId
+      ? generateShortId(threadId)
+      : generateShortId(new mongoose.Types.ObjectId());
 
     // Parse arrays from form data
     const toArray = Array.isArray(to) ? to : JSON.parse(to);
@@ -26,7 +58,6 @@ export const sendEmail = async (req, res) => {
           file.mimetype,
         );
 
-        // Create a lean attachment object that matches the schema exactly
         processedAttachments.push({
           name: file.originalname,
           size: file.size,
@@ -36,7 +67,11 @@ export const sendEmail = async (req, res) => {
       }
     }
 
-    // Send email using the email service
+    // Generate tracking email address
+    const trackingAddress = `support+p${shortProjectId}t${shortThreadId}u${shortUserId}@${process.env.EMAIL_DOMAIN}`;
+    const messageId = generateMessageId(shortProjectId, shortThreadId);
+
+    // Send email using the email service with tracking headers
     const emailResult = await emailService.sendEmail({
       from: process.env.EMAIL_FROM,
       to: toArray.join(', '),
@@ -48,11 +83,19 @@ export const sendEmail = async (req, res) => {
         filename: attachment.name,
         path: attachment.url,
       })),
+      headers: {
+        'Message-ID': messageId,
+        'Reply-To': trackingAddress,
+        'X-Project-ID': shortProjectId,
+        'X-Thread-ID': shortThreadId,
+        'X-User-ID': shortUserId,
+      },
     });
 
     // Create email record in database
     const emailData = {
       projectId,
+      threadId,
       subject,
       body,
       to: toArray,
@@ -62,6 +105,9 @@ export const sendEmail = async (req, res) => {
       sentBy: userId,
       status: emailResult.success ? 'sent' : 'failed',
       sentAt: new Date(),
+      messageId,
+      trackingAddress,
+      from: process.env.EMAIL_FROM,
     };
 
     console.log('Creating email with data:', JSON.stringify(emailData, null, 2));
