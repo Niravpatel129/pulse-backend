@@ -6,6 +6,7 @@ import {
   sendEmail as sendEmailSchema,
 } from '../config/validators/emailValidators.js';
 import { getEmailDetails, getEmailHistory } from '../controllers/email/historyController.js';
+import { replyEmail } from '../controllers/email/replyEmailController.js';
 import { sendEmail } from '../controllers/email/sendEmailController.js';
 import {
   deleteTemplate,
@@ -26,6 +27,7 @@ router.use(extractWorkspace);
 
 // Email sending routes
 router.post('/send', upload.array('attachments'), validateRequest(sendEmailSchema), sendEmail);
+router.post('/reply', upload.array('attachments'), validateRequest(sendEmailSchema), replyEmail);
 
 // Email history routes
 router.get('/history/:projectId', getEmailHistory);

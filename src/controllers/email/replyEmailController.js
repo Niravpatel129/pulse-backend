@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import Email from '../../models/Email.js';
 import emailService from '../../services/emailService.js';
 import { handleError } from '../../utils/errorHandler.js';
@@ -28,30 +27,16 @@ const generateMessageId = (projectId, threadId) => {
   return `<${timestamp}.${projectId}.${threadId}@${process.env.EMAIL_DOMAIN}>`;
 };
 
-// Helper to normalize message IDs by ensuring they have angle brackets
-const normalizeMessageId = (messageId) => {
-  if (!messageId) return null;
-  messageId = messageId.trim();
-  if (!messageId.startsWith('<')) messageId = '<' + messageId;
-  if (!messageId.endsWith('>')) messageId = messageId + '>';
-  return messageId;
-};
-
-export const sendEmail = async (req, res) => {
+export const replyEmail = async (req, res) => {
   try {
-    const { to, cc, bcc, subject, body, projectId, threadId, inReplyTo, references } = req.body;
+    const { to, cc, bcc, subject, body, projectId, inReplyTo, references, trackingData } = req.body;
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
-
-    // Generate short IDs
-    const shortProjectId = generateShortId(projectId);
-    const shortUserId = generateShortId(userId);
-    const shortThreadId = threadId
-      ? generateShortId(threadId)
-      : generateShortId(new mongoose.Types.ObjectId());
+    const parsedTrackingData = JSON.parse(trackingData);
+    console.log('🚀 parsedTrackingData:', parsedTrackingData);
 
     // Parse arrays from form data
-    const toArray = Array.isArray(to) ? to : JSON.parse(to);
+    const toArray = Array.isArray(to) ? to : to ? JSON.parse(to) : [];
     const ccArray = cc ? (Array.isArray(cc) ? cc : JSON.parse(cc)) : [];
     const bccArray = bcc ? (Array.isArray(bcc) ? bcc : JSON.parse(bcc)) : [];
     const referencesArray = references
@@ -60,36 +45,80 @@ export const sendEmail = async (req, res) => {
         : JSON.parse(references)
       : [];
 
-    // Normalize message IDs
-    const normalizedInReplyTo = inReplyTo ? normalizeMessageId(inReplyTo) : null;
-    const normalizedReferences = referencesArray
-      .map((ref) => normalizeMessageId(ref))
-      .filter(Boolean);
-
     // Handle file uploads if present
     const processedAttachments = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const storagePath = firebaseStorage.generatePath(workspaceId, projectId, file.originalname);
+        try {
+          const storagePath = firebaseStorage.generatePath(
+            workspaceId,
+            projectId,
+            file.originalname,
+          );
 
-        const { url: firebaseUrl } = await firebaseStorage.uploadFile(
-          file.buffer,
-          storagePath,
-          file.mimetype,
-        );
+          const { url: firebaseUrl } = await firebaseStorage.uploadFile(
+            file.buffer,
+            storagePath,
+            file.mimetype,
+          );
 
-        processedAttachments.push({
-          name: file.originalname,
-          size: file.size,
-          type: fileUtils.getType(file.mimetype),
-          url: firebaseUrl,
-        });
+          processedAttachments.push({
+            name: file.originalname,
+            size: file.size,
+            type: fileUtils.getType(file.mimetype),
+            url: firebaseUrl,
+          });
+        } catch (fileError) {
+          console.error('Error uploading file:', fileError);
+          // Continue with other files even if one fails
+        }
       }
     }
 
+    // Validate required fields
+    if (!toArray.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one recipient is required',
+      });
+    }
+
+    if (
+      !parsedTrackingData ||
+      !parsedTrackingData.shortProjectId ||
+      !parsedTrackingData.shortThreadId ||
+      !parsedTrackingData.shortUserId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required tracking data',
+      });
+    }
+
     // Generate tracking email address
-    const trackingAddress = `support+p${shortProjectId}t${shortThreadId}u${shortUserId}@${process.env.EMAIL_DOMAIN}`;
-    const messageId = generateMessageId(shortProjectId, shortThreadId);
+    const trackingAddress = `support+p${parsedTrackingData.shortProjectId}t${parsedTrackingData.shortThreadId}u${parsedTrackingData.shortUserId}@${process.env.EMAIL_DOMAIN}`;
+    const messageId = generateMessageId(
+      parsedTrackingData.shortProjectId,
+      parsedTrackingData.shortThreadId,
+    );
+
+    // Prepare email headers
+    const headers = {
+      'Message-ID': messageId,
+      'Reply-To': trackingAddress,
+      'X-Project-ID': trackingData.shortProjectId,
+      'X-Thread-ID': trackingData.shortThreadId,
+      'X-User-ID': trackingData.shortUserId,
+    };
+
+    // Only add In-Reply-To and References if they exist
+    if (inReplyTo) {
+      headers['In-Reply-To'] = inReplyTo;
+    }
+
+    if (referencesArray.length > 0) {
+      headers['References'] = referencesArray.join(' ');
+    }
 
     // Send email using the email service with tracking headers
     const emailResult = await emailService.sendEmail({
@@ -103,21 +132,12 @@ export const sendEmail = async (req, res) => {
         filename: attachment.name,
         path: attachment.url,
       })),
-      headers: {
-        'Message-ID': messageId,
-        'Reply-To': trackingAddress,
-        'X-Project-ID': shortProjectId,
-        'X-Thread-ID': shortThreadId,
-        'X-User-ID': shortUserId,
-        ...(normalizedInReplyTo && { 'In-Reply-To': normalizedInReplyTo }),
-        ...(normalizedReferences.length > 0 && { References: normalizedReferences.join(' ') }),
-      },
+      headers,
     });
 
     // Create email record in database
     const emailData = {
       projectId,
-      threadId,
       subject,
       body,
       to: toArray,
@@ -130,20 +150,21 @@ export const sendEmail = async (req, res) => {
       messageId,
       trackingAddress,
       from: process.env.EMAIL_FROM,
-      inReplyTo: normalizedInReplyTo,
-      references: normalizedReferences,
+      inReplyTo,
+      references: referencesArray,
+      trackingData,
     };
 
-    console.log('Creating email with data:', JSON.stringify(emailData, null, 2));
+    console.log('Creating reply email with data:', JSON.stringify(emailData, null, 2));
     const email = await Email.create(emailData);
 
     return res.status(200).json({
       success: true,
-      message: 'Email sent successfully',
+      message: 'Reply email sent successfully',
       email,
     });
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('Error sending reply email:', error);
     if (error instanceof SyntaxError) {
       return res.status(400).json({
         success: false,
@@ -151,6 +172,6 @@ export const sendEmail = async (req, res) => {
         error: 'Please ensure all arrays are properly formatted',
       });
     }
-    return handleError(res, error, 'Failed to send email');
+    return handleError(res, error, 'Failed to send reply email');
   }
 };
