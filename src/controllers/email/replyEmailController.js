@@ -33,7 +33,7 @@ export const replyEmail = async (req, res) => {
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
     const parsedTrackingData = JSON.parse(trackingData);
-    console.log('🚀 parsedTrackingData:', parsedTrackingData);
+    const userEmail = req.user.email;
 
     // Parse arrays from form data
     const toArray = Array.isArray(to) ? to : to ? JSON.parse(to) : [];
@@ -122,7 +122,7 @@ export const replyEmail = async (req, res) => {
 
     // Send email using the email service with tracking headers
     const emailResult = await emailService.sendEmail({
-      from: process.env.EMAIL_FROM,
+      from: `"${userEmail}" <${process.env.EMAIL_FROM}>`,
       to: toArray.join(', '),
       cc: ccArray.length ? ccArray.join(', ') : undefined,
       bcc: bccArray.length ? bccArray.join(', ') : undefined,

@@ -41,6 +41,7 @@ export const sendEmail = async (req, res) => {
   try {
     const { to, cc, bcc, subject, body, projectId, threadId, inReplyTo, references } = req.body;
     const userId = req.user.userId;
+    const userEmail = req.user.email;
     const workspaceId = req.workspace._id;
 
     // Generate short IDs
@@ -93,7 +94,7 @@ export const sendEmail = async (req, res) => {
 
     // Send email using the email service with tracking headers
     const emailResult = await emailService.sendEmail({
-      from: process.env.EMAIL_FROM,
+      from: `"${userEmail}" <${process.env.EMAIL_FROM}>`,
       to: toArray.join(', '),
       cc: ccArray.length ? ccArray.join(', ') : undefined,
       bcc: bccArray.length ? bccArray.join(', ') : undefined,

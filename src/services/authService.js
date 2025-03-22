@@ -3,8 +3,8 @@ import User from '../models/User.js';
 import AppError from '../utils/AppError.js';
 
 class AuthService {
-  generateToken(id) {
-    return jwt.sign({ id, userId: id }, process.env.JWT_SECRET || 'your-secret-key');
+  generateToken(id, email) {
+    return jwt.sign({ id, userId: id, email }, process.env.JWT_SECRET || 'your-secret-key');
   }
 
   async login(email, password) {
@@ -18,7 +18,7 @@ class AuthService {
       throw new AppError('Invalid credentials', 401);
     }
 
-    const token = this.generateToken(user._id);
+    const token = this.generateToken(user._id, user.email);
 
     return {
       token,
@@ -34,7 +34,7 @@ class AuthService {
   async register(userData) {
     try {
       const user = await User.create(userData);
-      const token = this.generateToken(user._id);
+      const token = this.generateToken(user._id, user.email);
 
       return {
         token,
