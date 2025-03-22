@@ -106,9 +106,9 @@ export const replyEmail = async (req, res) => {
     const headers = {
       'Message-ID': messageId,
       'Reply-To': trackingAddress,
-      'X-Project-ID': trackingData.shortProjectId,
-      'X-Thread-ID': trackingData.shortThreadId,
-      'X-User-ID': trackingData.shortUserId,
+      'X-Project-ID': parsedTrackingData.shortProjectId,
+      'X-Thread-ID': parsedTrackingData.shortThreadId,
+      'X-User-ID': parsedTrackingData.shortUserId,
     };
 
     // Only add In-Reply-To and References if they exist
