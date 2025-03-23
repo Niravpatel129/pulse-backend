@@ -19,9 +19,13 @@ const emailSchema = new mongoose.Schema(
         return this.direction === 'outbound';
       },
     },
-    threadId: {
+    shortEmailId: {
+      type: String,
+      unique: true,
+    },
+    replyEmailId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Thread',
+      ref: 'Email',
     },
     subject: {
       type: String,
@@ -71,29 +75,11 @@ const emailSchema = new mongoose.Schema(
       enum: ['sent', 'failed', 'draft', 'received'],
       default: 'sent',
     },
-    messageId: {
-      type: String,
-      unique: true,
-      sparse: true,
-    },
-    inReplyTo: {
-      type: String,
-      index: true,
-      sparse: true,
-    },
-    references: [
-      {
-        type: String,
-      },
-    ],
+
     trackingAddress: {
       type: String,
     },
-    trackingData: {
-      shortProjectId: String,
-      shortThreadId: String,
-      shortUserId: String,
-    },
+
     direction: {
       type: String,
       enum: ['outbound', 'inbound'],
@@ -104,14 +90,6 @@ const emailSchema = new mongoose.Schema(
     openCount: {
       type: Number,
       default: 0,
-    },
-    headers: {
-      type: Map,
-      of: mongoose.Schema.Types.Mixed,
-    },
-    unmatched: {
-      type: Boolean,
-      default: false,
     },
   },
   {

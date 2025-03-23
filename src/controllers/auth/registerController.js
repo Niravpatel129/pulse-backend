@@ -6,7 +6,7 @@ import AppError from '../../utils/AppError.js';
 // @access  Public
 export const register = async (req, res, next) => {
   try {
-    const result = await authService.register(req.body);
+    const result = await authService.register({ ...req.body, isActivated: true });
     res.status(201).json({
       status: 'success',
       data: result,

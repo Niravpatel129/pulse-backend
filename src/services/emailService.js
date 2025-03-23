@@ -18,12 +18,12 @@ class EmailService {
     } else {
       // Real transporter for production
       this.transporter = nodemailer.createTransport({
-        host: process.env.EMAIL_HOST,
-        port: process.env.EMAIL_PORT,
-        secure: process.env.EMAIL_SECURE === 'true',
+        host: process.env.EMAIL_MAILEROO_HOST,
+        port: process.env.EMAIL_MAILEROO_PORT,
+        secure: process.env.EMAIL_MAILEROO_SECURE === 'true',
         auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASSWORD,
+          user: process.env.EMAIL_MAILEROO_USER,
+          pass: process.env.EMAIL_MAILEROO_PASSWORD,
         },
       });
 
@@ -69,7 +69,7 @@ class EmailService {
   async sendEmail({ from, to, cc, bcc, subject, html, attachments, headers = {} }) {
     try {
       const emailContent = {
-        from: from || process.env.EMAIL_FROM,
+        from: from || process.env.EMAIL_MAILEROO_FROM,
         to,
         subject,
         html: headers['Message-ID'] ? this.addTrackingPixel(html, headers['Message-ID']) : html,
@@ -128,7 +128,7 @@ class EmailService {
     `;
 
     return this.sendEmail({
-      from: `"${senderName}" <${process.env.EMAIL_FROM}>`,
+      from: `"${senderName}" <${process.env.EMAIL_MAILEROO_FROM}>`,
       to: recipientEmail || process.env.DEFAULT_CLIENT_EMAIL,
       subject,
       html,

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { nanoid } from 'nanoid';
 import Email from '../../models/Email.js';
 import emailService from '../../services/emailService.js';
 import { handleError } from '../../utils/errorHandler.js';
@@ -43,6 +44,7 @@ export const sendEmail = async (req, res) => {
     const userId = req.user.userId;
     const userEmail = req.user.email;
     const workspaceId = req.workspace._id;
+    const shortEmailId = nanoid(8);
 
     // Generate short IDs
     const shortProjectId = generateShortId(projectId);
@@ -72,7 +74,6 @@ export const sendEmail = async (req, res) => {
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const storagePath = firebaseStorage.generatePath(workspaceId, projectId, file.originalname);
-
         const { url: firebaseUrl } = await firebaseStorage.uploadFile(
           file.buffer,
           storagePath,
@@ -89,11 +90,11 @@ export const sendEmail = async (req, res) => {
     }
 
     // Generate tracking email address
-    const trackingAddress = `support+p${shortProjectId}t${shortThreadId}u${shortUserId}@${process.env.EMAIL_DOMAIN}`;
+    const trackingAddress = `mailer+${shortEmailId}@${process.env.EMAIL_DOMAIN}`;
     const messageId = generateMessageId(shortProjectId, shortThreadId);
 
     // Send email using the email service with tracking headers
-    const emailResult = await emailService.sendEmail({
+    const emailPayload = {
       from: `"${userEmail}" <${process.env.EMAIL_FROM}>`,
       to: toArray.join(', '),
       cc: ccArray.length ? ccArray.join(', ') : undefined,
@@ -110,14 +111,18 @@ export const sendEmail = async (req, res) => {
         'X-Project-ID': shortProjectId,
         'X-Thread-ID': shortThreadId,
         'X-User-ID': shortUserId,
+        'X-Short-ID': shortEmailId,
         ...(normalizedInReplyTo && { 'In-Reply-To': normalizedInReplyTo }),
         ...(normalizedReferences.length > 0 && { References: normalizedReferences.join(' ') }),
       },
-    });
+    };
+
+    const emailResult = await emailService.sendEmail(emailPayload);
 
     // Create email record in database
     const emailData = {
       projectId,
+      shortEmailId,
       threadId,
       subject,
       body,
@@ -135,7 +140,6 @@ export const sendEmail = async (req, res) => {
       references: normalizedReferences,
     };
 
-    console.log('Creating email with data:', JSON.stringify(emailData, null, 2));
     const email = await Email.create(emailData);
 
     return res.status(200).json({

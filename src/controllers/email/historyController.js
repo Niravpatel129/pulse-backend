@@ -2,41 +2,46 @@ import Email from '../../models/Email.js';
 import { handleError } from '../../utils/errorHandler.js';
 
 /**
- * Build email thread chain using standard email headers
+ * Build email thread chain using replyEmailId to establish parent-child relationships
  */
 const buildEmailChain = async (emails) => {
-  // Create a map of messageId to email for quick lookup
+  // Create a map of email ID to email for quick lookup
   const emailMap = new Map();
-  const rootEmails = new Set();
+  const rootEmails = [];
 
-  // First pass: build the map and identify root emails
+  // First pass: build the map
   for (const email of emails) {
-    emailMap.set(email.messageId, {
+    emailMap.set(email._id.toString(), {
       ...email.toObject(),
       replies: [],
     });
-
-    // If no inReplyTo, it's a root email
-    if (!email.inReplyTo) {
-      rootEmails.add(email.messageId);
-    }
   }
 
-  // Second pass: build reply chains
+  // Second pass: establish parent-child relationships
   for (const email of emails) {
-    if (email.inReplyTo && emailMap.has(email.inReplyTo)) {
-      const parent = emailMap.get(email.inReplyTo);
-      parent.replies.push(emailMap.get(email.messageId));
-      // If this was marked as root, remove it since it's a reply
-      rootEmails.delete(email.messageId);
+    if (email.replyEmailId) {
+      // This is a reply to another email
+      const parentId =
+        typeof email.replyEmailId === 'object'
+          ? email.replyEmailId._id.toString()
+          : email.replyEmailId.toString();
+
+      if (emailMap.has(parentId)) {
+        const parent = emailMap.get(parentId);
+        parent.replies.push(emailMap.get(email._id.toString()));
+      } else {
+        // If parent not found in our dataset, treat as root
+        rootEmails.push(emailMap.get(email._id.toString()));
+      }
+    } else {
+      // This is a root email (not a reply)
+      rootEmails.push(emailMap.get(email._id.toString()));
     }
   }
 
   // Group into threads
   const threads = [];
-  for (const rootId of rootEmails) {
-    const rootEmail = emailMap.get(rootId);
-
+  for (const rootEmail of rootEmails) {
     // Sort replies by date recursively
     const sortReplies = (email) => {
       email.replies.sort((a, b) => new Date(a.sentAt) - new Date(b.sentAt));
@@ -64,15 +69,20 @@ const buildEmailChain = async (emails) => {
       return participants;
     };
 
+    // Find the latest message date in the thread
+    const getLatestMessageDate = (email) => {
+      if (email.replies.length === 0) {
+        return new Date(email.sentAt).getTime();
+      }
+
+      const replyDates = email.replies.map((reply) => getLatestMessageDate(reply));
+      return Math.max(new Date(email.sentAt).getTime(), ...replyDates);
+    };
+
     threads.push({
       threadId: rootEmail.threadId || null,
       subject: rootEmail.subject,
-      lastMessageAt: Math.max(
-        new Date(rootEmail.sentAt).getTime(),
-        ...Array.from(emailMap.values())
-          .filter((e) => e.inReplyTo === rootId)
-          .map((e) => new Date(e.sentAt).getTime()),
-      ),
+      lastMessageAt: getLatestMessageDate(rootEmail),
       messageCount: countEmails(rootEmail),
       participants: Array.from(getParticipants(rootEmail)),
       messages: [rootEmail],
@@ -93,14 +103,15 @@ export const getEmailHistory = async (req, res) => {
     // Get all emails for the project
     const emails = await Email.find({ projectId })
       .sort({ sentAt: -1 })
-      .populate('sentBy', 'name email');
+      .populate('sentBy', 'name email')
+      .populate('replyEmailId');
 
     // Build email threads
     const threads = await buildEmailChain(emails);
 
     // Paginate the threads
     const start = (page - 1) * limit;
-    const paginatedThreads = threads.slice(start, start + limit);
+    const paginatedThreads = threads.slice(start, start + parseInt(limit));
 
     return res.status(200).json({
       success: true,
@@ -121,7 +132,8 @@ export const getEmailDetails = async (req, res) => {
     const { emailId } = req.params;
     const email = await Email.findById(emailId)
       .populate('sentBy', 'name email')
-      .populate('projectId', 'name');
+      .populate('projectId', 'name')
+      .populate('replyEmailId');
 
     if (!email) {
       return res.status(404).json({
@@ -130,12 +142,34 @@ export const getEmailDetails = async (req, res) => {
       });
     }
 
-    // Get all related emails (parent and replies)
-    const relatedEmails = await Email.find({
-      $or: [{ messageId: email.inReplyTo }, { inReplyTo: email.messageId }],
-    }).populate('sentBy', 'name email');
+    // Get all related emails in the thread
+    const findRelatedEmails = async (emailId, allEmails = []) => {
+      // Find parent (if any)
+      if (email.replyEmailId) {
+        const parent = await Email.findById(email.replyEmailId).populate('sentBy', 'name email');
+        if (parent && !allEmails.some((e) => e._id.toString() === parent._id.toString())) {
+          allEmails.push(parent);
+          await findRelatedEmails(parent._id, allEmails);
+        }
+      }
 
-    const [thread] = await buildEmailChain([...relatedEmails, email]);
+      // Find replies
+      const replies = await Email.find({ replyEmailId: emailId }).populate('sentBy', 'name email');
+
+      for (const reply of replies) {
+        if (!allEmails.some((e) => e._id.toString() === reply._id.toString())) {
+          allEmails.push(reply);
+          await findRelatedEmails(reply._id, allEmails);
+        }
+      }
+
+      return allEmails;
+    };
+
+    const relatedEmails = await findRelatedEmails(emailId);
+    const allThreadEmails = [email, ...relatedEmails];
+
+    const [thread] = await buildEmailChain(allThreadEmails);
 
     return res.status(200).json({
       success: true,
