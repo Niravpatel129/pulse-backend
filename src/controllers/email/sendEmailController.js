@@ -105,16 +105,6 @@ export const sendEmail = async (req, res) => {
         filename: attachment.name,
         path: attachment.url,
       })),
-      headers: {
-        'Message-ID': messageId,
-        'Reply-To': trackingAddress,
-        'X-Project-ID': shortProjectId,
-        'X-Thread-ID': shortThreadId,
-        'X-User-ID': shortUserId,
-        'X-Short-ID': shortEmailId,
-        ...(normalizedInReplyTo && { 'In-Reply-To': normalizedInReplyTo }),
-        ...(normalizedReferences.length > 0 && { References: normalizedReferences.join(' ') }),
-      },
     };
 
     const emailResult = await emailService.sendEmail(emailPayload);

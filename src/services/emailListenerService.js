@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import MailListener from 'mail-listener2';
+import { nanoid } from 'nanoid';
 import Email from '../models/Email.js';
 import User from '../models/User.js';
 
@@ -67,11 +68,14 @@ class EmailListenerService {
       // based on the trackerAddress example, extract out the shortEmailId
       const shortEmailId = toEmail.split('@')[0].split('+')[1];
 
+      console.log('🚀 shortEmailId:', shortEmailId);
+
       // find the email Id from shortEmailId
       const checkEmail = await Email.findOne({ shortEmailId });
 
       // Use the sender's email address
       const emailOfTheUser = fromEmail;
+      console.log('🚀 emailOfTheUser:', emailOfTheUser);
 
       // Find the user
       let user = await User.findOne({
@@ -83,15 +87,27 @@ class EmailListenerService {
         user = await User.create({
           email: emailOfTheUser,
           name: fromEmail.split('@')[0] || 'Unknown User',
+          password: nanoid(),
           isActivated: false,
         });
       }
 
+      // Get the original recipient from the original email
+      let recipientEmails = [];
+      if (checkEmail) {
+        // Use the original email's 'to' field as the recipient for this reply
+        recipientEmails = checkEmail.to || [];
+      } else {
+        // If we can't find the original email, use the current 'to' address
+        recipientEmails = Array.isArray(to) ? to.map((t) => t.address) : [toEmail];
+      }
+
+      console.log('🚀 recipientEmails:', recipientEmails);
       // Create base email data
       const emailData = {
         from: fromEmail,
         projectId: checkEmail?.projectId,
-        to: Array.isArray(to) ? to.map((t) => t.address) : [toEmail],
+        to: recipientEmails,
         subject,
         sentBy: user?._id, // Added optional chaining in case user is null
         body: html || text,

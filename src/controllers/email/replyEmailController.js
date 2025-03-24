@@ -3,47 +3,24 @@ import emailService from '../../services/emailService.js';
 import { handleError } from '../../utils/errorHandler.js';
 import { fileUtils, firebaseStorage } from '../../utils/firebase.js';
 
-// Base62 characters for short ID generation
-const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-
-// Convert MongoDB ObjectId to short base62 ID (8 characters)
-const generateShortId = (objectId) => {
-  const hex = objectId.toString();
-  const dec = BigInt('0x' + hex.slice(0, 12));
-  let shortId = '';
-  let num = dec;
-
-  while (shortId.length < 8) {
-    shortId = BASE62[Number(num % 62n)] + shortId;
-    num = num / 62n;
-  }
-
-  return shortId;
-};
-
-// Generate a unique message ID for email tracking
-const generateMessageId = (projectId, threadId) => {
-  const timestamp = Date.now().toString(36);
-  return `<${timestamp}.${projectId}.${threadId}@${process.env.EMAIL_DOMAIN}>`;
-};
-
 export const replyEmail = async (req, res) => {
   try {
-    const { to, cc, bcc, subject, body, projectId, inReplyTo, references, trackingData } = req.body;
+    const { to, cc, bcc, subject, body, projectId, inReplyTo, emailId } = req.body;
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
-    const parsedTrackingData = JSON.parse(trackingData);
     const userEmail = req.user.email;
+
+    if (!emailId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email ID is required',
+      });
+    }
 
     // Parse arrays from form data
     const toArray = Array.isArray(to) ? to : to ? JSON.parse(to) : [];
     const ccArray = cc ? (Array.isArray(cc) ? cc : JSON.parse(cc)) : [];
     const bccArray = bcc ? (Array.isArray(bcc) ? bcc : JSON.parse(bcc)) : [];
-    const referencesArray = references
-      ? Array.isArray(references)
-        ? references
-        : JSON.parse(references)
-      : [];
 
     // Handle file uploads if present
     const processedAttachments = [];
@@ -75,49 +52,11 @@ export const replyEmail = async (req, res) => {
       }
     }
 
-    // Validate required fields
     if (!toArray.length) {
       return res.status(400).json({
         success: false,
         message: 'At least one recipient is required',
       });
-    }
-
-    if (
-      !parsedTrackingData ||
-      !parsedTrackingData.shortProjectId ||
-      !parsedTrackingData.shortThreadId ||
-      !parsedTrackingData.shortUserId
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required tracking data',
-      });
-    }
-
-    // Generate tracking email address
-    const trackingAddress = `support+p${parsedTrackingData.shortProjectId}t${parsedTrackingData.shortThreadId}u${parsedTrackingData.shortUserId}@${process.env.EMAIL_DOMAIN}`;
-    const messageId = generateMessageId(
-      parsedTrackingData.shortProjectId,
-      parsedTrackingData.shortThreadId,
-    );
-
-    // Prepare email headers
-    const headers = {
-      'Message-ID': messageId,
-      'Reply-To': trackingAddress,
-      'X-Project-ID': parsedTrackingData.shortProjectId,
-      'X-Thread-ID': parsedTrackingData.shortThreadId,
-      'X-User-ID': parsedTrackingData.shortUserId,
-    };
-
-    // Only add In-Reply-To and References if they exist
-    if (inReplyTo) {
-      headers['In-Reply-To'] = inReplyTo;
-    }
-
-    if (referencesArray.length > 0) {
-      headers['References'] = referencesArray.join(' ');
     }
 
     // Send email using the email service with tracking headers
@@ -132,10 +71,8 @@ export const replyEmail = async (req, res) => {
         filename: attachment.name,
         path: attachment.url,
       })),
-      headers,
     });
 
-    // Create email record in database
     const emailData = {
       projectId,
       subject,
@@ -147,12 +84,9 @@ export const replyEmail = async (req, res) => {
       sentBy: userId,
       status: emailResult.success ? 'sent' : 'failed',
       sentAt: new Date(),
-      messageId,
-      trackingAddress,
       from: process.env.EMAIL_FROM,
       inReplyTo,
-      references: referencesArray,
-      trackingData,
+      replyEmailId: emailId,
     };
 
     console.log('Creating reply email with data:', JSON.stringify(emailData, null, 2));

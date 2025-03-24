@@ -21,7 +21,6 @@ const emailSchema = new mongoose.Schema(
     },
     shortEmailId: {
       type: String,
-      unique: true,
     },
     replyEmailId: {
       type: mongoose.Schema.Types.ObjectId,
