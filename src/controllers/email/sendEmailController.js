@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { nanoid } from 'nanoid';
 import Email from '../../models/Email.js';
 import emailService from '../../services/emailService.js';
@@ -100,6 +99,7 @@ export const sendEmail = async (req, res) => {
       from: process.env.EMAIL_FROM,
       inReplyTo: normalizedInReplyTo,
       references: normalizedReferences,
+      readBy: [userId], // Mark as read by the sender by default
     };
 
     const email = await Email.create(emailData);
