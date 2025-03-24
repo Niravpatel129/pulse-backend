@@ -18,7 +18,7 @@ class EmailListenerService {
       searchFilter: ['UNSEEN'], // Only process unread messages
       markSeen: true,
       fetchUnreadOnStart: true,
-      debug: process.env.NODE_ENV === 'development' ? console.log : false,
+      debug: false,
     });
 
     this.setupEventListeners();
@@ -57,30 +57,22 @@ class EmailListenerService {
 
   async processIncomingEmail(mail) {
     try {
-      const { from, to, subject, text, html, date, headers, replyTo } = mail;
-      console.log('🚀 mail:', mail);
-
-      // Log raw headers for debugging
-      console.log('Raw headers:', headers);
+      const { from, to, subject, text, html, date, headers } = mail;
 
       // Extract sender's email
       const fromEmail = typeof from === 'string' ? from : from[0].address;
 
       // Extract recipient's email and check for tracking data
       const toEmail = typeof to === 'string' ? to : to[0].address;
-      // based on the trackerAddress example, i need to extract out the shortEmailId
+      // based on the trackerAddress example, extract out the shortEmailId
       const shortEmailId = toEmail.split('@')[0].split('+')[1];
-      console.log('🚀 shortEmailId:', shortEmailId);
 
-      //   find the email Id from shortEmailId
+      // find the email Id from shortEmailId
       const checkEmail = await Email.findOne({ shortEmailId });
-      console.log('🚀 checkEmail from shortEmailId:', checkEmail ? 'found' : 'not found');
 
-      // Instead of looking for replyTo which doesn't exist in your JSON,
-      // use the sender's email address (fromEmail)
+      // Use the sender's email address
       const emailOfTheUser = fromEmail;
 
-      console.log('🚀 emailOfTheUser:', emailOfTheUser);
       // Find the user
       let user = await User.findOne({
         email: emailOfTheUser,
@@ -93,9 +85,7 @@ class EmailListenerService {
           name: fromEmail.split('@')[0] || 'Unknown User',
           isActivated: false,
         });
-        console.log('Created new user for email:', emailOfTheUser);
       }
-      console.log('🚀 user:', user);
 
       // Create base email data
       const emailData = {
