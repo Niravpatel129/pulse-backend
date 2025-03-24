@@ -13,6 +13,7 @@ import {
   getTemplates,
   saveTemplate,
 } from '../controllers/email/templateController.js';
+import toggleReadStatus from '../controllers/email/toggleReadStatus.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -31,6 +32,8 @@ router.post('/reply', upload.array('attachments'), validateRequest(sendEmailSche
 
 // Email history routes
 router.get('/history/:projectId', getEmailHistory);
+router.patch('/:emailId/toggle-read-status', toggleReadStatus);
+
 router.get('/:emailId', getEmailDetails);
 
 // Template routes

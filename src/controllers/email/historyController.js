@@ -4,7 +4,7 @@ import { handleError } from '../../utils/errorHandler.js';
 /**
  * Build email thread chain using replyEmailId to establish parent-child relationships
  */
-const buildEmailChain = async (emails) => {
+const buildEmailChain = async (emails, userId) => {
   // Create a map of email ID to email for quick lookup
   const emailMap = new Map();
   const rootEmails = [];
@@ -14,6 +14,7 @@ const buildEmailChain = async (emails) => {
     emailMap.set(email._id.toString(), {
       ...email.toObject(),
       replies: [],
+      isRead: email.readBy && email.readBy.some((id) => id.toString() === userId),
     });
   }
 
@@ -99,6 +100,7 @@ export const getEmailHistory = async (req, res) => {
   try {
     const { projectId } = req.params;
     const { page = 1, limit = 10 } = req.query;
+    const userId = req.user.userId;
 
     // Get all emails for the project
     const emails = await Email.find({ projectId })
@@ -107,7 +109,7 @@ export const getEmailHistory = async (req, res) => {
       .populate('replyEmailId');
 
     // Build email threads
-    const threads = await buildEmailChain(emails);
+    const threads = await buildEmailChain(emails, userId);
 
     // Paginate the threads
     const start = (page - 1) * limit;
@@ -130,6 +132,8 @@ export const getEmailHistory = async (req, res) => {
 export const getEmailDetails = async (req, res) => {
   try {
     const { emailId } = req.params;
+    const userId = req.user.userId;
+
     const email = await Email.findById(emailId)
       .populate('sentBy', 'name email')
       .populate('projectId', 'name')
@@ -169,11 +173,14 @@ export const getEmailDetails = async (req, res) => {
     const relatedEmails = await findRelatedEmails(emailId);
     const allThreadEmails = [email, ...relatedEmails];
 
-    const [thread] = await buildEmailChain(allThreadEmails);
+    const [thread] = await buildEmailChain(allThreadEmails, userId);
 
     return res.status(200).json({
       success: true,
-      email,
+      email: {
+        ...email.toObject(),
+        isRead: email.readBy && email.readBy.some((id) => id.toString() === userId),
+      },
       thread,
     });
   } catch (error) {

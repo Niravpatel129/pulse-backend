@@ -79,6 +79,12 @@ const emailSchema = new mongoose.Schema(
       type: String,
     },
 
+    readBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
     direction: {
       type: String,
       enum: ['outbound', 'inbound'],

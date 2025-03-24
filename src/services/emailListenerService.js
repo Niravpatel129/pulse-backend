@@ -58,7 +58,8 @@ class EmailListenerService {
 
   async processIncomingEmail(mail) {
     try {
-      const { from, to, subject, text, html, date, headers } = mail;
+      const { from, to, subject, text, html, date } = mail;
+      console.log('🚀 mail:', mail);
 
       // Extract sender's email
       const fromEmail = typeof from === 'string' ? from : from[0].address;
@@ -68,14 +69,17 @@ class EmailListenerService {
       // based on the trackerAddress example, extract out the shortEmailId
       const shortEmailId = toEmail.split('@')[0].split('+')[1];
 
-      console.log('🚀 shortEmailId:', shortEmailId);
-
       // find the email Id from shortEmailId
-      const checkEmail = await Email.findOne({ shortEmailId });
+      const checkEmail = await Email.findOne({ shortEmailId }).populate('sentBy', 'email');
 
+      console.log('🚀 checkEmail:', checkEmail);
+
+      if (!checkEmail) {
+        console.log('No email found, error');
+        return;
+      }
       // Use the sender's email address
       const emailOfTheUser = fromEmail;
-      console.log('🚀 emailOfTheUser:', emailOfTheUser);
 
       // Find the user
       let user = await User.findOne({
@@ -92,24 +96,13 @@ class EmailListenerService {
         });
       }
 
-      // Get the original recipient from the original email
-      let recipientEmails = [];
-      if (checkEmail) {
-        // Use the original email's 'to' field as the recipient for this reply
-        recipientEmails = checkEmail.to || [];
-      } else {
-        // If we can't find the original email, use the current 'to' address
-        recipientEmails = Array.isArray(to) ? to.map((t) => t.address) : [toEmail];
-      }
-
-      console.log('🚀 recipientEmails:', recipientEmails);
       // Create base email data
       const emailData = {
         from: fromEmail,
         projectId: checkEmail?.projectId,
-        to: recipientEmails,
+        to: checkEmail?.sentBy?.email,
         subject,
-        sentBy: user?._id, // Added optional chaining in case user is null
+        sentBy: user?._id,
         body: html || text,
         bodyText: text,
         sentAt: date,
