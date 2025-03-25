@@ -7,6 +7,7 @@ import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
+import calendarRoutes from './src/routes/calendarRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
@@ -41,9 +42,10 @@ app.use(
   cors({
     origin: (origin, callback) => {
       const allowedOrigins = [
-        /^https?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
+        /^https?:\/\/(?:[\w-]+\.)*hourblock\.com(?::\d+)?$/,
         /^http:\/\/localhost(?::\d+)?$/,
         /^https:\/\/toastify-.*\.vercel\.app$/,
+        /^https:\/\/(?:[\w-]+\.)*hourblock\.com$/,
       ];
       if (
         !origin ||
@@ -76,6 +78,7 @@ app.use('/api/elements', elementRoutes);
 app.use('/api/module-emails', moduleEmailRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/emails', emailRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
