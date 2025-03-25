@@ -14,7 +14,7 @@ const timeSlotSchema = new mongoose.Schema(
   { _id: false },
 );
 
-const defaultTimeSlot = { start: '09:00', end: '17:00' };
+const defaultTimeSlot = { start: '00:00', end: '23:59' };
 
 const availabilitySchema = new mongoose.Schema(
   {
@@ -26,7 +26,7 @@ const availabilitySchema = new mongoose.Schema(
     },
     timezone: {
       type: String,
-      default: '',
+      default: 'America/Toronto',
     },
     minimumNotice: {
       type: Number,
