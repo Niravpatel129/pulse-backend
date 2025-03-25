@@ -7,6 +7,7 @@ import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
+import availabilityRoutes from './src/routes/availabilityRoutes.js';
 import calendarRoutes from './src/routes/calendarRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
@@ -66,19 +67,22 @@ app.use(
 // Passport middleware
 app.use(passport.initialize());
 
+const routesPrefix = '/api';
+
 // Mount routers
-app.use('/api/users', userRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/participants', participantRoutes);
-app.use('/api/workspaces', workspaceRoutes);
-app.use('/api/meetings', meetingRoutes);
-app.use('/api/modules', moduleRoutes);
-app.use('/api/elements', elementRoutes);
-app.use('/api/module-emails', moduleEmailRoutes);
-app.use('/api/activities', activityRoutes);
-app.use('/api/emails', emailRoutes);
-app.use('/api/calendar', calendarRoutes);
+app.use(`${routesPrefix}/users`, userRoutes);
+app.use(`${routesPrefix}/auth`, authRoutes);
+app.use(`${routesPrefix}/projects`, projectRoutes);
+app.use(`${routesPrefix}/participants`, participantRoutes);
+app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
+app.use(`${routesPrefix}/meetings`, meetingRoutes);
+app.use(`${routesPrefix}/modules`, moduleRoutes);
+app.use(`${routesPrefix}/elements`, elementRoutes);
+app.use(`${routesPrefix}/module-emails`, moduleEmailRoutes);
+app.use(`${routesPrefix}/activities`, activityRoutes);
+app.use(`${routesPrefix}/emails`, emailRoutes);
+app.use(`${routesPrefix}/calendar`, calendarRoutes);
+app.use(`${routesPrefix}/availability`, availabilityRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
