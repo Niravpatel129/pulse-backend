@@ -16,6 +16,7 @@ import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
+import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
 import AppError from './src/utils/AppError.js';
@@ -45,7 +46,6 @@ app.use(
       const allowedOrigins = [
         /^https?:\/\/(?:[\w-]+\.)*hourblock\.com(?::\d+)?$/,
         /^http:\/\/localhost(?::\d+)?$/,
-        /^https:\/\/toastify-.*\.vercel\.app$/,
         /^https:\/\/(?:[\w-]+\.)*hourblock\.com$/,
       ];
       if (
@@ -83,6 +83,7 @@ app.use(`${routesPrefix}/activities`, activityRoutes);
 app.use(`${routesPrefix}/emails`, emailRoutes);
 app.use(`${routesPrefix}/calendar`, calendarRoutes);
 app.use(`${routesPrefix}/availability`, availabilityRoutes);
+app.use(`${routesPrefix}/schedule`, scheduleRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
