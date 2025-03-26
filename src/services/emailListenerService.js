@@ -78,9 +78,11 @@ class EmailListenerService {
         console.log('No email found, error');
         return;
       }
-      // Use the sender's email address
-      const emailOfTheUser = fromEmail;
 
+      // Use the replyTo address if available, otherwise use the from address
+      const emailOfTheUser = mail.replyTo?.[0]?.address || fromEmail;
+
+      console.log('🚀 emailOfTheUser:', emailOfTheUser);
       // Find the user
       let user = await User.findOne({
         email: emailOfTheUser,
