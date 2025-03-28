@@ -12,6 +12,7 @@ import calendarRoutes from './src/routes/calendarRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
+import integrationRoutes from './src/routes/integrationRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
@@ -84,6 +85,7 @@ app.use(`${routesPrefix}/emails`, emailRoutes);
 app.use(`${routesPrefix}/calendar`, calendarRoutes);
 app.use(`${routesPrefix}/availability`, availabilityRoutes);
 app.use(`${routesPrefix}/schedule`, scheduleRoutes);
+app.use(`${routesPrefix}/integrations`, integrationRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
