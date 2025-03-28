@@ -24,6 +24,11 @@ const scheduleInvite = async (req, res, next) => {
       customLocation,
     } = req.body;
 
+    const workspaceName = req.workspace?.name;
+    if (!workspaceName) {
+      return next(new AppError('Workspace name not found', 400));
+    }
+
     // Convert meetingDuration to number and validate
     const duration = parseInt(meetingDuration, 10);
     if (isNaN(duration) || duration <= 0) {
@@ -68,9 +73,9 @@ const scheduleInvite = async (req, res, next) => {
       customLocation,
     });
 
-    const bookingLink = `${process.env.FRONTEND_URL || 'https://hourblock.com'}/booking/${
-      booking._id
-    }`;
+    const bookingLink = `${
+      process.env.FRONTEND_URL || `https://${workspaceName}.hourblock.com`
+    }/portal/booking/${booking._id}`;
 
     // Send email to each client
     for (const clientEmail of clientEmails) {
