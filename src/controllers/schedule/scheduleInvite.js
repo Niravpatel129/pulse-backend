@@ -14,7 +14,7 @@ const scheduleInvite = async (req, res, next) => {
   try {
     const { userId } = req.user;
     const {
-      clientEmails,
+      primaryClientEmail,
       meetingDuration,
       meetingPurpose,
       startDateRange,
@@ -22,6 +22,7 @@ const scheduleInvite = async (req, res, next) => {
       projectId,
       meetingLocation,
       customLocation,
+      videoPlatform,
     } = req.body;
 
     const workspaceName = req.workspace?.name;
@@ -36,7 +37,7 @@ const scheduleInvite = async (req, res, next) => {
     }
 
     if (
-      !clientEmails ||
+      !primaryClientEmail ||
       !meetingDuration ||
       !meetingPurpose ||
       !startDateRange ||
@@ -50,6 +51,10 @@ const scheduleInvite = async (req, res, next) => {
       return next(new AppError('Custom location is required when location type is "other"', 400));
     }
 
+    if (meetingLocation === 'video' && !videoPlatform) {
+      return next(new AppError('Video platform is required when location type is "video"', 400));
+    }
+
     const availability = await Availability.findOne({ userId });
 
     if (!availability) {
@@ -61,7 +66,7 @@ const scheduleInvite = async (req, res, next) => {
     const booking = await BookingRequest.create({
       userId,
       bookingToken,
-      clientEmails,
+      primaryClientEmail,
       meetingDuration: duration,
       meetingPurpose,
       dateRange: {
@@ -71,42 +76,45 @@ const scheduleInvite = async (req, res, next) => {
       projectId,
       meetingLocation,
       customLocation,
+      videoPlatform,
     });
 
     const bookingLink = `${
       process.env.FRONTEND_URL || `https://${workspaceName}.hourblock.com`
     }/portal/booking/${booking._id}`;
 
-    // Send email to each client
-    for (const clientEmail of clientEmails) {
-      await emailService.sendEmail({
-        to: clientEmail,
-        subject: `Invitation to Schedule a Meeting: ${meetingPurpose}`,
-        html: `
+    // Send email to the client
+    await emailService.sendEmail({
+      to: primaryClientEmail,
+      subject: `Invitation to Schedule a Meeting: ${meetingPurpose}`,
+      html: `
+        <div>
+          <h2>You've Been Invited to Schedule a Meeting</h2>
+          <p>You have been invited to schedule a ${meetingDuration} minute meeting about "${meetingPurpose}".</p>
+          <p>Please select a time that works for you between ${new Date(
+            startDateRange,
+          ).toLocaleDateString()} and ${new Date(endDateRange).toLocaleDateString()}.</p>
+          <p>Meeting location: ${
+            meetingLocation === 'video'
+              ? `${videoPlatform} video call`
+              : meetingLocation === 'other'
+              ? customLocation
+              : meetingLocation
+          }</p>
           <div>
-            <h2>You've Been Invited to Schedule a Meeting</h2>
-            <p>You have been invited to schedule a ${meetingDuration} minute meeting about "${meetingPurpose}".</p>
-            <p>Please select a time that works for you between ${new Date(
-              startDateRange,
-            ).toLocaleDateString()} and ${new Date(endDateRange).toLocaleDateString()}.</p>
-            <p>Meeting location: ${
-              meetingLocation === 'other' ? customLocation : meetingLocation
-            }</p>
-            <div>
-              <a href="${bookingLink}">Schedule Meeting</a>
-            </div>
-            <p>If you have any questions, please reply to this email.</p>
-            <p>Thank you!</p>
+            <a href="${bookingLink}">Schedule Meeting</a>
           </div>
-        `,
-      });
-    }
+          <p>If you have any questions, please reply to this email.</p>
+          <p>Thank you!</p>
+        </div>
+      `,
+    });
 
     res.status(200).json({
       status: 'success',
       message: 'Schedule invite sent successfully',
       data: {
-        clientEmails,
+        primaryClientEmail,
         meetingDuration,
         meetingPurpose,
         dateRange: {
@@ -114,6 +122,7 @@ const scheduleInvite = async (req, res, next) => {
           end: endDateRange,
         },
         meetingLocation,
+        videoPlatform,
         customLocation: meetingLocation === 'other' ? customLocation : undefined,
         bookingLink,
       },
