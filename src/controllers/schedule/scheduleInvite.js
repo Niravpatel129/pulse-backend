@@ -14,16 +14,35 @@ const scheduleInvite = async (req, res, next) => {
   try {
     const { userId } = req.user;
     const {
-      clientEmail,
+      clientEmails,
       meetingDuration,
       meetingPurpose,
       startDateRange,
       endDateRange,
       projectId,
+      meetingLocation,
+      customLocation,
     } = req.body;
 
-    if (!clientEmail || !meetingDuration || !meetingPurpose || !startDateRange || !endDateRange) {
+    // Convert meetingDuration to number and validate
+    const duration = parseInt(meetingDuration, 10);
+    if (isNaN(duration) || duration <= 0) {
+      return next(new AppError('Invalid meeting duration', 400));
+    }
+
+    if (
+      !clientEmails ||
+      !meetingDuration ||
+      !meetingPurpose ||
+      !startDateRange ||
+      !endDateRange ||
+      !meetingLocation
+    ) {
       return next(new AppError('Missing required fields', 400));
+    }
+
+    if (meetingLocation === 'other' && !customLocation) {
+      return next(new AppError('Custom location is required when location type is "other"', 400));
     }
 
     const availability = await Availability.findOne({ userId });
@@ -37,51 +56,60 @@ const scheduleInvite = async (req, res, next) => {
     const booking = await BookingRequest.create({
       userId,
       bookingToken,
-      clientEmail,
-      meetingDuration,
+      clientEmails,
+      meetingDuration: duration,
       meetingPurpose,
       dateRange: {
         start: startDateRange,
         end: endDateRange,
       },
       projectId,
+      meetingLocation,
+      customLocation,
     });
 
     const bookingLink = `${process.env.FRONTEND_URL || 'https://hourblock.com'}/booking/${
       booking._id
     }`;
 
-    // TODO: Send email to the client
-    emailService.sendEmail({
-      to: clientEmail,
-      subject: `Invitation to Schedule a Meeting: ${meetingPurpose}`,
-      html: `
-        <div>
-          <h2>You've Been Invited to Schedule a Meeting</h2>
-          <p>You have been invited to schedule a ${meetingDuration} minute meeting about "${meetingPurpose}".</p>
-          <p>Please select a time that works for you between ${new Date(
-            startDateRange,
-          ).toLocaleDateString()} and ${new Date(endDateRange).toLocaleDateString()}.</p>
+    // Send email to each client
+    for (const clientEmail of clientEmails) {
+      await emailService.sendEmail({
+        to: clientEmail,
+        subject: `Invitation to Schedule a Meeting: ${meetingPurpose}`,
+        html: `
           <div>
-            <a href="${bookingLink}">Schedule Meeting</a>
+            <h2>You've Been Invited to Schedule a Meeting</h2>
+            <p>You have been invited to schedule a ${meetingDuration} minute meeting about "${meetingPurpose}".</p>
+            <p>Please select a time that works for you between ${new Date(
+              startDateRange,
+            ).toLocaleDateString()} and ${new Date(endDateRange).toLocaleDateString()}.</p>
+            <p>Meeting location: ${
+              meetingLocation === 'other' ? customLocation : meetingLocation
+            }</p>
+            <div>
+              <a href="${bookingLink}">Schedule Meeting</a>
+            </div>
+            <p>If you have any questions, please reply to this email.</p>
+            <p>Thank you!</p>
           </div>
-          <p>If you have any questions, please reply to this email.</p>
-          <p>Thank you!</p>
-        </div>
-      `,
-    });
+        `,
+      });
+    }
 
     res.status(200).json({
       status: 'success',
       message: 'Schedule invite sent successfully',
       data: {
-        clientEmail,
+        clientEmails,
         meetingDuration,
         meetingPurpose,
         dateRange: {
           start: startDateRange,
           end: endDateRange,
         },
+        meetingLocation,
+        customLocation: meetingLocation === 'other' ? customLocation : undefined,
         bookingLink,
       },
     });

@@ -16,8 +16,8 @@ const bookingRequestSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    clientEmail: {
-      type: String,
+    clientEmails: {
+      type: [String],
       required: true,
     },
     meetingDuration: {
@@ -37,6 +37,13 @@ const bookingRequestSchema = new mongoose.Schema(
         type: Date,
         required: true,
       },
+    },
+    meetingLocation: {
+      type: String,
+      required: true,
+    },
+    customLocation: {
+      type: String,
     },
     status: {
       type: String,
