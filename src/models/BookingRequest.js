@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const bookingRequestSchema = new mongoose.Schema(
   {
-    userId: {
+    bookingBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
@@ -41,6 +41,10 @@ const bookingRequestSchema = new mongoose.Schema(
     meetingLocation: {
       type: String,
       required: true,
+    },
+    videoPlatform: {
+      type: String,
+      required: false,
     },
     customLocation: {
       type: String,

@@ -5,6 +5,9 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
+      default: function () {
+        return this.email.split('@')[0];
+      },
     },
     isActivated: {
       type: Boolean,

@@ -13,7 +13,7 @@ const getBooking = async (req, res, next) => {
   try {
     const { bookingId } = req.params;
 
-    const booking = await BookingRequest.findById(bookingId);
+    const booking = await BookingRequest.findById(bookingId).populate('bookingBy', 'name');
 
     if (!booking) {
       return next(new AppError('Booking not found', 404));
@@ -21,8 +21,8 @@ const getBooking = async (req, res, next) => {
 
     // Get user's Google Calendar and Availability information
     const [googleCalendar, availability] = await Promise.all([
-      GoogleCalendar.findOne({ user: booking.userId }),
-      Availability.findOne({ userId: booking.userId }),
+      GoogleCalendar.findOne({ user: booking.bookingBy }),
+      Availability.findOne({ userId: booking.bookingBy }),
     ]);
 
     res.status(200).json({

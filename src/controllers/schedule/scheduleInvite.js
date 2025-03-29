@@ -64,7 +64,7 @@ const scheduleInvite = async (req, res, next) => {
     const bookingToken = crypto.randomBytes(32).toString('hex');
 
     const booking = await BookingRequest.create({
-      userId,
+      bookingBy: userId,
       bookingToken,
       primaryClientEmail,
       meetingDuration: duration,
