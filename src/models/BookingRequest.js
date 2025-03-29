@@ -49,6 +49,10 @@ const bookingRequestSchema = new mongoose.Schema(
     customLocation: {
       type: String,
     },
+    meetLink: {
+      type: String,
+      required: false,
+    },
     status: {
       type: String,
       enum: ['pending', 'booked', 'cancelled', 'completed'],

@@ -36,6 +36,7 @@ const getSchedule = async (req, res, next) => {
         scheduledTime: booking.scheduledTime,
         createdBy: booking.bookingBy,
         createdAt: booking.createdAt,
+        meetLink: booking.meetLink,
       })),
     };
 
