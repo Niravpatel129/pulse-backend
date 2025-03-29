@@ -2,7 +2,6 @@ import crypto from 'crypto';
 import Availability from '../../models/Availability.js';
 import BookingRequest from '../../models/BookingRequest.js';
 import emailService from '../../services/emailService.js';
-import googleCalendarService from '../../services/googleCalendarService.js';
 import AppError from '../../utils/AppError.js';
 
 /**
@@ -64,27 +63,6 @@ const scheduleInvite = async (req, res, next) => {
 
     const bookingToken = crypto.randomBytes(32).toString('hex');
 
-    // Generate Google Meet link if video platform is Google Meet
-    let meetLink = null;
-    if (videoPlatform === 'google-meet') {
-      try {
-        meetLink = await googleCalendarService.generateMeetLink(userId, {
-          title: meetingPurpose,
-          description: `Meeting scheduled through ${workspaceName}`,
-          startTime: new Date(startDateRange),
-          endTime: new Date(endDateRange),
-        });
-      } catch (error) {
-        console.error('Failed to generate Google Meet link:', error);
-        return next(
-          new AppError(
-            'Failed to generate Google Meet link. Please ensure Google Calendar is connected.',
-            500,
-          ),
-        );
-      }
-    }
-
     const booking = await BookingRequest.create({
       bookingBy: userId,
       bookingToken,
@@ -99,7 +77,6 @@ const scheduleInvite = async (req, res, next) => {
       meetingLocation,
       customLocation,
       videoPlatform,
-      meetLink,
     });
 
     const bookingLink = `${

@@ -32,10 +32,13 @@ class GoogleCalendarService {
    * @param {string} meetingDetails.description - Meeting description
    * @param {Date} meetingDetails.startTime - Meeting start time
    * @param {Date} meetingDetails.endTime - Meeting end time
+   * @param {Array} [meetingDetails.attendees] - Array of attendees with email and name
+   * @param {string} [meetingDetails.sendUpdates] - Whether to send updates to attendees
    * @returns {Promise<string>} Google Meet link
    */
   async generateMeetLink(userId, meetingDetails) {
     try {
+      console.log('🚀 meetingDetails:', meetingDetails);
       const calendarCreds = await this.getCalendarCredentials(userId);
 
       // Set up credentials
@@ -47,7 +50,7 @@ class GoogleCalendarService {
       // Create calendar instance
       const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
 
-      // Create calendar event with Google Meet
+      // Create calendar event
       const event = {
         summary: meetingDetails.title,
         description: meetingDetails.description,
@@ -59,30 +62,37 @@ class GoogleCalendarService {
           dateTime: meetingDetails.endTime.toISOString(),
           timeZone: 'UTC',
         },
-        conferenceData: {
+        attendees: meetingDetails.attendees || ['mrmapletv123@gmail.com'],
+      };
+
+      // Only try to add Google Meet if there are attendees
+      if (meetingDetails.attendees?.length > 0) {
+        event.conferenceData = {
           createRequest: {
             requestId: `${userId}-${Date.now()}`,
             conferenceSolutionKey: { type: 'hangoutsMeet' },
           },
-        },
-      };
+        };
+      }
 
       const response = await calendar.events.insert({
         calendarId: calendarCreds.calendarId,
         requestBody: event,
-        conferenceDataVersion: 1,
+        conferenceDataVersion: event.conferenceData ? 1 : 0,
+        sendUpdates: meetingDetails.sendUpdates || 'all',
       });
 
-      // Extract Meet link from the response
+      // Extract Meet link from the response if available
       const meetLink = response.data.conferenceData?.entryPoints?.[0]?.uri;
-      if (!meetLink) {
-        throw new AppError('Failed to generate Google Meet link', 500);
+      if (meetLink) {
+        return meetLink;
       }
 
-      return meetLink;
+      // Return null if no Meet link was generated
+      return null;
     } catch (error) {
-      console.error('Error generating Google Meet link:', error);
-      throw new AppError('Failed to generate Google Meet link', 500);
+      console.error('Error creating calendar event:', error);
+      throw new AppError('Failed to create calendar event', 500);
     }
   }
 }

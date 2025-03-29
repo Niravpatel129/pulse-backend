@@ -1,4 +1,5 @@
 import express from 'express';
+import confirmBooking from '../controllers/schedule/confirmBooking.js';
 import getBooking from '../controllers/schedule/getBooking.js';
 import getSchedule from '../controllers/schedule/getSchedule.js';
 import scheduleInvite from '../controllers/schedule/scheduleInvite.js';
@@ -13,5 +14,6 @@ router.use(extractWorkspace);
 router.post('/invite', scheduleInvite);
 router.get('/booking/:bookingId', getBooking);
 router.get('/', getSchedule);
+router.post('/booking/:bookingId/confirm', confirmBooking);
 
 export default router;

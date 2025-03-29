@@ -11,6 +11,10 @@ const bookingRequestSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
     },
+    notes: {
+      type: String,
+      required: false,
+    },
     bookingToken: {
       type: String,
       required: true,
