@@ -42,9 +42,10 @@ const confirmBooking = async (req, res) => {
       throw new BadRequestError('Invalid end time format');
     }
 
+    let meetingLink = null;
     // Create Google Calendar event
     try {
-      await googleCalendarService.generateMeetLink(bookingRequest.bookingBy, {
+      meetingLink = await googleCalendarService.generateMeetLink(bookingRequest.bookingBy, {
         title: bookingRequest.meetingPurpose,
         description: `Meeting with ${name || 'guest'}\nPurpose: ${bookingRequest.meetingPurpose}`,
         startTime: scheduledDate,
@@ -77,6 +78,7 @@ const confirmBooking = async (req, res) => {
     bookingRequest.status = 'booked';
     bookingRequest.scheduledTime = startTime;
     bookingRequest.notes = notes;
+    bookingRequest.meetLink = meetingLink;
     await bookingRequest.save();
 
     // TODO: Send confirmation emails to all client emails
