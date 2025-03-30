@@ -79,6 +79,12 @@ const confirmBooking = async (req, res) => {
     bookingRequest.scheduledTime = startTime;
     bookingRequest.notes = notes;
     bookingRequest.meetLink = meetingLink;
+
+    bookingRequest.acceptedInviteInformation = {
+      email: bookingRequest.bookingBy.email,
+      name: bookingRequest.bookingBy.name,
+      responseStatus: 'needsAction',
+    };
     await bookingRequest.save();
 
     // TODO: Send confirmation emails to all client emails

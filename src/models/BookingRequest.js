@@ -11,6 +11,14 @@ const bookingRequestSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
     },
+    acceptedInviteInformation: {
+      email: {
+        type: String,
+      },
+      name: {
+        type: String,
+      },
+    },
     notes: {
       type: String,
       required: false,
