@@ -56,21 +56,40 @@ export const createParticipant = async (req, res, next) => {
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
 
-    // Extract data from the new payload structure
-    const { participant, projectId } = req.body;
-    const { name, email, phone, dateAdded, notes, customFields } = participant;
-
-    const participantData = {
-      name,
-      email,
-      phone,
-      dateAdded,
-      comments: notes, // Map notes to comments field
-      customFields,
-      workspace: workspaceId,
-      createdBy: userId,
-      project: projectId, // Add project reference if provided
-    };
+    // Handle both nested and flat payload structures
+    let participantData;
+    if (req.body.participant) {
+      // Handle nested structure
+      const { participant, projectId } = req.body;
+      const { name, email, phone, dateAdded, notes, customFields } = participant;
+      participantData = {
+        name,
+        email,
+        phone,
+        dateAdded,
+        comments: notes,
+        customFields,
+        workspace: workspaceId,
+        createdBy: userId,
+        project: projectId,
+      };
+    } else {
+      // Handle flat structure
+      const { name, email, phone, website, jobTitle, mailingAddress, comments, customFields } =
+        req.body;
+      participantData = {
+        name,
+        email,
+        phone,
+        website,
+        jobTitle,
+        mailingAddress,
+        comments,
+        customFields,
+        workspace: workspaceId,
+        createdBy: userId,
+      };
+    }
 
     const newParticipant = await Participant.create(participantData);
     return res.status(201).json(new ApiResponse(201, newParticipant));
