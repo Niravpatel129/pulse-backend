@@ -7,6 +7,10 @@ const bookingRequestSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    description: {
+      type: String,
+      required: false,
+    },
     projectId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
@@ -38,7 +42,25 @@ const bookingRequestSchema = new mongoose.Schema(
     },
     meetingPurpose: {
       type: String,
+      required: false,
+    },
+    type: {
+      type: String,
+      enum: ['video', 'phone', 'other'],
+      required: false,
+    },
+    startTime: {
+      type: String,
+      required: false,
+    },
+    endTime: {
+      type: String,
+      required: false,
+    },
+    timezone: {
+      type: String,
       required: true,
+      default: 'UTC',
     },
     dateRange: {
       start: {
@@ -60,6 +82,10 @@ const bookingRequestSchema = new mongoose.Schema(
     },
     customLocation: {
       type: String,
+    },
+    phoneNumber: {
+      type: String,
+      required: false,
     },
     meetLink: {
       type: String,
