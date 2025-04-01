@@ -10,7 +10,7 @@ const bookMeeting = async (req, res, next) => {
     const {
       title,
       type,
-      duration,
+      duration = 30,
       participants,
       startTime,
       endTime,
@@ -28,7 +28,6 @@ const bookMeeting = async (req, res, next) => {
     if (
       !title ||
       !type ||
-      !duration ||
       !participants ||
       !startTime ||
       !endTime ||

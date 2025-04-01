@@ -94,19 +94,10 @@ const scheduleInvite = async (req, res, next) => {
           <p>Please select a time that works for you between ${new Date(
             startDateRange,
           ).toLocaleDateString()} and ${new Date(endDateRange).toLocaleDateString()}.</p>
-          <p>Meeting location: ${
-            meetingLocation === 'video'
-              ? videoPlatform === 'google-meet'
-                ? `Google Meet video call${meetLink ? ` (${meetLink})` : ''}`
-                : `${videoPlatform} video call`
-              : meetingLocation === 'other'
-              ? customLocation
-              : meetingLocation
-          }</p>
+          </p>
           <div>
             <a href="${bookingLink}">Schedule Meeting</a>
           </div>
-          <p>If you have any questions, please reply to this email.</p>
           <p>Thank you!</p>
         </div>
       `,
@@ -126,7 +117,6 @@ const scheduleInvite = async (req, res, next) => {
         meetingLocation,
         videoPlatform,
         customLocation: meetingLocation === 'other' ? customLocation : undefined,
-        meetLink,
         bookingLink,
       },
     });
