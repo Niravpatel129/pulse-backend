@@ -25,6 +25,56 @@ class GoogleCalendarService {
   }
 
   /**
+   * Refresh Google OAuth tokens if expired
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Updated calendar credentials
+   */
+  async refreshTokensIfNeeded(userId) {
+    const calendarCreds = await this.getCalendarCredentials(userId);
+
+    // Set up credentials
+    this.oauth2Client.setCredentials({
+      access_token: calendarCreds.accessToken,
+      refresh_token: calendarCreds.refreshToken,
+      expiry_date: calendarCreds.expiryDate
+        ? new Date(calendarCreds.expiryDate).getTime()
+        : undefined,
+    });
+
+    // Check if token is expired or about to expire (within 5 minutes)
+    const isTokenExpired =
+      calendarCreds.expiryDate &&
+      Date.now() >= new Date(calendarCreds.expiryDate).getTime() - 5 * 60 * 1000;
+
+    if (isTokenExpired) {
+      try {
+        console.log('Refreshing expired token');
+        const { tokens } = await this.oauth2Client.refreshToken(calendarCreds.refreshToken);
+
+        // Update tokens in database
+        calendarCreds.accessToken = tokens.access_token;
+        if (tokens.refresh_token) calendarCreds.refreshToken = tokens.refresh_token;
+        calendarCreds.expiryDate = tokens.expiry_date ? new Date(tokens.expiry_date) : undefined;
+        await calendarCreds.save();
+
+        // Update oauth client with new tokens
+        this.oauth2Client.setCredentials({
+          access_token: calendarCreds.accessToken,
+          refresh_token: calendarCreds.refreshToken,
+          expiry_date: calendarCreds.expiryDate
+            ? new Date(calendarCreds.expiryDate).getTime()
+            : undefined,
+        });
+      } catch (error) {
+        console.error('Error refreshing token:', error);
+        throw new AppError('Failed to refresh Google authorization', 401);
+      }
+    }
+
+    return calendarCreds; // Return the credentials
+  }
+
+  /**
    * Generate a Google Meet link for a meeting
    * @param {string} userId - User ID
    * @param {Object} meetingDetails - Meeting details
@@ -39,15 +89,11 @@ class GoogleCalendarService {
   async generateMeetLink(userId, meetingDetails) {
     try {
       console.log('🚀 meetingDetails:', meetingDetails);
-      const calendarCreds = await this.getCalendarCredentials(userId);
 
-      // Set up credentials
-      this.oauth2Client.setCredentials({
-        access_token: calendarCreds.accessToken,
-        refresh_token: calendarCreds.refreshToken,
-      });
+      // Use the refresh method to ensure we have valid tokens and get credentials
+      const calendarCreds = await this.refreshTokensIfNeeded(userId);
 
-      // Create calendar instance
+      // Create calendar instance with the refreshed credentials
       const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
 
       // Create calendar event
