@@ -18,6 +18,7 @@ import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
+import projectModuleRoutes from './src/routes/projectModuleRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
@@ -88,6 +89,7 @@ app.use(`${routesPrefix}/availability`, availabilityRoutes);
 app.use(`${routesPrefix}/schedule`, scheduleRoutes);
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
 app.use(`${routesPrefix}/files`, fileRoutes);
+app.use(`${routesPrefix}/project-modules`, projectModuleRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
