@@ -3,7 +3,7 @@ import multer from 'multer';
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
 
-// File filter function
+// File filter function - allow all file types
 const fileFilter = (req, file, cb) => {
   console.log('Processing file upload:', {
     originalname: file.originalname,
@@ -11,33 +11,8 @@ const fileFilter = (req, file, cb) => {
     size: file.size,
   });
 
-  // Add or modify allowed types as needed
-  const allowedTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  ];
-
-  if (!file.mimetype) {
-    console.error('File upload rejected: No mimetype specified');
-    cb(new Error('No mimetype specified'), false);
-    return;
-  }
-
-  if (allowedTypes.includes(file.mimetype)) {
-    console.log('File type accepted:', file.mimetype);
-    cb(null, true);
-  } else {
-    console.error('File upload rejected: Invalid file type:', file.mimetype);
-    cb(new Error(`Invalid file type: ${file.mimetype}`), false);
-  }
+  // Allow all file types
+  cb(null, true);
 };
 
 // Create multer upload instance

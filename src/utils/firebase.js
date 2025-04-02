@@ -31,10 +31,10 @@ export const firebaseStorage = {
   /**
    * Generates a unique storage path for a file
    */
-  generatePath(workspaceId, moduleId, fileName) {
+  generatePath(workspaceId, fileName) {
     const timestamp = Date.now();
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const path = `workspaces/${workspaceId}/modules/${moduleId}/files/${timestamp}_${sanitizedFileName}`;
+    const path = `workspaces/${workspaceId}/files/${timestamp}_${sanitizedFileName}`;
     console.log('Generated storage path:', path);
     return path;
   },
