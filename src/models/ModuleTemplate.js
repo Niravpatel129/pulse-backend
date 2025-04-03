@@ -32,10 +32,6 @@ const templateFieldSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  lookupFields: {
-    type: [String],
-    default: [],
-  },
 });
 
 const moduleTemplateSchema = new mongoose.Schema(

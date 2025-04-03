@@ -15,9 +15,22 @@ const getModuleTemplates = async (req, res, next) => {
       workspace: workspaceId,
     });
 
+    // Remove lookupFields from each field in each module template
+    const processedModuleTemplates = moduleTemplates.map((template) => {
+      const templateObj = template.toObject();
+      if (templateObj.fields && templateObj.fields.length > 0) {
+        templateObj.fields = templateObj.fields.map((field) => {
+          const fieldObj = { ...field };
+          delete fieldObj.lookupFields;
+          return fieldObj;
+        });
+      }
+      return templateObj;
+    });
+
     res.status(200).json({
       success: true,
-      data: moduleTemplates,
+      data: processedModuleTemplates,
       message: 'Module templates retrieved successfully',
     });
   } catch (error) {

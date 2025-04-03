@@ -1,4 +1,5 @@
 import ModuleTemplate from '../../models/ModuleTemplate.js';
+import Table from '../../models/Table/Table.js';
 import AppError from '../../utils/AppError.js';
 
 /**
@@ -18,8 +19,8 @@ const createModuleTemplate = async (req, res, next) => {
     }
 
     // Process fields to ensure they have the correct structure
-    const processedFields =
-      fields?.map((field) => {
+    const processedFields = await Promise.all(
+      (fields || []).map(async (field) => {
         const processedField = {
           name: field.name,
           type: field.type,
@@ -32,11 +33,17 @@ const createModuleTemplate = async (req, res, next) => {
         if (field.type === 'relation' && field.relationType) {
           processedField.relationType = field.relationType;
           processedField.multiple = field.multiple || false;
-          processedField.lookupFields = field.lookupFields || [];
+
+          // Validate that the relationType exists
+          const relatedTable = await Table.findById(field.relationType);
+          if (!relatedTable) {
+            throw new AppError(`Related table with ID ${field.relationType} not found`, 400);
+          }
         }
 
         return processedField;
-      }) || [];
+      }),
+    );
 
     const moduleTemplate = await ModuleTemplate.create({
       name,
@@ -46,9 +53,19 @@ const createModuleTemplate = async (req, res, next) => {
       createdBy: userId,
     });
 
+    // Remove lookupFields from the response
+    const moduleTemplateObj = moduleTemplate.toObject();
+    if (moduleTemplateObj.fields && moduleTemplateObj.fields.length > 0) {
+      moduleTemplateObj.fields = moduleTemplateObj.fields.map((field) => {
+        const fieldObj = { ...field };
+        delete fieldObj.lookupFields;
+        return fieldObj;
+      });
+    }
+
     res.status(201).json({
       success: true,
-      data: moduleTemplate,
+      data: moduleTemplateObj,
       message: 'Module template created successfully',
     });
   } catch (error) {
