@@ -1,14 +1,14 @@
 import Table from '../../models/Table/Table.js';
 
 /**
- * Get all tables in a workspace
+ * Get all tables in a workspace (minimal data for listing in tab view)
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
 const getTables = async (req, res, next) => {
   try {
-    const { workspaceId } = req;
+    const workspaceId = req.workspace._id;
 
     // Query parameters for filtering
     const { status = 'active', search } = req.query;
@@ -24,9 +24,8 @@ const getTables = async (req, res, next) => {
       query.$text = { $search: search };
     }
 
-    const tables = await Table.find(query)
-      .select('name description views columns createdAt updatedAt')
-      .sort({ updatedAt: -1 });
+    // Only select essential fields for tab view listing
+    const tables = await Table.find(query).select('_id name').sort({ updatedAt: -1 });
 
     res.status(200).json({
       success: true,
