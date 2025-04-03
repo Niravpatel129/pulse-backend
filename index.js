@@ -17,6 +17,7 @@ import integrationRoutes from './src/routes/integrationRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
+import moduleTemplatesRoutes from './src/routes/moduleTemplatesRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
 import projectModuleRoutes from './src/routes/projectModuleRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
@@ -24,7 +25,6 @@ import tablesRoutes from './src/routes/tablesRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
 import AppError from './src/utils/AppError.js';
-
 // Load env vars
 dotenv.config();
 
@@ -73,25 +73,38 @@ app.use(passport.initialize());
 
 const routesPrefix = '/api';
 
-// Mount routers
-app.use(`${routesPrefix}/users`, userRoutes);
+// Authentication and user management
 app.use(`${routesPrefix}/auth`, authRoutes);
+app.use(`${routesPrefix}/users`, userRoutes);
+app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
+
+// Project management
 app.use(`${routesPrefix}/projects`, projectRoutes);
 app.use(`${routesPrefix}/participants`, participantRoutes);
-app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
-app.use(`${routesPrefix}/meetings`, meetingRoutes);
-app.use(`${routesPrefix}/modules`, moduleRoutes);
-app.use(`${routesPrefix}/elements`, elementRoutes);
-app.use(`${routesPrefix}/module-emails`, moduleEmailRoutes);
 app.use(`${routesPrefix}/activities`, activityRoutes);
-app.use(`${routesPrefix}/emails`, emailRoutes);
+
+// Modules and templates
+app.use(`${routesPrefix}/modules`, moduleRoutes);
+app.use(`${routesPrefix}/module-templates`, moduleTemplatesRoutes);
+app.use(`${routesPrefix}/project-modules`, projectModuleRoutes);
+app.use(`${routesPrefix}/module-emails`, moduleEmailRoutes);
+app.use(`${routesPrefix}/elements`, elementRoutes);
+
+// Calendar and scheduling
+app.use(`${routesPrefix}/meetings`, meetingRoutes);
 app.use(`${routesPrefix}/calendar`, calendarRoutes);
 app.use(`${routesPrefix}/availability`, availabilityRoutes);
 app.use(`${routesPrefix}/schedule`, scheduleRoutes);
-app.use(`${routesPrefix}/integrations`, integrationRoutes);
-app.use(`${routesPrefix}/files`, fileRoutes);
-app.use(`${routesPrefix}/project-modules`, projectModuleRoutes);
+
+// Communication
+app.use(`${routesPrefix}/emails`, emailRoutes);
+
+// Data and storage
 app.use(`${routesPrefix}/tables`, tablesRoutes);
+app.use(`${routesPrefix}/files`, fileRoutes);
+
+// Integrations
+app.use(`${routesPrefix}/integrations`, integrationRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
