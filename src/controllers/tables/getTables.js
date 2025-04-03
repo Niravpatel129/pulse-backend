@@ -30,7 +30,7 @@ const getTables = async (req, res, next) => {
     res.status(200).json({
       success: true,
       count: tables.length,
-      data: tables,
+      data: tables.reverse(),
       message: 'Tables retrieved successfully',
     });
   } catch (error) {
