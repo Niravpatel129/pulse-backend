@@ -13,6 +13,10 @@ const columnSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    icon: {
+      type: String,
+      default: 'text',
+    },
     type: {
       type: String,
       enum: [
