@@ -2,6 +2,7 @@ import express from 'express';
 import createTable from '../controllers/tables/createTable.js';
 import createTableRecord from '../controllers/tables/createTableRecord.js';
 import createTableRow from '../controllers/tables/createTableRow.js';
+import deleteTableColumn from '../controllers/tables/deleteTableColumn.js';
 import getTableById from '../controllers/tables/getTableById.js';
 import getTableRecordById from '../controllers/tables/getTableRecordById.js';
 import getTableRecords from '../controllers/tables/getTableRecords.js';
@@ -25,5 +26,6 @@ router.post('/:tableId/records', createTableRecord);
 router.post('/:tableId/rows', createTableRow);
 router.get('/:tableId', getTableById);
 router.post('/:tableId/columns', updateTableColumns);
+router.delete('/:tableId/columns/:columnId', deleteTableColumn);
 
 export default router;
