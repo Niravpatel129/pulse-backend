@@ -1,17 +1,17 @@
-import Record from '../../models/Table/Record.js';
+import Row from '../../models/Table/Row.js';
 import Table from '../../models/Table/Table.js';
 import AppError from '../../utils/AppError.js';
 
 /**
- * Create a new record in a table
+ * Create a new row in a table
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-const createTableRecord = async (req, res, next) => {
+const createTableRow = async (req, res, next) => {
   try {
     const { tableId } = req.params;
-    const { values, columnId, rowId } = req.body;
+    const { position } = req.body;
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
 
@@ -25,32 +25,36 @@ const createTableRecord = async (req, res, next) => {
       return next(new AppError('Table not found or you do not have access to this table', 404));
     }
 
-    // Validate that the column exists in the table
-    const columnExists = table.columns.some((col) => col.id === columnId);
-    if (!columnExists) {
-      return next(new AppError('Column not found in this table', 404));
+    // If position is provided, shift existing rows
+    if (position) {
+      await Row.updateMany(
+        {
+          tableId,
+          position: { $gte: position },
+        },
+        { $inc: { position: 1 } },
+      );
+    } else {
+      // If no position provided, add to the end
+      const lastRow = await Row.findOne({ tableId }).sort({ position: -1 });
+      position = lastRow ? lastRow.position + 1 : 1;
     }
 
-    // Create the record
-    const record = await Record.create({
+    // Create the new row
+    const row = await Row.create({
       tableId,
-      columnId,
-      rowId,
-      values,
+      position,
       createdBy: userId,
     });
 
-    // Populate the createdBy field
-    await record.populate('createdBy', 'name email');
-
     res.status(201).json({
       success: true,
-      data: record,
-      message: 'Record created successfully',
+      data: row,
+      message: 'Row created successfully',
     });
   } catch (error) {
     next(error);
   }
 };
 
-export default createTableRecord;
+export default createTableRow;
