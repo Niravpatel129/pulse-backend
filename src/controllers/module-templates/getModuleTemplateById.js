@@ -3,7 +3,6 @@ import Record from '../../models/Table/Record.js';
 import Row from '../../models/Table/Row.js';
 import Table from '../../models/Table/Table.js';
 import AppError from '../../utils/AppError.js';
-import transformModuleTemplateForForm from '../../utils/moduleTemplateTransformer.js';
 
 /**
  * Get a module template by ID
@@ -16,6 +15,7 @@ const getModuleTemplateById = async (req, res, next) => {
     const { id } = req.params;
     const workspaceId = req.workspace._id;
 
+    // Find the module template
     const moduleTemplate = await ModuleTemplate.findOne({
       _id: id,
       workspace: workspaceId,
@@ -28,91 +28,91 @@ const getModuleTemplateById = async (req, res, next) => {
       return next(new AppError('Module template not found', 404));
     }
 
-    // Transform the data to include all necessary information for form building
-    const transformedData = {
-      ...moduleTemplate.toObject(),
-      fields: await Promise.all(
-        moduleTemplate.fields.map(async (field) => {
-          // Convert field to object and remove lookupFields property
-          const fieldObj = field.toObject();
-          delete fieldObj.lookupFields;
+    // Convert module template to plain object
+    const moduleTemplateObj = moduleTemplate.toObject();
 
-          const fieldData = {
-            ...fieldObj,
-            description: fieldObj.description || '',
-            options: fieldObj.options || [],
+    // Process each field
+    const processedFields = await Promise.all(
+      moduleTemplateObj.fields.map(async (field) => {
+        // Create a base field object with common properties
+        const processedField = {
+          ...field,
+          description: field.description || '',
+          options: field.options || [],
+        };
+
+        // If it's a relation field, fetch data from the related table
+        if (field.type === 'relation' && field.relationType) {
+          // Store the related table information
+          processedField.relationTable = {
+            _id: field.relationType._id,
+            name: field.relationType.name,
           };
 
-          // If it's a relation field, include the related table information
-          if (fieldData.type === 'relation' && fieldData.relationType) {
-            fieldData.relationTable = {
-              _id: fieldData.relationType._id,
-              name: fieldData.relationType.name,
-            };
+          // Get the related table
+          const relatedTable = await Table.findById(field.relationType._id);
 
-            // Get the related table
-            const relatedTable = await Table.findById(fieldData.relationType._id);
+          if (relatedTable) {
+            // Get all rows for the table
+            const rows = await Row.find({
+              tableId: field.relationType._id,
+            })
+              .select('_id position')
+              .sort({ position: 1 });
 
-            if (relatedTable) {
-              // Get all rows for the table
-              const rows = await Row.find({
-                tableId: fieldData.relationType._id,
-              })
-                .select('_id position')
-                .sort({ position: 1 });
+            if (rows.length > 0) {
+              // Get all records for these rows
+              const records = await Record.find({
+                tableId: field.relationType._id,
+                rowId: { $in: rows.map((row) => row._id) },
+              });
 
-              if (rows.length > 0) {
-                // Get the records for these rows
-                const records = await Record.find({
-                  tableId: fieldData.relationType._id,
-                  rowId: { $in: rows.map((row) => row._id) },
-                }).select('rowId values');
+              // Create a map of rowId to record values for easier lookup
+              const recordMap = new Map();
+              records.forEach((record) => {
+                if (!recordMap.has(record.rowId.toString())) {
+                  recordMap.set(record.rowId.toString(), {});
+                }
+                const rowValues = recordMap.get(record.rowId.toString());
+                rowValues[record.columnId] = record.values.get(record.columnId);
+              });
 
-                // Create a map of rowId to record values for easier lookup
-                const recordMap = new Map();
-                records.forEach((record) => {
-                  if (!recordMap.has(record.rowId.toString())) {
-                    recordMap.set(record.rowId.toString(), {});
-                  }
-                  const rowValues = recordMap.get(record.rowId.toString());
-                  rowValues[record.columnId] = record.values.get(record.columnId);
-                });
+              // Create select options from the rows
+              processedField.selectOptions = rows.map((row) => {
+                const rowValues = recordMap.get(row._id.toString()) || {};
 
-                // Map rows to include all values as a single string
-                fieldData.lookupItems = rows.map((row) => {
-                  const rowValues = recordMap.get(row._id.toString()) || {};
+                // Convert all values to a single string for display
+                const displayValue = Object.values(rowValues)
+                  .filter((value) => value !== undefined && value !== null)
+                  .join(', ');
 
-                  // Convert all values to a single string
-                  const displayValue = Object.values(rowValues)
-                    .filter((value) => value !== undefined && value !== null)
-                    .join(' - ');
-
-                  return {
-                    _id: row._id,
-                    name: displayValue || 'Unnamed Item',
-                    values: rowValues,
-                  };
-                });
-              } else {
-                fieldData.lookupItems = [];
-              }
+                return {
+                  value: row._id.toString(),
+                  label: displayValue || 'Unnamed Item',
+                  rowData: rowValues,
+                };
+              });
             } else {
-              fieldData.lookupItems = [];
+              processedField.selectOptions = [];
             }
+          } else {
+            processedField.selectOptions = [];
           }
+        }
 
-          return fieldData;
-        }),
-      ),
+        return processedField;
+      }),
+    );
+
+    // Create the transformed data object
+    const transformedData = {
+      ...moduleTemplateObj,
+      fields: processedFields,
     };
-
-    // Transform the data for frontend form rendering
-    const formData = transformModuleTemplateForForm(transformedData);
 
     res.status(200).json({
       success: true,
       data: transformedData,
-      formData: formData,
       message: 'Module template retrieved successfully',
     });
   } catch (error) {
