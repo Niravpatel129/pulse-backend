@@ -7,6 +7,7 @@ import getTableById from '../controllers/tables/getTableById.js';
 import getTableRecordById from '../controllers/tables/getTableRecordById.js';
 import getTableRecords from '../controllers/tables/getTableRecords.js';
 import getTables from '../controllers/tables/getTables.js';
+import updateTableColumn from '../controllers/tables/updateTableColumn.js';
 import updateTableColumns from '../controllers/tables/updateTableColumns.js';
 import updateTableRecord from '../controllers/tables/updateTableRecord.js';
 import { authenticate } from '../middleware/auth.js';
@@ -26,6 +27,7 @@ router.post('/:tableId/records', createTableRecord);
 router.post('/:tableId/rows', createTableRow);
 router.get('/:tableId', getTableById);
 router.post('/:tableId/columns', updateTableColumns);
+router.patch('/:tableId/columns/:columnId', updateTableColumn);
 router.delete('/:tableId/columns/:columnId', deleteTableColumn);
 
 export default router;
