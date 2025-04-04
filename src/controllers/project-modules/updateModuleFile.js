@@ -31,6 +31,9 @@ const updateModuleFile = async (req, res, next) => {
       contentSnapshot: {
         fileId: fileId,
         fileName: newFile.originalName || newFile.name,
+        fileType: newFile.type,
+        fileSize: newFile.size,
+        fileUrl: newFile.url,
       },
       updatedBy: req.user.userId,
     });

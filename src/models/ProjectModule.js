@@ -44,6 +44,14 @@ const fieldSchema = new mongoose.Schema(
 const contentSnapshotSchema = new mongoose.Schema(
   {
     fields: [fieldSchema],
+    fileId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'File',
+    },
+    fileName: String,
+    fileType: String,
+    fileSize: Number,
+    fileUrl: String,
   },
   { _id: false },
 );
