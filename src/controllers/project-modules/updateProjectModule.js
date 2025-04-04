@@ -4,7 +4,7 @@ import AppError from '../../utils/AppError.js';
 const updateProjectModule = async (req, res, next) => {
   try {
     const { moduleId } = req.params;
-    const { name, description, status, order, fields } = req.body;
+    const { status, order, fields, templateName, templateDescription } = req.body;
 
     const module = await ProjectModule.findById(moduleId);
     if (!module) {
@@ -17,10 +17,12 @@ const updateProjectModule = async (req, res, next) => {
     }
 
     // Update basic fields
-    if (name !== undefined) module.name = name;
-    if (description !== undefined) module.description = description;
+    if (templateName !== undefined) module.name = templateName;
+    if (templateDescription !== undefined) module.description = templateDescription;
     if (status !== undefined) module.status = status;
     if (order !== undefined) module.order = order;
+    if (templateName !== undefined) module.templateName = templateName;
+    if (templateDescription !== undefined) module.templateDescription = templateDescription;
 
     // Fields are required for templated modules
     if (!fields) {
