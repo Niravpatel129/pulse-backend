@@ -4,6 +4,7 @@ import addTemplatedModuleToProject from '../controllers/project-modules/addTempl
 import deleteModuleFromProject from '../controllers/project-modules/deleteModuleFromProject.js';
 import getModuleDetails from '../controllers/project-modules/getModuleDetails.js';
 import getProjectModules from '../controllers/project-modules/getProjectModules.js';
+import restoreModuleVersion from '../controllers/project-modules/restoreModuleVersion.js';
 import updateModuleDetails from '../controllers/project-modules/updateModuleDetails.js';
 import updateProjectModule from '../controllers/project-modules/updateProjectModule.js';
 import { authenticate } from '../middleware/auth.js';
@@ -23,5 +24,7 @@ router.delete('/:moduleId', deleteModuleFromProject);
 
 router.get('/:projectId', getProjectModules);
 router.get('/module/:moduleId', getModuleDetails);
+
+router.patch('/:moduleId/restore-version', restoreModuleVersion);
 
 export default router;
