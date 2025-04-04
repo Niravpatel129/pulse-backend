@@ -1,12 +1,60 @@
 import mongoose from 'mongoose';
 
+const fieldSchema = new mongoose.Schema(
+  {
+    templateFieldId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+    fieldName: {
+      type: String,
+      required: true,
+    },
+    fieldType: {
+      type: String,
+      required: true,
+    },
+    isRequired: {
+      type: Boolean,
+      default: false,
+    },
+    description: {
+      type: String,
+      default: '',
+    },
+    relationType: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Table',
+    },
+    relationTable: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Table',
+    },
+    multiple: {
+      type: Boolean,
+      default: false,
+    },
+    fieldValue: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+  },
+  { _id: false },
+);
+
+const contentSnapshotSchema = new mongoose.Schema(
+  {
+    fields: [fieldSchema],
+  },
+  { _id: false },
+);
+
 const versionSchema = new mongoose.Schema({
   number: {
     type: Number,
     required: true,
   },
   contentSnapshot: {
-    type: mongoose.Schema.Types.Mixed, // store form answers or file reference
+    type: contentSnapshotSchema,
     required: true,
   },
   updatedBy: {

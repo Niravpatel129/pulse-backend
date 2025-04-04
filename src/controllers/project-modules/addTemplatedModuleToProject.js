@@ -12,23 +12,18 @@ const addTemplatedModuleToProject = async (req, res, next) => {
       return res.status(404).json({ message: 'Template not found' });
     }
 
-    // Validate fields if provided
-    let processedFields = [];
-    if (fields && Array.isArray(fields)) {
-      // Process each field from the request
-      processedFields = fields.map((field) => ({
-        templateFieldId: field.templateFieldId,
-        fieldName: field.fieldName,
-        fieldType: field.fieldType,
-        fieldValue: field.fieldValue,
-        isRequired: field.isRequired,
-        description: field.description,
-        relationType: field.relationType,
-        relationTable: field.relationTable,
-        lookupFields: field.lookupFields,
-        multiple: field.multiple,
-      }));
-    }
+    // Process fields for storage
+    const processedFields = fields.map((field) => ({
+      templateFieldId: field.templateFieldId,
+      fieldName: field.fieldName,
+      fieldType: field.fieldType,
+      isRequired: field.isRequired,
+      description: field.description,
+      relationType: field.relationType,
+      relationTable: field.relationTable,
+      multiple: field.multiple,
+      fieldValue: field.fieldValue,
+    }));
 
     // Create a new project module based on the template
     const projectModule = await ProjectModule.create({
@@ -40,8 +35,17 @@ const addTemplatedModuleToProject = async (req, res, next) => {
         templateId: templateId,
         templateDescription: templateDescription,
         workspace: req.workspace._id,
-        fields: processedFields,
       },
+      versions: [
+        {
+          number: 1,
+          contentSnapshot: {
+            fields: processedFields,
+          },
+          updatedBy: req.user.userId,
+        },
+      ],
+      currentVersion: 1,
     });
 
     return res.status(201).json(projectModule);

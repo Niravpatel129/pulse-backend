@@ -34,11 +34,25 @@ const createModuleTemplate = async (req, res, next) => {
           processedField.relationType = field.relationType;
           processedField.multiple = field.multiple || false;
 
+          // Add display configuration for relation fields
+          processedField.displayConfig = {
+            showColumns: field.showColumns || [], // Array of column names to display
+            primaryColumn: field.primaryColumn || 'name', // Default primary column for display
+            format: field.format || 'dropdown', // Format for displaying the relation (dropdown, table, etc.)
+          };
+
           // Validate that the relationType exists
           const relatedTable = await Table.findById(field.relationType);
           if (!relatedTable) {
             throw new AppError(`Related table with ID ${field.relationType} not found`, 400);
           }
+
+          // Store the table's column structure for reference
+          processedField.relationColumns = relatedTable.columns.map((col) => ({
+            id: col.id,
+            name: col.name,
+            type: col.type,
+          }));
         }
 
         return processedField;
