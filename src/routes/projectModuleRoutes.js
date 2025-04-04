@@ -2,6 +2,7 @@ import express from 'express';
 import addModuleToProject from '../controllers/project-modules/addModuleToProject.js';
 import addTemplatedModuleToProject from '../controllers/project-modules/addTemplatedModuleToProject.js';
 import deleteModuleFromProject from '../controllers/project-modules/deleteModuleFromProject.js';
+import getModuleDetails from '../controllers/project-modules/getModuleDetails.js';
 import getProjectModules from '../controllers/project-modules/getProjectModules.js';
 import updateModuleDetails from '../controllers/project-modules/updateModuleDetails.js';
 import { authenticate } from '../middleware/auth.js';
@@ -19,5 +20,6 @@ router.patch('/:moduleId', updateModuleDetails);
 router.delete('/:moduleId', deleteModuleFromProject);
 
 router.get('/:projectId', getProjectModules);
+router.get('/module/:moduleId', getModuleDetails);
 
 export default router;

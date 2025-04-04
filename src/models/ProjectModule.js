@@ -1,5 +1,60 @@
 import mongoose from 'mongoose';
 
+const versionSchema = new mongoose.Schema({
+  number: {
+    type: Number,
+    required: true,
+  },
+  contentSnapshot: {
+    type: mongoose.Schema.Types.Mixed, // store form answers or file reference
+    required: true,
+  },
+  updatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const approvalSchema = new mongoose.Schema({
+  status: {
+    type: String,
+    enum: ['not_requested', 'pending', 'approved', 'rejected'],
+    default: 'not_requested',
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  approvedAt: {
+    type: Date,
+  },
+  comment: {
+    type: String,
+  },
+});
+
+const commentSchema = new mongoose.Schema({
+  commenter: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  text: String,
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  statusContext: {
+    type: String,
+    enum: ['general', 'approval'],
+    default: 'general',
+  },
+});
+
 const projectModuleSchema = new mongoose.Schema(
   {
     project: {
@@ -35,18 +90,17 @@ const projectModuleSchema = new mongoose.Schema(
         ref: 'ModuleTemplate',
       },
     },
+    versions: [versionSchema],
+    currentVersion: {
+      type: Number,
+      default: 1,
+    },
+    approval: approvalSchema,
+    comments: [commentSchema],
     addedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
     },
   },
   {
@@ -54,34 +108,28 @@ const projectModuleSchema = new mongoose.Schema(
   },
 );
 
-// Add compound index to ensure unique project-module combinations
-// Note: You'll need to redefine what "unique" means in your context
+// Unique per project ordering
 projectModuleSchema.index({ project: 1, order: 1 }, { unique: true });
 
-// Add validation to ensure appropriate content is provided based on moduleType
+// Validation based on moduleType
 projectModuleSchema.pre('validate', function (next) {
   const moduleType = this.moduleType;
   const content = this.content || {};
 
   if (moduleType === 'file' && !content.fileId) {
     return next(new Error('File ID is required for file modules'));
-  } else if (moduleType === 'form' && !content.formId) {
-    return next(new Error('Form ID is required for form modules'));
   } else if (moduleType === 'template' && !content.templateId) {
     return next(new Error('Template ID is required for template modules'));
-  } else if (moduleType === 'text' && !content.text) {
-    return next(new Error('Text content is required for text modules'));
   }
 
   next();
 });
 
-// Update the updatedAt field on save
+// Update `updatedAt` on save
 projectModuleSchema.pre('save', function (next) {
   this.updatedAt = Date.now();
   next();
 });
 
 const ProjectModule = mongoose.model('ProjectModule', projectModuleSchema);
-
 export default ProjectModule;
