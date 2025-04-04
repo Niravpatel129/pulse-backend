@@ -23,17 +23,17 @@ const projectModuleSchema = new mongoose.Schema(
     moduleType: {
       type: String,
       required: true,
-      enum: ['file'],
+      enum: ['file', 'template'],
     },
     content: {
       fileId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'File',
       },
-      //   templateId: {
-      //     type: mongoose.Schema.Types.ObjectId,
-      //     ref: 'Template', // Assuming you'll create a Template model
-      //   },
+      templateId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ModuleTemplate',
+      },
     },
     addedBy: {
       type: mongoose.Schema.Types.ObjectId,
