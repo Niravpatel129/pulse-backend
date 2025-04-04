@@ -29,11 +29,7 @@ const updateModuleFile = async (req, res, next) => {
     module.versions.push({
       number: newVersionNumber,
       contentSnapshot: {
-        fileId: fileId,
-        fileName: newFile.originalName || newFile.name,
-        fileType: newFile.type,
-        fileSize: newFile.size,
-        fileUrl: newFile.url,
+        fileId: newFile,
       },
       updatedBy: req.user.userId,
     });

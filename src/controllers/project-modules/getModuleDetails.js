@@ -12,7 +12,8 @@ const getModuleDetails = async (req, res, next) => {
       .populate('content.fileId')
       .populate('content.templateId')
       .populate('addedBy')
-      .populate('versions.updatedBy');
+      .populate('versions.updatedBy')
+      .populate('versions.contentSnapshot.fileId');
 
     if (!module) {
       throw new AppError('Module not found', 404);

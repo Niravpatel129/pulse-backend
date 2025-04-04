@@ -22,6 +22,20 @@ const addModuleToProject = async (req, res) => {
         content: {
           fileId: fileId,
         },
+        versions: [
+          {
+            number: 1,
+            contentSnapshot: {
+              fileId: fileId,
+              fileName: file.originalName || file.name,
+              fileType: file.type,
+              fileSize: file.size,
+              fileUrl: file.url,
+            },
+            updatedBy: req.user.userId,
+          },
+        ],
+        currentVersion: 1,
       });
       return res.status(201).json(projectModule);
     } else {
