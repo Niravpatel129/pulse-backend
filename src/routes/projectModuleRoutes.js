@@ -3,6 +3,7 @@ import addModuleToProject from '../controllers/project-modules/addModuleToProjec
 import addTemplatedModuleToProject from '../controllers/project-modules/addTemplatedModuleToProject.js';
 import deleteModuleFromProject from '../controllers/project-modules/deleteModuleFromProject.js';
 import getProjectModules from '../controllers/project-modules/getProjectModules.js';
+import updateModuleDetails from '../controllers/project-modules/updateModuleDetails.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -14,6 +15,7 @@ router.use(extractWorkspace);
 router.post('/templated-module/:projectId', addTemplatedModuleToProject);
 router.post('/', addModuleToProject);
 
+router.patch('/:moduleId', updateModuleDetails);
 router.delete('/:moduleId', deleteModuleFromProject);
 
 router.get('/:projectId', getProjectModules);
