@@ -52,6 +52,7 @@ app.use(
         /^https?:\/\/(?:[\w-]+\.)*hourblock\.com(?::\d+)?$/,
         /^http:\/\/localhost(?::\d+)?$/,
         /^https:\/\/(?:[\w-]+\.)*hourblock\.com$/,
+        /^https?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
       ];
       if (
         !origin ||
