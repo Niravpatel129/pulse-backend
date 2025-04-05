@@ -8,6 +8,10 @@ const getModuleApprovals = async (req, res, next) => {
     const approvals = await ModuleApproval.find({ moduleId })
       .populate('requestedBy', 'name email')
       .populate('approverId', 'name email')
+      .populate({
+        path: 'timeline.performedBy',
+        select: 'name email',
+      })
       .sort({ createdAt: -1 });
 
     res.status(200).json({

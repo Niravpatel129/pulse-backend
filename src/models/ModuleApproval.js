@@ -48,12 +48,24 @@ const moduleApprovalSchema = new mongoose.Schema(
     approvalResponse: {
       type: String,
     },
-    comments: [
+    timeline: [
       {
-        text: String,
-        commentedBy: {
+        action: {
+          type: String,
+          required: true,
+          enum: ['requested', 'approved', 'rejected', 'commented'],
+        },
+        description: {
+          type: String,
+          required: true,
+        },
+        performedBy: {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'User',
+        },
+        guestInfo: {
+          name: String,
+          email: String,
         },
         createdAt: {
           type: Date,

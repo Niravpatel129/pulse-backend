@@ -3,11 +3,16 @@ import getApprovalDetails from '../controllers/approvals/getApprovalDetails.js';
 import getModuleApprovals from '../controllers/approvals/getModuleApprovals.js';
 import requestApproval from '../controllers/approvals/requestApproval.js';
 import sendApprovalEmail from '../controllers/approvals/sendApprovalEmail.js';
+import updateApprovalStatus from '../controllers/approvals/updateApprovalStatus.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
 
+// Authentication is optional for status updates
+router.post('/:approvalId/status', updateApprovalStatus);
+
+// Other routes require authentication
 router.use(authenticate);
 router.use(extractWorkspace);
 

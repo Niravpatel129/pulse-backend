@@ -39,7 +39,7 @@ const getApprovalDetails = async (req, res, next) => {
       .populate('requestedBy', 'name email')
       .populate('approverId', 'name email')
       .populate({
-        path: 'comments.commentedBy',
+        path: 'timeline.performedBy',
         select: 'name email',
       });
 
@@ -136,6 +136,37 @@ const getApprovalDetails = async (req, res, next) => {
         approval.moduleId.content.fields = processedFields;
       }
     }
+
+    // Format timeline entries to include user/guest information
+    const formattedTimeline = approval.timeline.map((entry) => {
+      const formattedEntry = { ...entry.toObject() };
+
+      // If there's a performedBy (authenticated user), use their info
+      if (entry.performedBy) {
+        formattedEntry.user = {
+          name: entry.performedBy.name,
+          email: entry.performedBy.email,
+          isGuest: false,
+        };
+      }
+      // If there's guestInfo, use that
+      else if (entry.guestInfo) {
+        formattedEntry.user = {
+          name: entry.guestInfo.name,
+          email: entry.guestInfo.email,
+          isGuest: true,
+        };
+      }
+
+      // Remove the raw fields
+      delete formattedEntry.performedBy;
+      delete formattedEntry.guestInfo;
+
+      return formattedEntry;
+    });
+
+    // Replace the timeline with the formatted version
+    approval.timeline = formattedTimeline;
 
     res.status(200).json({
       status: 'success',

@@ -30,6 +30,14 @@ const requestApproval = async (req, res, next) => {
           allowComments,
           moduleDetails,
           sendReminder,
+          timeline: [
+            {
+              action: 'requested',
+              description: message,
+              performedBy: req.user.userId,
+              createdAt: new Date(),
+            },
+          ],
         });
 
         return approvalRecord;
