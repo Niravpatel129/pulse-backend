@@ -1,4 +1,5 @@
 import express from 'express';
+import getModuleApprovals from '../controllers/approvals/getModuleApprovals.js';
 import requestApproval from '../controllers/approvals/requestApproval.js';
 import sendApprovalEmail from '../controllers/approvals/sendApprovalEmail.js';
 import { authenticate } from '../middleware/auth.js';
@@ -8,6 +9,9 @@ const router = express.Router();
 
 router.use(authenticate);
 router.use(extractWorkspace);
+
+// Get all approvals for a module
+router.get('/modules/:moduleId', getModuleApprovals);
 
 // Request approval for a module
 router.post('/modules/:moduleId/request', requestApproval);
