@@ -1,4 +1,5 @@
 import express from 'express';
+import getApprovalDetails from '../controllers/approvals/getApprovalDetails.js';
 import getModuleApprovals from '../controllers/approvals/getModuleApprovals.js';
 import requestApproval from '../controllers/approvals/requestApproval.js';
 import sendApprovalEmail from '../controllers/approvals/sendApprovalEmail.js';
@@ -12,6 +13,9 @@ router.use(extractWorkspace);
 
 // Get all approvals for a module
 router.get('/modules/:moduleId', getModuleApprovals);
+
+// Get details for a specific approval
+router.get('/:approvalId', getApprovalDetails);
 
 // Request approval for a module
 router.post('/modules/:moduleId/request', requestApproval);
