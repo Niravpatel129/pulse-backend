@@ -6,6 +6,7 @@ import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
 import activityRoutes from './src/routes/activityRoutes.js';
+import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
 import calendarRoutes from './src/routes/calendarRoutes.js';
@@ -89,6 +90,9 @@ app.use(`${routesPrefix}/module-templates`, moduleTemplatesRoutes);
 app.use(`${routesPrefix}/project-modules`, projectModuleRoutes);
 app.use(`${routesPrefix}/module-emails`, moduleEmailRoutes);
 app.use(`${routesPrefix}/elements`, elementRoutes);
+
+// Approvals
+app.use(`${routesPrefix}/approvals`, approvalRoutes);
 
 // Calendar and scheduling
 app.use(`${routesPrefix}/meetings`, meetingRoutes);
