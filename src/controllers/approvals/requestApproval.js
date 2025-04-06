@@ -58,16 +58,16 @@ const requestApproval = async (req, res, next) => {
         });
 
         // find user name
-        const userDb = await User.findById(req.user.userId);
+        const senderUser = await User.findById(req.user.userId);
 
         // Send approval email to the approver
         await emailService.sendApprovalEmail({
           moduleName: module.name,
           message: message,
-          senderName: userDb.name || '',
+          senderName: senderUser?.name?.charAt(0).toUpperCase() + senderUser?.name?.slice(1) || '',
           recipientEmail: approver.email,
           subject: `Approval Request: ${module.name} from ${
-            userDb?.name?.charAt(0).toUpperCase() + userDb?.name?.slice(1) || ''
+            senderUser?.name?.charAt(0).toUpperCase() + senderUser?.name?.slice(1) || ''
           }`,
           link: `${workspace.name}.${process.env.FRONTEND_URL}/approvals/${approvalRecord._id}?user=${user._id}`,
         });
