@@ -21,36 +21,29 @@ const updateApprovalStatus = async (req, res, next) => {
     approval.status = status;
     approval.approvedAt = new Date();
 
-    // Add timeline entry for the approval/rejection
-    approval.timeline.push({
+    // Create timeline entry for the approval/rejection
+    const timelineEntry = {
       action: status,
       description: status === 'approved' ? 'Approved the request' : 'Rejected the request',
-      performedBy: req.user?.userId,
       createdAt: new Date(),
-    });
+    };
 
-    // If there's a comment, add it as a separate timeline entry
+    // If there's a comment, add it to the same timeline entry
     if (comment) {
-      const timelineEntry = {
-        action: 'commented',
-        description: comment,
-        createdAt: new Date(),
-      };
-
-      // If user is authenticated, use their ID
-      if (req.user?.userId) {
-        timelineEntry.performedBy = req.user.userId;
-      }
-      // If guest info is provided, use that
-      else if (guestInfo) {
-        timelineEntry.guestInfo = {
-          name: guestInfo.name,
-          email: guestInfo.email,
-        };
-      }
-
-      approval.timeline.push(timelineEntry);
+      timelineEntry.description += `: ${comment}`;
     }
+
+    // Set who performed the action
+    if (req.user?.userId) {
+      timelineEntry.performedBy = req.user.userId;
+    } else if (guestInfo) {
+      timelineEntry.guestInfo = {
+        name: guestInfo.name,
+        email: guestInfo.email,
+      };
+    }
+
+    approval.timeline.push(timelineEntry);
 
     await approval.save();
 
