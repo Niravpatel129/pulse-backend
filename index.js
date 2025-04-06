@@ -20,6 +20,7 @@ import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
 import moduleTemplatesRoutes from './src/routes/moduleTemplatesRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
+import pipelineRoutes from './src/routes/pipelineRoutes.js';
 import projectModuleRoutes from './src/routes/projectModuleRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import tablesRoutes from './src/routes/tablesRoutes.js';
@@ -84,6 +85,7 @@ app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
 app.use(`${routesPrefix}/projects`, projectRoutes);
 app.use(`${routesPrefix}/participants`, participantRoutes);
 app.use(`${routesPrefix}/activities`, activityRoutes);
+app.use(`${routesPrefix}/pipeline`, pipelineRoutes);
 
 // Modules and templates
 app.use(`${routesPrefix}/modules`, moduleRoutes);
