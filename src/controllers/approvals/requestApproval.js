@@ -1,5 +1,6 @@
 import ModuleApproval from '../../models/ModuleApproval.js';
 import ProjectModule from '../../models/ProjectModule.js';
+import User from '../../models/User.js';
 import AppError from '../../utils/AppError.js';
 
 const requestApproval = async (req, res, next) => {
@@ -20,10 +21,24 @@ const requestApproval = async (req, res, next) => {
     // Create approval request records for each approver
     const approvalRequests = await Promise.all(
       approvers.map(async (approver) => {
+        // Check if user exists by email
+        let user = await User.findOne({ email: approver.email });
+
+        // If user doesn't exist, create a new inactive user
+        if (!user) {
+          user = await User.create({
+            name: approver.name,
+            email: approver.email,
+            password: Math.random().toString(36).slice(-8), // Generate random password
+            isActivated: false,
+            role: 'user',
+          });
+        }
+
         const approvalRecord = await ModuleApproval.create({
           moduleId: module._id,
           requestedBy: req.user.userId,
-          approverId: approver.id,
+          approverId: user._id,
           approverEmail: approver.email,
           message,
           status: 'pending',
