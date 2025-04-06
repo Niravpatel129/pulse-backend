@@ -167,6 +167,23 @@ const projectModuleSchema = new mongoose.Schema(
 // Unique per project ordering
 projectModuleSchema.index({ project: 1, order: 1 }, { unique: true });
 
+// Auto-assign order number on save
+projectModuleSchema.pre('save', async function (next) {
+  if (this.isNew) {
+    try {
+      const lastModule = await this.constructor
+        .findOne({ project: this.project })
+        .sort({ order: -1 })
+        .select('order');
+
+      this.order = lastModule ? lastModule.order + 1 : 0;
+    } catch (error) {
+      return next(error);
+    }
+  }
+  next();
+});
+
 // Validation based on moduleType
 projectModuleSchema.pre('validate', function (next) {
   const moduleType = this.moduleType;
