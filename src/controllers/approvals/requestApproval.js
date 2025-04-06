@@ -1,6 +1,7 @@
 import ModuleApproval from '../../models/ModuleApproval.js';
 import ProjectModule from '../../models/ProjectModule.js';
 import User from '../../models/User.js';
+import emailService from '../../services/emailService.js';
 import AppError from '../../utils/AppError.js';
 
 const requestApproval = async (req, res, next) => {
@@ -55,13 +56,27 @@ const requestApproval = async (req, res, next) => {
           ],
         });
 
+        // find user name
+        const userDb = await User.findById(req.user.userId);
+
+        // Send approval email to the approver
+        await emailService.sendApprovalEmail({
+          moduleName: module.name,
+          message: message,
+          senderName: userDb.name || '',
+          recipientEmail: approver.email,
+          subject: `Approval Request: ${module.name} from ${
+            userDb?.name?.charAt(0).toUpperCase() + userDb?.name?.slice(1) || ''
+          }`,
+        });
+
         return approvalRecord;
       }),
     );
 
     res.status(200).json({
       status: 'success',
-      message: 'Approval requests created successfully',
+      message: 'Approval requests created and emails sent successfully',
       data: approvalRequests,
     });
   } catch (error) {

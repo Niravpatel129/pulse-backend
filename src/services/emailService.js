@@ -107,24 +107,11 @@ class EmailService {
    * @param {string} options.senderName - Name of the sender
    * @param {string} options.recipientEmail - Recipient email address
    * @param {string} options.subject - Email subject
-   * @param {boolean} options.requestApproval - Whether to include approval request
    * @returns {Promise} - Resolves with the send result
    */
-  async sendApprovalEmail({
-    moduleName,
-    message,
-    senderName,
-    recipientEmail,
-    subject,
-    requestApproval = false,
-  }) {
+  async sendApprovalEmail({ moduleName, message, senderName, recipientEmail, subject }) {
     const html = `
-      <div>
-        <h2>Module: ${moduleName}</h2>
-        <p>${message}</p>
-        ${requestApproval ? '<p>Please review and approve this module.</p>' : ''}
-        <p>Sent by: ${senderName}</p>
-      </div>
+        <div>${message.replace(/\n/g, '<br>')}</div>
     `;
 
     return this.sendEmail({
