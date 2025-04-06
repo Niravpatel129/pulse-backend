@@ -1,4 +1,5 @@
 import express from 'express';
+import deleteApproval from '../controllers/approvals/deleteApproval.js';
 import getApprovalDetails from '../controllers/approvals/getApprovalDetails.js';
 import getModuleApprovals from '../controllers/approvals/getModuleApprovals.js';
 import requestApproval from '../controllers/approvals/requestApproval.js';
@@ -27,5 +28,8 @@ router.post('/modules/:moduleId/request', requestApproval);
 
 // Send approval email for a specific approval request
 router.post('/:approvalId/send-email', sendApprovalEmail);
+
+// Delete an approval request
+router.delete('/:approvalId', deleteApproval);
 
 export default router;
