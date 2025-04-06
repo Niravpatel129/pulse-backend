@@ -29,7 +29,7 @@ const requestApproval = async (req, res, next) => {
         // If user doesn't exist, create a new inactive user
         if (!user) {
           user = await User.create({
-            name: approver.name,
+            name: approver.email.split('@')[0],
             email: approver.email,
             password: Math.random().toString(36).slice(-8), // Generate random password
             isActivated: false,

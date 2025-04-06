@@ -4,7 +4,7 @@ import AppError from '../../utils/AppError.js';
 const updateApprovalStatus = async (req, res, next) => {
   try {
     const { approvalId } = req.params;
-    const { status, comment, guestInfo } = req.body;
+    const { status, comment, userId } = req.body;
 
     // Validate status
     if (!['approved', 'rejected'].includes(status)) {
@@ -26,21 +26,12 @@ const updateApprovalStatus = async (req, res, next) => {
       action: status,
       description: status === 'approved' ? 'Approved the request' : 'Rejected the request',
       createdAt: new Date(),
+      performedBy: userId,
     };
 
     // If there's a comment, add it to the same timeline entry
     if (comment) {
       timelineEntry.description += `: ${comment}`;
-    }
-
-    // Set who performed the action
-    if (req.user?.userId) {
-      timelineEntry.performedBy = req.user.userId;
-    } else if (guestInfo) {
-      timelineEntry.guestInfo = {
-        name: guestInfo.name,
-        email: guestInfo.email,
-      };
     }
 
     approval.timeline.push(timelineEntry);
