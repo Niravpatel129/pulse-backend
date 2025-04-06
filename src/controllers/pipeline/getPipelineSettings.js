@@ -6,6 +6,7 @@ export const getPipelineSettings = async (req, res) => {
 
     let settings = await PipelineSettings.findOne({ workspace: workspace._id });
 
+    console.log('🚀 settings:', settings);
     if (!settings) {
       // Create default settings if none exist
       settings = await PipelineSettings.create({ workspace: workspace._id });
