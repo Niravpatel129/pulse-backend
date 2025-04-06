@@ -8,6 +8,7 @@ const requestApproval = async (req, res, next) => {
   try {
     const { moduleId } = req.params;
     const { approvers, message, sendReminder, allowComments, moduleDetails } = req.body;
+    const workspace = req.workspace;
 
     if (!approvers || approvers.length === 0) {
       throw new AppError('Please select at least one approver', 400);
@@ -68,6 +69,7 @@ const requestApproval = async (req, res, next) => {
           subject: `Approval Request: ${module.name} from ${
             userDb?.name?.charAt(0).toUpperCase() + userDb?.name?.slice(1) || ''
           }`,
+          link: `${workspace.name}.${process.env.FRONTEND_URL}/approvals/${approvalRecord._id}?user=${user._id}`,
         });
 
         return approvalRecord;
