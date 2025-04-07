@@ -1,4 +1,5 @@
 import Project from '../../models/Project.js';
+import ProjectModule from '../../models/ProjectModule.js';
 import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
@@ -28,6 +29,10 @@ export const getProject = async (req, res, next) => {
         participant: undefined, // Remove the nested participant object
       }));
     }
+
+    // Get the count of modules for this project
+    const modulesCount = await ProjectModule.countDocuments({ project: id });
+    formattedProject.modulesCount = modulesCount;
 
     return res.status(200).json(new ApiResponse(200, formattedProject));
   } catch (error) {
