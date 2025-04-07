@@ -36,7 +36,7 @@ export const createProject = async (req, res, next) => {
       name,
       stage,
       status,
-      manager,
+      manager: manager || userId, // Use current user as manager if not provided
       description,
       participants: formattedParticipants,
       startDate,
