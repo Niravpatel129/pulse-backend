@@ -1,4 +1,5 @@
 import express from 'express';
+import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getWorkspaceMembers } from '../controllers/workspace/getWorkspaceMembers.js';
 import {
   createWorkspace,
@@ -14,6 +15,8 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+router.get('/team', extractWorkspace, getTeamMembers);
 
 // Create a new workspace
 router.post('/', createWorkspace);
@@ -32,5 +35,7 @@ router.get('/:workspaceId', getWorkspace);
 
 // Update a workspace
 router.patch('/:workspaceId', updateWorkspace);
+
+// Get Team Members
 
 export default router;
