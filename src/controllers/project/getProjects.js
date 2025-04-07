@@ -11,7 +11,13 @@ export const getProjects = async (req, res, next) => {
     })
       .populate('createdBy', 'name email')
       .populate('manager', 'name email')
-      .populate('clients', 'name email')
+      .populate({
+        path: 'clients',
+        populate: {
+          path: 'user',
+          select: 'name email',
+        },
+      })
       .populate('participants.participant', 'name email');
 
     // Get pipeline settings for the workspace
