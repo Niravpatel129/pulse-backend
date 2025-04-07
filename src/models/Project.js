@@ -45,15 +45,16 @@ const projectSchema = new mongoose.Schema(
     ],
     startDate: {
       type: Date,
-      required: true,
+      required: false,
     },
     targetDate: {
       type: Date,
-      required: true,
+      required: false,
     },
     attachments: [
       {
-        type: String,
+        ref: 'File',
+        type: mongoose.Schema.Types.ObjectId,
       },
     ],
     isActive: {

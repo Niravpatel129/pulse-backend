@@ -27,6 +27,11 @@ export const createProject = async (req, res, next) => {
         }))
       : [];
 
+    // Format attachments to extract just the fileId
+    const formattedAttachments = attachments
+      ? attachments.map((attachment) => attachment.fileId)
+      : [];
+
     const projectData = {
       name,
       stage,
@@ -36,7 +41,7 @@ export const createProject = async (req, res, next) => {
       participants: formattedParticipants,
       startDate,
       targetDate,
-      attachments,
+      attachments: formattedAttachments,
       workspace: workspaceId,
       createdBy: userId,
     };
