@@ -11,7 +11,7 @@ export const createProject = async (req, res, next) => {
       status,
       manager,
       description,
-      client,
+      participants,
       startDate,
       targetDate,
       attachments = [],
@@ -20,13 +20,20 @@ export const createProject = async (req, res, next) => {
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
 
+    // Format participants to match the schema structure
+    const formattedParticipants = participants
+      ? participants.map((participantId) => ({
+          participant: participantId,
+        }))
+      : [];
+
     const projectData = {
       name,
       stage,
       status,
       manager,
       description,
-      clients: client,
+      participants: formattedParticipants,
       startDate,
       targetDate,
       attachments,
