@@ -1,4 +1,5 @@
 import express from 'express';
+import { createClient } from '../controllers/workspace/createClient.js';
 import { getClients } from '../controllers/workspace/getClients.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getWorkspaceMembers } from '../controllers/workspace/getWorkspaceMembers.js';
@@ -20,6 +21,9 @@ router.use(authenticate);
 router.get('/team', extractWorkspace, getTeamMembers);
 
 router.get('/clients', extractWorkspace, getClients);
+
+// create client
+router.post('/clients', extractWorkspace, createClient);
 
 // Create a new workspace
 router.post('/', createWorkspace);
