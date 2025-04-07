@@ -1,4 +1,5 @@
 import Project from '../../models/Project.js';
+import ProjectModule from '../../models/ProjectModule.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import { setupProjectActivities } from './middleware/projectSetup.js';
 
@@ -47,6 +48,38 @@ export const createProject = async (req, res, next) => {
     };
 
     const project = await Project.create(projectData);
+
+    // Create ProjectModule entries for each attachment
+    if (attachments && attachments.length > 0) {
+      const modulePromises = attachments.map(async (attachment) => {
+        return ProjectModule.create({
+          project: project._id,
+          addedBy: userId,
+          moduleType: 'file',
+          name: attachment.fileName || attachment.name,
+          content: {
+            fileId: attachment.fileId,
+          },
+          versions: [
+            {
+              number: 1,
+              contentSnapshot: {
+                fileId: attachment.fileId,
+                fileName: attachment.fileName || attachment.name,
+                fileType: attachment.fileType,
+                fileSize: attachment.fileSize,
+                fileUrl: attachment.fileUrl,
+              },
+              updatedBy: userId,
+            },
+          ],
+          currentVersion: 1,
+        });
+      });
+
+      await Promise.all(modulePromises);
+    }
+
     await setupProjectActivities(project, userId, workspaceId);
 
     return res.status(201).json(new ApiResponse(201, project));
