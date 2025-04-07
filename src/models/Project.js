@@ -12,6 +12,10 @@ const projectSchema = new mongoose.Schema(
       ref: 'Workspace',
       required: true,
     },
+    description: {
+      type: String,
+      required: false,
+    },
     projectType: {
       type: String,
       required: false,
