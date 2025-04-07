@@ -14,7 +14,7 @@ const projectSchema = new mongoose.Schema(
     },
     projectType: {
       type: String,
-      required: true,
+      required: false,
     },
     manager: {
       type: mongoose.Schema.Types.ObjectId,
@@ -27,13 +27,30 @@ const projectSchema = new mongoose.Schema(
     stage: {
       type: String,
       required: true,
-      default: 'Initial Contact',
     },
     status: {
       type: String,
       required: true,
-      default: 'planning',
     },
+    clients: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Client',
+      },
+    ],
+    startDate: {
+      type: Date,
+      required: true,
+    },
+    targetDate: {
+      type: Date,
+      required: true,
+    },
+    attachments: [
+      {
+        type: String,
+      },
+    ],
     isActive: {
       type: Boolean,
       default: true,

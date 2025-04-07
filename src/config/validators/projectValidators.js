@@ -2,11 +2,13 @@ import Joi from 'joi';
 
 export const createProjectSchema = Joi.object({
   name: Joi.string().required().trim().min(3).max(100),
-  description: Joi.string().required().min(10).max(1000),
-  status: Joi.string().valid('planning', 'in-progress', 'completed', 'on-hold').default('planning'),
+  stage: Joi.string().required(),
+  status: Joi.string().required(),
+  lead: Joi.string().required(),
+  client: Joi.array().items(Joi.string()).required(),
   startDate: Joi.date().required(),
-  endDate: Joi.date().min(Joi.ref('startDate')).allow(null),
-  isActive: Joi.boolean().default(true),
+  targetDate: Joi.date().min(Joi.ref('startDate')).required(),
+  attachments: Joi.array().items(Joi.string()).default([]),
 });
 
 export const updateProjectSchema = Joi.object({
