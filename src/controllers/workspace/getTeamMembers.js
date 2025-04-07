@@ -9,7 +9,6 @@ export const getTeamMembers = async (req, res, next) => {
       'members.user',
       'name email',
     );
-    console.log('getTeamMembers', teamMembers);
 
     res.status(200).json(new ApiResponse(200, teamMembers, 'Team members retrieved successfully'));
   } catch (error) {
