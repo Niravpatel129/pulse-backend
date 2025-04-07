@@ -5,7 +5,16 @@ import { setupProjectActivities } from './middleware/projectSetup.js';
 // Create project
 export const createProject = async (req, res, next) => {
   try {
-    const { name, stage, status, lead, client, startDate, targetDate, attachments = [] } = req.body;
+    const {
+      name,
+      stage,
+      status,
+      manager,
+      client,
+      startDate,
+      targetDate,
+      attachments = [],
+    } = req.body;
 
     const userId = req.user.userId;
     const workspaceId = req.workspace._id;
@@ -14,7 +23,7 @@ export const createProject = async (req, res, next) => {
       name,
       stage,
       status,
-      manager: lead,
+      manager,
       clients: client,
       startDate,
       targetDate,
