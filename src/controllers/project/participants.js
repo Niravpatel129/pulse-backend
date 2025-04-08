@@ -32,7 +32,7 @@ export const addParticipant = async (req, res, next) => {
       // Verify the participant exists
       const existingParticipant = await Participant.findOne({
         _id: participantId,
-        workspace: workspaceId,
+        workspaces: workspaceId,
       });
 
       if (!existingParticipant) {
@@ -46,7 +46,7 @@ export const addParticipant = async (req, res, next) => {
       if (participant.email) {
         existingParticipant = await Participant.findOne({
           email: participant.email,
-          workspace: workspaceId,
+          workspaces: workspaceId,
         });
       }
 
@@ -63,7 +63,7 @@ export const addParticipant = async (req, res, next) => {
           dateAdded,
           comments: notes,
           customFields,
-          workspace: workspaceId,
+          workspaces: [workspaceId],
           createdBy: userId,
           project: projectId,
         });

@@ -1,5 +1,5 @@
 import express from 'express';
-import { createClient } from '../controllers/workspace/createClient.js';
+import { addParticipant } from '../controllers/workspace/addParticipant.js';
 import { getClients } from '../controllers/workspace/getClients.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getWorkspaceMembers } from '../controllers/workspace/getWorkspaceMembers.js';
@@ -23,7 +23,7 @@ router.get('/team', extractWorkspace, getTeamMembers);
 router.get('/clients', extractWorkspace, getClients);
 
 // create client
-router.post('/clients', extractWorkspace, createClient);
+router.post('/clients', extractWorkspace, addParticipant);
 
 // Create a new workspace
 router.post('/', createWorkspace);
@@ -42,6 +42,9 @@ router.get('/:workspaceId', getWorkspace);
 
 // Update a workspace
 router.patch('/:workspaceId', updateWorkspace);
+
+// Add a participant to the workspace
+router.post('/participants', extractWorkspace, addParticipant);
 
 // Get Team Members
 

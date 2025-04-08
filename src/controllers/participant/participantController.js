@@ -11,7 +11,9 @@ export const getAllParticipants = async (req, res, next) => {
     }
 
     const workspaceId = req.workspace._id;
-    const participants = await Participant.find({ workspace: workspaceId }).sort({ createdAt: -1 });
+    const participants = await Participant.find({ workspaces: workspaceId }).sort({
+      createdAt: -1,
+    });
     return res.status(200).json(new ApiResponse(200, participants));
   } catch (error) {
     next(error);
@@ -32,7 +34,7 @@ export const getParticipant = async (req, res, next) => {
 
     const participant = await Participant.findOne({
       _id: id,
-      workspace: workspaceId,
+      workspaces: workspaceId,
     });
 
     if (!participant) {
@@ -69,7 +71,7 @@ export const createParticipant = async (req, res, next) => {
         dateAdded,
         comments: notes,
         customFields,
-        workspace: workspaceId,
+        workspaces: [workspaceId],
         createdBy: userId,
         project: projectId,
       };
@@ -86,7 +88,7 @@ export const createParticipant = async (req, res, next) => {
         mailingAddress,
         comments,
         customFields,
-        workspace: workspaceId,
+        workspaces: [workspaceId],
         createdBy: userId,
       };
     }
@@ -114,7 +116,7 @@ export const updateParticipant = async (req, res, next) => {
 
     const participant = await Participant.findOne({
       _id: id,
-      workspace: workspaceId,
+      workspaces: workspaceId,
     });
 
     if (!participant) {
@@ -151,7 +153,7 @@ export const deleteParticipant = async (req, res, next) => {
 
     const participant = await Participant.findOne({
       _id: id,
-      workspace: workspaceId,
+      workspaces: workspaceId,
     });
 
     if (!participant) {

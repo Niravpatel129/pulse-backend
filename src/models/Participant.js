@@ -37,11 +37,13 @@ const participantSchema = new mongoose.Schema(
       type: Map,
       of: String,
     },
-    workspace: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Workspace',
-      required: true,
-    },
+    workspaces: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Workspace',
+        required: true,
+      },
+    ],
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

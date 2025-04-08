@@ -21,7 +21,7 @@ export const addExistingParticipantToProject = async (req, res, next) => {
     const [participant, project] = await Promise.all([
       Participant.findOne({
         _id: participantId,
-        workspace: workspaceId,
+        workspaces: workspaceId,
       }),
       Project.findById(projectId),
     ]);

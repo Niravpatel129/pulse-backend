@@ -1,6 +1,5 @@
 import express from 'express';
 import {
-  createClient,
   deleteClient,
   getClient,
   getClientByUserAndWorkspace,
@@ -14,9 +13,6 @@ const router = express.Router();
 
 router.use(authenticate);
 router.use(extractWorkspace);
-
-// Create a new client
-router.post('/', createClient);
 
 // Get a specific client by ID
 router.get('/:id', getClient);

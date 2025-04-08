@@ -13,22 +13,22 @@ export const addParticipant = async (req, res) => {
   }
 
   // Check if user with email already exists
-  const existingUser = await User.findOne({ email });
-  if (existingUser) {
-    throw new BadRequestError('User with this email already exists');
+  let user = await User.findOne({ email });
+
+  // If user doesn't exist, create one
+  if (!user) {
+    // Generate a random password
+    const tempPassword = crypto.randomBytes(8).toString('hex');
+
+    // Create the user
+    user = await User.create({
+      name,
+      email,
+      password: tempPassword,
+      isActivated: false,
+      role: 'user',
+    });
   }
-
-  // Generate a random password
-  const tempPassword = crypto.randomBytes(8).toString('hex');
-
-  // Create the user
-  const user = await User.create({
-    name,
-    email,
-    password: tempPassword,
-    isActivated: false,
-    role: 'user',
-  });
 
   // Create the participant
   const participant = await Participant.create({
@@ -41,7 +41,7 @@ export const addParticipant = async (req, res) => {
     comments: comments || '',
     customFields: customFields || new Map(),
     workspaces: [workspace._id],
-    createdBy: req.user._id,
+    createdBy: req.user.userId,
   });
 
   res.status(201).json({
