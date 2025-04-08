@@ -52,6 +52,8 @@ const contentSnapshotSchema = new mongoose.Schema(
     fileType: String,
     fileSize: Number,
     fileUrl: String,
+    figmaUrl: String,
+    figmaFileKey: String,
   },
   { _id: false },
 );

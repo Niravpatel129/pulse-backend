@@ -106,6 +106,21 @@ const getModuleDetails = async (req, res, next) => {
       } else {
         module.content.fields = processedFields;
       }
+    } else if (module.moduleType === 'figma') {
+      // For Figma modules, ensure we have the latest version's content
+      if (module.versions && module.versions.length > 0) {
+        const currentVersionIndex = module.versions.findIndex(
+          (v) => v.number === module.currentVersion,
+        );
+        if (currentVersionIndex !== -1) {
+          // Ensure the content is up to date with the latest version
+          module.content = {
+            ...module.content,
+            figmaUrl: module.versions[currentVersionIndex].contentSnapshot.figmaUrl,
+            figmaFileKey: module.versions[currentVersionIndex].contentSnapshot.figmaFileKey,
+          };
+        }
+      }
     }
 
     res.status(200).json({
