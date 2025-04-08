@@ -38,6 +38,50 @@ const addModuleToProject = async (req, res) => {
         currentVersion: 1,
       });
       return res.status(201).json(projectModule);
+    } else if (moduleType === 'figma') {
+      const { figmaUrl, figmaFileKey, name } = moduleContent;
+
+      if (!figmaUrl || !name) {
+        return res.status(400).json({ message: 'Figma URL and name are required' });
+      }
+
+      // Extract file key from URL if not provided
+      let fileKey = figmaFileKey;
+      if (!fileKey) {
+        // Try both file and design URL formats
+        const urlMatch = figmaUrl.match(/figma\.com\/(?:file|design)\/([^\/]+)/);
+        if (urlMatch) {
+          fileKey = urlMatch[1];
+        } else {
+          return res.status(400).json({
+            message:
+              'Invalid Figma URL format. URL should be in format: figma.com/file/... or figma.com/design/...',
+          });
+        }
+      }
+
+      const projectModule = await ProjectModule.create({
+        project: projectId,
+        addedBy: req.user.userId,
+        moduleType: 'figma',
+        name: name,
+        content: {
+          figmaUrl,
+          figmaFileKey: fileKey,
+        },
+        versions: [
+          {
+            number: 1,
+            contentSnapshot: {
+              figmaUrl,
+              figmaFileKey: fileKey,
+            },
+            updatedBy: req.user.userId,
+          },
+        ],
+        currentVersion: 1,
+      });
+      return res.status(201).json(projectModule);
     } else {
       return res.status(400).json({ message: 'Invalid module type' });
     }

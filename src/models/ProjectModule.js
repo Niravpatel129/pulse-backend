@@ -134,7 +134,7 @@ const projectModuleSchema = new mongoose.Schema(
     moduleType: {
       type: String,
       required: true,
-      enum: ['file', 'template'],
+      enum: ['file', 'template', 'figma'],
     },
     content: {
       fileId: {
@@ -144,6 +144,12 @@ const projectModuleSchema = new mongoose.Schema(
       templateId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'ModuleTemplate',
+      },
+      figmaUrl: {
+        type: String,
+      },
+      figmaFileKey: {
+        type: String,
       },
     },
     versions: [versionSchema],
@@ -193,6 +199,8 @@ projectModuleSchema.pre('validate', function (next) {
     return next(new Error('File ID is required for file modules'));
   } else if (moduleType === 'template' && !content.templateId) {
     return next(new Error('Template ID is required for template modules'));
+  } else if (moduleType === 'figma' && !content.figmaUrl) {
+    return next(new Error('Figma URL is required for figma modules'));
   }
 
   next();

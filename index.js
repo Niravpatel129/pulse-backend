@@ -13,6 +13,7 @@ import calendarRoutes from './src/routes/calendarRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
+import figmaRoutes from './src/routes/figmaRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
 import integrationRoutes from './src/routes/integrationRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
@@ -109,6 +110,7 @@ app.use(`${routesPrefix}/emails`, emailRoutes);
 // Data and storage
 app.use(`${routesPrefix}/tables`, tablesRoutes);
 app.use(`${routesPrefix}/files`, fileRoutes);
+app.use(`${routesPrefix}/figma`, figmaRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
