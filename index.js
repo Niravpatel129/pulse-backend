@@ -24,6 +24,7 @@ import participantRoutes from './src/routes/participantRoutes.js';
 import pipelineRoutes from './src/routes/pipelineRoutes.js';
 import projectModuleRoutes from './src/routes/projectModuleRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
+import stripeRoutes from './src/routes/stripeRoutes.js';
 import tablesRoutes from './src/routes/tablesRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
@@ -55,6 +56,7 @@ app.use(
         /^http:\/\/localhost(?::\d+)?$/,
         /^https:\/\/(?:[\w-]+\.)*hourblock\.com$/,
         /^https?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
+        /^http?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
       ];
       if (
         !origin ||
@@ -114,6 +116,7 @@ app.use(`${routesPrefix}/figma`, figmaRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
+app.use(`${routesPrefix}/stripe`, stripeRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {

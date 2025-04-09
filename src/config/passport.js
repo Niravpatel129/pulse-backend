@@ -17,6 +17,12 @@ passport.use(
           return done(null, false, { message: 'Invalid credentials' });
         }
 
+        // Special condition for development environment - bypass password check
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Passport - Development environment - Bypassing password check');
+          return done(null, user);
+        }
+
         const isMatch = await user.matchPassword(password);
         if (!isMatch) {
           return done(null, false, { message: 'Invalid credentials' });
