@@ -44,7 +44,6 @@ const stripeConnectAccountSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'active', 'restricted', 'rejected'],
       default: 'pending',
     },
   },
