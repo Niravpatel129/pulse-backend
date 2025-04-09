@@ -49,8 +49,8 @@ export const createStripeAccount = asyncHandler(async (req, res) => {
 
   // Get workspace URL from request host
   const workspaceUrl = getWorkspaceUrl(req);
-  const refreshUrl = `${workspaceUrl}/stripe/refresh`;
-  const returnUrl = `${workspaceUrl}/stripe/onboard`;
+  const refreshUrl = `${workspaceUrl}/invoices/refresh`;
+  const returnUrl = `${workspaceUrl}/invoices/return`;
 
   console.log('Request Host:', req.headers.host);
   console.log('Workspace URL:', workspaceUrl);
