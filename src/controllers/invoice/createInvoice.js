@@ -1,55 +1,43 @@
 import Invoice from '../../models/invoiceModel.js';
+import ProductCatalog from '../../models/ProductCatalog.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 import { generateInvoiceNumber } from '../../utils/generateInvoiceNumber.js';
 
 export const createInvoice = catchAsync(async (req, res, next) => {
   try {
-    const {
-      clientId,
-      items,
-      subtotal,
-      total,
-      status = 'draft',
-      dueDate,
-      notes,
-      paymentTerms,
-      currency = 'USD',
-      deliveryMethod = 'email',
-    } = req.body;
+    const { clientId, itemIds, status = 'draft', deliveryMethod = 'email' } = req.body;
 
     if (!clientId) {
       return next(new AppError('Client ID is required', 400));
     }
 
-    const invoiceNumber = await generateInvoiceNumber(req.workspace._id);
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return next(new AppError('At least one item is required', 400));
+    if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+      return next(new AppError('At least one product catalog item is required', 400));
     }
 
-    const transformedItems = items.map((item) => ({
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      amount: item.total || item.amount,
-    }));
+    // Fetch product catalog items
+    const products = await ProductCatalog.find({ _id: { $in: itemIds } });
 
-    const calculatedSubtotal =
-      subtotal || transformedItems.reduce((sum, item) => sum + item.amount, 0);
-    const calculatedTotal = total || calculatedSubtotal;
+    if (products.length !== itemIds.length) {
+      return next(new AppError('One or more product catalog items not found', 404));
+    }
+
+    // Calculate totals
+    const subtotal = products.reduce((sum, product) => sum + product.price * product.quantity, 0);
+    const total = subtotal; // You can add tax or other calculations here if needed
+
+    const invoiceNumber = await generateInvoiceNumber(req.workspace._id);
 
     const invoice = await Invoice.create({
       invoiceNumber,
       client: clientId,
-      items: transformedItems,
-      subtotal: calculatedSubtotal,
-      total: calculatedTotal,
+      items: itemIds,
+      subtotal,
+      total,
       status,
-      dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      notes,
-      paymentTerms,
-      currency,
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+      currency: 'USD',
       deliveryMethod,
       workspace: req.workspace._id,
       createdBy: req.user.userId,

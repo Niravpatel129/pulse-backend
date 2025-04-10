@@ -18,22 +18,8 @@ const invoiceSchema = new mongoose.Schema(
     },
     items: [
       {
-        description: {
-          type: String,
-          required: true,
-        },
-        quantity: {
-          type: Number,
-          required: true,
-        },
-        unitPrice: {
-          type: Number,
-          required: true,
-        },
-        amount: {
-          type: Number,
-          required: true,
-        },
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ProductCatalog',
       },
     ],
     subtotal: {
