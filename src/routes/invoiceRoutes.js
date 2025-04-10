@@ -8,6 +8,7 @@ import { getInvoiceSettings } from '../controllers/invoice/getInvoiceSettings.js
 import { markAsPaid } from '../controllers/invoice/markAsPaid.js';
 import { sendInvoice } from '../controllers/invoice/sendInvoice.js';
 import { updateInvoice } from '../controllers/invoice/updateInvoice.js';
+import { updateInvoiceSettings } from '../controllers/invoice/updateInvoiceSettings.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -19,6 +20,7 @@ router.use(extractWorkspace);
 router.get('/', getInvoices);
 
 router.get('/invoice-settings', getInvoiceSettings);
+router.patch('/invoice-settings', updateInvoiceSettings);
 
 router.get('/:id', getInvoice);
 

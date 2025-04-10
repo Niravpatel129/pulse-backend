@@ -1,35 +1,66 @@
 import Invoice from '../../models/invoiceModel.js';
+import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
-import { generateInvoiceNumber } from './generateInvoiceNumber.js';
+import { generateInvoiceNumber } from '../../utils/generateInvoiceNumber.js';
 
 export const createInvoice = catchAsync(async (req, res, next) => {
-  const { items, client, project, dueDate, notes, paymentTerms, currency } = req.body;
+  try {
+    const {
+      clientId,
+      items,
+      subtotal,
+      total,
+      status = 'draft',
+      dueDate,
+      notes,
+      paymentTerms,
+      currency = 'USD',
+      deliveryMethod = 'email',
+    } = req.body;
 
-  // Calculate totals
-  const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-  const tax = subtotal * 0.1; // 10% tax - adjust as needed
-  const total = subtotal + tax;
+    if (!clientId) {
+      return next(new AppError('Client ID is required', 400));
+    }
 
-  const invoiceNumber = await generateInvoiceNumber(req.user.workspace);
+    const invoiceNumber = await generateInvoiceNumber(req.workspace._id);
 
-  const invoice = await Invoice.create({
-    invoiceNumber,
-    items,
-    client,
-    project,
-    subtotal,
-    tax,
-    total,
-    dueDate,
-    notes,
-    paymentTerms,
-    currency,
-    workspace: req.user.workspace,
-    createdBy: req.user.id,
-  });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return next(new AppError('At least one item is required', 400));
+    }
 
-  res.status(201).json({
-    status: 'success',
-    data: invoice,
-  });
+    const transformedItems = items.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      amount: item.total || item.amount,
+    }));
+
+    const calculatedSubtotal =
+      subtotal || transformedItems.reduce((sum, item) => sum + item.amount, 0);
+    const calculatedTotal = total || calculatedSubtotal;
+
+    const invoice = await Invoice.create({
+      invoiceNumber,
+      client: clientId,
+      items: transformedItems,
+      subtotal: calculatedSubtotal,
+      total: calculatedTotal,
+      status,
+      dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      notes,
+      paymentTerms,
+      currency,
+      deliveryMethod,
+      workspace: req.workspace._id,
+      createdBy: req.user.userId,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: invoice,
+    });
+  } catch (error) {
+    console.log('Error creating invoice:', error);
+    next(error);
+  }
 });

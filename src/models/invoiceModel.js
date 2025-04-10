@@ -9,13 +9,12 @@ const invoiceSchema = new mongoose.Schema(
     },
     client: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Participant',
       required: true,
     },
     project: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
-      required: true,
     },
     items: [
       {
@@ -63,6 +62,11 @@ const invoiceSchema = new mongoose.Schema(
     currency: {
       type: String,
       default: 'USD',
+    },
+    deliveryMethod: {
+      type: String,
+      enum: ['email', 'sms', 'both'],
+      default: 'email',
     },
     workspace: {
       type: mongoose.Schema.Types.ObjectId,
