@@ -37,6 +37,10 @@ const participantSchema = new mongoose.Schema(
       type: Map,
       of: String,
     },
+    company: {
+      type: String,
+      trim: true,
+    },
     workspaces: [
       {
         type: mongoose.Schema.Types.ObjectId,
