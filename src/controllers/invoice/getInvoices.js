@@ -9,7 +9,7 @@ export const getInvoices = catchAsync(async (req, res, next) => {
       .populate('project', 'name description')
       .populate('items', 'name quantity price projects modules')
       .populate('createdBy', 'name')
-      .select('invoiceNumber total status dueDate notes createdAt project modules items')
+      .select('invoiceNumber total status dueDate notes createdAt project modules items currency')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
