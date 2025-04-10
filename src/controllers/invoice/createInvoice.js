@@ -6,7 +6,7 @@ import { generateInvoiceNumber } from '../../utils/generateInvoiceNumber.js';
 
 export const createInvoice = catchAsync(async (req, res, next) => {
   try {
-    const { clientId, itemIds, status = 'draft', deliveryMethod = 'email' } = req.body;
+    const { clientId, itemIds, status = 'open', deliveryMethod = 'email' } = req.body;
 
     if (!clientId) {
       return next(new AppError('Client ID is required', 400));
