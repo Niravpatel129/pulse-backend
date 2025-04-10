@@ -1,0 +1,35 @@
+import express from 'express';
+
+import { createInvoice } from '../controllers/invoice/createInvoice.js';
+import { deleteInvoice } from '../controllers/invoice/deleteInvoice.js';
+import { getInvoice } from '../controllers/invoice/getInvoice.js';
+import { getInvoices } from '../controllers/invoice/getInvoices.js';
+import { getInvoiceSettings } from '../controllers/invoice/getInvoiceSettings.js';
+import { markAsPaid } from '../controllers/invoice/markAsPaid.js';
+import { sendInvoice } from '../controllers/invoice/sendInvoice.js';
+import { updateInvoice } from '../controllers/invoice/updateInvoice.js';
+import { authenticate } from '../middleware/auth.js';
+import { extractWorkspace } from '../middleware/workspace.js';
+
+const router = express.Router();
+
+router.use(authenticate);
+router.use(extractWorkspace);
+
+router.get('/', getInvoices);
+
+router.get('/invoice-settings', getInvoiceSettings);
+
+router.get('/:id', getInvoice);
+
+router.post('/', createInvoice);
+
+router.patch('/:id', updateInvoice);
+
+router.delete('/:id', deleteInvoice);
+
+router.post('/:id/send', sendInvoice);
+
+router.patch('/:id/paid', markAsPaid);
+
+export default router;

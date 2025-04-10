@@ -42,6 +42,10 @@ const workspaceSchema = new mongoose.Schema(
         },
       },
     ],
+    invoiceSettings: {
+      type: Object,
+      default: {},
+    },
     settings: {
       allowMemberInvites: {
         type: Boolean,

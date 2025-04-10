@@ -16,6 +16,7 @@ import emailRoutes from './src/routes/emailRoutes.js';
 import figmaRoutes from './src/routes/figmaRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
 import integrationRoutes from './src/routes/integrationRoutes.js';
+import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
@@ -119,6 +120,9 @@ app.use(`${routesPrefix}/product-catalog`, productCatalogRoutes);
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
 app.use(`${routesPrefix}/stripe`, stripeRoutes);
+
+// Invoices
+app.use(`${routesPrefix}/invoices`, invoiceRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
