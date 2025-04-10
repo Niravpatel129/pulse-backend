@@ -2,14 +2,21 @@ import Invoice from '../../models/invoiceModel.js';
 import catchAsync from '../../utils/catchAsync.js';
 
 export const getInvoices = catchAsync(async (req, res, next) => {
-  const invoices = await Invoice.find({ workspace: req.user.workspace })
-    .populate('client', 'name email')
-    .populate('project', 'name')
-    .populate('createdBy', 'name');
+  try {
+    const workspace = req.workspace._id;
+    const invoices = await Invoice.find({ workspace })
+      .populate('client', 'name email')
+      .populate('project', 'name description')
+      .populate('createdBy', 'name')
+      .select('invoiceNumber total status dueDate notes createdAt project modules')
+      .sort({ createdAt: -1 });
 
-  res.status(200).json({
-    status: 'success',
-    results: invoices.length,
-    data: invoices,
-  });
+    res.status(200).json({
+      status: 'success',
+      results: invoices.length,
+      data: invoices,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
