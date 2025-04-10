@@ -2,6 +2,7 @@ import express from 'express';
 import addModuleToProject from '../controllers/project-modules/addModuleToProject.js';
 import addTemplatedModuleToProject from '../controllers/project-modules/addTemplatedModuleToProject.js';
 import deleteModuleFromProject from '../controllers/project-modules/deleteModuleFromProject.js';
+import getAllProjectModules from '../controllers/project-modules/getAllProjectModules.js';
 import getModuleDetails from '../controllers/project-modules/getModuleDetails.js';
 import getProjectModules from '../controllers/project-modules/getProjectModules.js';
 import restoreModuleVersion from '../controllers/project-modules/restoreModuleVersion.js';
@@ -27,6 +28,7 @@ router.patch('/:moduleId/figma', updateModuleFigma);
 router.delete('/:moduleId', deleteModuleFromProject);
 
 router.get('/:projectId', getProjectModules);
+router.get('/', getAllProjectModules);
 router.get('/module/:moduleId', getModuleDetails);
 
 router.patch('/:moduleId/restore-version', restoreModuleVersion);

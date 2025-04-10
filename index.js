@@ -22,6 +22,7 @@ import moduleRoutes from './src/routes/moduleRoutes.js';
 import moduleTemplatesRoutes from './src/routes/moduleTemplatesRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
 import pipelineRoutes from './src/routes/pipelineRoutes.js';
+import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
 import projectModuleRoutes from './src/routes/projectModuleRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import stripeRoutes from './src/routes/stripeRoutes.js';
@@ -113,6 +114,7 @@ app.use(`${routesPrefix}/emails`, emailRoutes);
 app.use(`${routesPrefix}/tables`, tablesRoutes);
 app.use(`${routesPrefix}/files`, fileRoutes);
 app.use(`${routesPrefix}/figma`, figmaRoutes);
+app.use(`${routesPrefix}/product-catalog`, productCatalogRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
