@@ -14,6 +14,8 @@ import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
 
+router.get('/:id', getInvoice);
+
 router.use(authenticate);
 router.use(extractWorkspace);
 
@@ -21,8 +23,6 @@ router.get('/', getInvoices);
 
 router.get('/invoice-settings', getInvoiceSettings);
 router.patch('/invoice-settings', updateInvoiceSettings);
-
-router.get('/:id', getInvoice);
 
 router.post('/', createInvoice);
 
