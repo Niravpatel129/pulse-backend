@@ -1,11 +1,21 @@
 import crypto from 'crypto';
 import Participant from '../../models/Participant.js';
+import Project from '../../models/Project.js';
 import User from '../../models/User.js';
 import { BadRequestError } from '../../utils/errors.js';
 
 export const addParticipant = async (req, res) => {
-  const { name, email, phone, company, jobTitle, mailingAddress, comments, customFields } =
-    req.body;
+  const {
+    name,
+    email,
+    phone,
+    company,
+    jobTitle,
+    mailingAddress,
+    comments,
+    customFields,
+    projectId,
+  } = req.body;
   const { workspace } = req;
 
   if (!name || !email) {
@@ -43,6 +53,16 @@ export const addParticipant = async (req, res) => {
     workspaces: [workspace._id],
     createdBy: req.user.userId,
   });
+
+  if (projectId) {
+    const project = await Project.findById(projectId);
+    if (project) {
+      project.participants.push(participant._id);
+      await project.save();
+    }
+
+    console.log('Added participant to project');
+  }
 
   res.status(201).json({
     success: true,
