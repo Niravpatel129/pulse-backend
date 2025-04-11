@@ -121,6 +121,24 @@ class StripeService {
       );
     }
   }
+
+  // Verify a payment intent
+  static async verifyPaymentIntent(paymentIntentId, clientSecret) {
+    try {
+      const response = await stripeApi.get(`/payment_intents/${paymentIntentId}`);
+
+      // Verify the client secret matches
+      if (response.data.client_secret !== clientSecret) {
+        throw new Error('Invalid client secret');
+      }
+
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        `Failed to verify payment intent: ${error.response?.data?.error?.message || error.message}`,
+      );
+    }
+  }
 }
 
 export default StripeService;

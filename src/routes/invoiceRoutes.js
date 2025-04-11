@@ -1,6 +1,7 @@
 import express from 'express';
 
 import { createInvoice } from '../controllers/invoice/createInvoice.js';
+import { createPaymentIntent } from '../controllers/invoice/createPaymentIntent.js';
 import { deleteInvoice } from '../controllers/invoice/deleteInvoice.js';
 import { getInvoice } from '../controllers/invoice/getInvoice.js';
 import { getInvoices } from '../controllers/invoice/getInvoices.js';
@@ -15,6 +16,7 @@ import { extractWorkspace } from '../middleware/workspace.js';
 const router = express.Router();
 
 router.get('/:id', getInvoice);
+router.post('/:id/payment-intent', createPaymentIntent);
 
 router.use(authenticate);
 router.use(extractWorkspace);

@@ -36,7 +36,7 @@ const invoiceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
+      enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled', 'open'],
       default: 'draft',
     },
     dueDate: {
@@ -64,6 +64,14 @@ const invoiceSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    paymentIntentId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    paidAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
@@ -76,6 +84,7 @@ invoiceSchema.index({ client: 1 });
 invoiceSchema.index({ project: 1 });
 invoiceSchema.index({ status: 1 });
 invoiceSchema.index({ workspace: 1 });
+invoiceSchema.index({ paymentIntentId: 1 });
 
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 
