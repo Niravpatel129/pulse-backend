@@ -15,25 +15,23 @@ import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
 
+router.get('/invoice-settings', authenticate, extractWorkspace, getInvoiceSettings);
+
 router.get('/:id', getInvoice);
 router.post('/:id/payment-intent', createPaymentIntent);
 
-router.use(authenticate);
-router.use(extractWorkspace);
+router.get('/', authenticate, extractWorkspace, getInvoices);
 
-router.get('/', getInvoices);
+router.patch('/invoice-settings', authenticate, extractWorkspace, updateInvoiceSettings);
 
-router.get('/invoice-settings', getInvoiceSettings);
-router.patch('/invoice-settings', updateInvoiceSettings);
+router.post('/', authenticate, extractWorkspace, createInvoice);
 
-router.post('/', createInvoice);
+router.patch('/:id', authenticate, extractWorkspace, updateInvoice);
 
-router.patch('/:id', updateInvoice);
+router.delete('/:id', authenticate, extractWorkspace, deleteInvoice);
 
-router.delete('/:id', deleteInvoice);
+router.post('/:id/send', authenticate, extractWorkspace, sendInvoice);
 
-router.post('/:id/send', sendInvoice);
-
-router.patch('/:id/paid', markAsPaid);
+router.patch('/:id/paid', authenticate, extractWorkspace, markAsPaid);
 
 export default router;
