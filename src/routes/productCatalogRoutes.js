@@ -9,10 +9,6 @@ const router = express.Router();
 
 router.route('/').get(getAllProductCatalogs).post(createProductCatalog);
 
-router
-  .route('/:id')
-  .get(getProductCatalog)
-  .patch(updateProductCatalog)
-  .delete(deleteProductCatalog);
+router.route('/:id').get(getProductCatalog).put(updateProductCatalog).delete(deleteProductCatalog);
 
 export default router;

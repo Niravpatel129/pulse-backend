@@ -16,6 +16,10 @@ const productCatalogSchema = new mongoose.Schema({
     required: [true, 'Price is required'],
     min: [0, 'Price cannot be negative'],
   },
+  currency: {
+    type: String,
+    default: 'usd',
+  },
   projects: [
     {
       type: mongoose.Schema.Types.ObjectId,
