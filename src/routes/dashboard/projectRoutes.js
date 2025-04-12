@@ -3,6 +3,7 @@ import { projectSharingSchema } from '../../config/validators/projectValidators.
 import { addCollaborator } from '../../controllers/project/addCollaborator.js';
 import { addTeamMember } from '../../controllers/project/addTeamMember.js';
 import { createProject } from '../../controllers/project/createProject.js';
+import { createProjectInvoice } from '../../controllers/project/createProjectInvoice.js';
 import { deleteCollaborator } from '../../controllers/project/deleteCollaborator.js';
 import { deleteParticipant } from '../../controllers/project/deleteParticipant.js';
 import { deleteProject } from '../../controllers/project/deleteProject.js';
@@ -40,6 +41,9 @@ router.get('/:id', getProject);
 router.put('/:id', updateProject);
 router.patch('/:id', patchProject);
 router.delete('/:id', deleteProject);
+
+// Project invoice routes
+router.post('/:projectId/invoices', createProjectInvoice);
 
 // Project participants routes
 router.post('/:projectId/participants', addParticipant);
