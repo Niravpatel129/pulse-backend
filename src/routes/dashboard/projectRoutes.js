@@ -2,6 +2,7 @@ import express from 'express';
 import { projectSharingSchema } from '../../config/validators/projectValidators.js';
 import { addCollaborator } from '../../controllers/project/addCollaborator.js';
 import { addTeamMember } from '../../controllers/project/addTeamMember.js';
+import { archiveProjectInvoice } from '../../controllers/project/archiveProjectInvoice.js';
 import { createProject } from '../../controllers/project/createProject.js';
 import { createProjectInvoice } from '../../controllers/project/createProjectInvoice.js';
 import { deleteCollaborator } from '../../controllers/project/deleteCollaborator.js';
@@ -46,6 +47,7 @@ router.delete('/:id', deleteProject);
 // Project invoice routes
 router.post('/:projectId/invoices', createProjectInvoice);
 router.get('/:projectId/invoices', getProjectInvoices);
+router.patch('/:projectId/invoices/:invoiceId', archiveProjectInvoice);
 
 // Project participants routes
 router.post('/:projectId/participants', addParticipant);
