@@ -11,6 +11,7 @@ import { deleteTeamMember } from '../../controllers/project/deleteTeamMember.js'
 import { getCollaborators } from '../../controllers/project/getCollaborators.js';
 import { getParticipants } from '../../controllers/project/getParticipants.js';
 import { getProject } from '../../controllers/project/getProject.js';
+import { getProjectInvoices } from '../../controllers/project/getProjectInvoices.js';
 import { getProjects } from '../../controllers/project/getProjects.js';
 import { getTeam } from '../../controllers/project/getTeam.js';
 import { addParticipant } from '../../controllers/project/participants.js';
@@ -44,6 +45,7 @@ router.delete('/:id', deleteProject);
 
 // Project invoice routes
 router.post('/:projectId/invoices', createProjectInvoice);
+router.get('/:projectId/invoices', getProjectInvoices);
 
 // Project participants routes
 router.post('/:projectId/participants', addParticipant);

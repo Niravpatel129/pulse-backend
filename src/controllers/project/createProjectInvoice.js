@@ -71,7 +71,7 @@ export const createProjectInvoice = async (req, res, next) => {
       subtotal,
       tax: taxAmount,
       total,
-      status: 'draft',
+      status: 'open',
       dueDate,
       notes: memo,
       paymentTerms: footer,
