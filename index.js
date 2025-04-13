@@ -6,6 +6,7 @@ import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
 import activityRoutes from './src/routes/activityRoutes.js';
+import aiRoutes from './src/routes/aiRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
@@ -85,6 +86,9 @@ const routesPrefix = '/api';
 app.use(`${routesPrefix}/auth`, authRoutes);
 app.use(`${routesPrefix}/users`, userRoutes);
 app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
+
+// AI routes
+app.use(`${routesPrefix}/ai`, aiRoutes);
 
 // Project management
 app.use(`${routesPrefix}/projects`, projectRoutes);
