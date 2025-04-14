@@ -2,6 +2,7 @@ import express from 'express';
 import { addParticipant } from '../controllers/workspace/addParticipant.js';
 import { getClients } from '../controllers/workspace/getClients.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
+import { getUser } from '../controllers/workspace/getUser.js';
 import { getWorkspaceMembers } from '../controllers/workspace/getWorkspaceMembers.js';
 import {
   createWorkspace,
@@ -17,6 +18,8 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+router.get('/user/:id', getUser);
 
 router.get('/team', extractWorkspace, getTeamMembers);
 
