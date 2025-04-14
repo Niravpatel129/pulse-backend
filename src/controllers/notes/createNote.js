@@ -10,9 +10,16 @@ export const createNote = async (req, res, next) => {
       return next(new AppError('Content and project ID are required', 400));
     }
 
+    // Parse attachments if they exist
+    let parsedAttachments = attachments;
+    if (attachments && Array.isArray(attachments)) {
+      // Extract the attachment IDs from the attachment objects
+      parsedAttachments = attachments.map((attachment) => attachment.id || attachment);
+    }
+
     const note = await Note.create({
       content,
-      attachments,
+      attachments: parsedAttachments,
       project: projectId,
       createdBy: userId,
     });

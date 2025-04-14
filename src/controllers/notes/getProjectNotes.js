@@ -1,9 +1,9 @@
 import Note from '../../models/Note.js';
 import AppError from '../../utils/AppError.js';
 
-export const getNotes = async (req, res, next) => {
+export const getProjectNotes = async (req, res, next) => {
   try {
-    const { projectId } = req.query;
+    const { projectId } = req.params;
 
     if (!projectId) {
       return next(new AppError('Project ID is required', 400));
