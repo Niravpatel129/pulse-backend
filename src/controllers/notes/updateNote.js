@@ -4,6 +4,7 @@ import AppError from '../../utils/AppError.js';
 export const updateNote = async (req, res, next) => {
   try {
     const { content, attachments } = req.body;
+    const userId = req.user.userId;
 
     if (!content) {
       return next(new AppError('Content is required for update', 400));
@@ -16,7 +17,7 @@ export const updateNote = async (req, res, next) => {
     }
 
     // Only the creator can update the note
-    if (note.createdBy.toString() !== req.user._id.toString()) {
+    if (note.createdBy.toString() !== userId) {
       return next(new AppError('You are not authorized to update this note', 403));
     }
 
@@ -27,7 +28,7 @@ export const updateNote = async (req, res, next) => {
     await note.save();
 
     const updatedNote = await Note.findById(note._id)
-      .populate('createdBy', 'name email')
+      .populate('createdBy', 'name email avatar')
       .populate('attachments');
 
     res.status(200).json({
