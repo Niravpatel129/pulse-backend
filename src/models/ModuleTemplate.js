@@ -9,7 +9,7 @@ const templateFieldSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['text', 'number', 'date', 'select', 'relation'],
+    enum: ['text', 'number', 'date', 'select', 'relation', 'files'],
     default: 'text',
   },
   description: {
@@ -23,6 +23,10 @@ const templateFieldSchema = new mongoose.Schema({
   options: {
     type: [String],
     default: [],
+  },
+  fieldSettings: {
+    type: Object,
+    default: {},
   },
   relationType: {
     type: mongoose.Schema.Types.ObjectId,
