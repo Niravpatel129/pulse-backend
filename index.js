@@ -22,6 +22,7 @@ import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
 import moduleRoutes from './src/routes/moduleRoutes.js';
 import moduleTemplatesRoutes from './src/routes/moduleTemplatesRoutes.js';
+import noteRoutes from './src/routes/noteRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
 import pipelineRoutes from './src/routes/pipelineRoutes.js';
 import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
@@ -92,6 +93,7 @@ app.use(`${routesPrefix}/ai`, aiRoutes);
 
 // Project management
 app.use(`${routesPrefix}/projects`, projectRoutes);
+app.use(`${routesPrefix}/notes`, noteRoutes);
 app.use(`${routesPrefix}/participants`, participantRoutes);
 app.use(`${routesPrefix}/activities`, activityRoutes);
 app.use(`${routesPrefix}/pipeline`, pipelineRoutes);
