@@ -1,3 +1,4 @@
+import Note from '../../models/Note.js';
 import Project from '../../models/Project.js';
 import ProjectModule from '../../models/ProjectModule.js';
 import ApiResponse from '../../utils/apiResponse.js';
@@ -38,7 +39,6 @@ export const createProject = async (req, res, next) => {
       stage,
       status,
       manager: manager || userId, // Use current user as manager if not provided
-      description,
       participants: formattedParticipants,
       startDate,
       targetDate,
@@ -48,6 +48,15 @@ export const createProject = async (req, res, next) => {
     };
 
     const project = await Project.create(projectData);
+
+    // Create the first note using the description
+    if (description) {
+      await Note.create({
+        content: description,
+        project: project._id,
+        createdBy: userId,
+      });
+    }
 
     // Create ProjectModule entries for each attachment
     if (attachments && attachments.length > 0) {
