@@ -49,15 +49,6 @@ export const createProject = async (req, res, next) => {
 
     const project = await Project.create(projectData);
 
-    // Create the first note using the description
-    if (description) {
-      await Note.create({
-        content: description,
-        project: project._id,
-        createdBy: userId,
-      });
-    }
-
     // Create ProjectModule entries for each attachment
     if (attachments && attachments.length > 0) {
       const modulePromises = attachments.map(async (attachment) => {
@@ -90,6 +81,15 @@ export const createProject = async (req, res, next) => {
     }
 
     await setupProjectActivities(project, userId, workspaceId);
+
+    // Create the first note using the description
+    if (description) {
+      await Note.create({
+        content: description,
+        project: project._id,
+        createdBy: userId,
+      });
+    }
 
     return res.status(201).json(new ApiResponse(201, project));
   } catch (error) {
