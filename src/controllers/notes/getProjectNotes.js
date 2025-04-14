@@ -10,7 +10,7 @@ export const getProjectNotes = async (req, res, next) => {
     }
 
     const notes = await Note.find({ project: projectId })
-      .populate('createdBy', 'name email')
+      .populate('createdBy', 'name email avatar')
       .populate('attachments')
       .sort({ createdAt: -1 });
 

@@ -9,6 +9,9 @@ const userSchema = new mongoose.Schema(
         return this.email.split('@')[0];
       },
     },
+    avatar: {
+      type: String,
+    },
     isActivated: {
       type: Boolean,
       default: false,
