@@ -1,5 +1,4 @@
 import ProjectModule from '../../models/ProjectModule.js';
-import { createActivity } from '../../utils/activity.js';
 
 const duplicateModule = async (req, res) => {
   try {
@@ -24,21 +23,6 @@ const duplicateModule = async (req, res) => {
 
     // Save the new module
     await newModule.save();
-
-    // Create activity log
-    await createActivity({
-      user: userId,
-      workspace: req.workspace._id,
-      project: originalModule.project,
-      type: 'document',
-      action: 'created',
-      description: `Duplicated module "${originalModule.name}"`,
-      entityId: newModule._id,
-      entityType: 'ProjectModule',
-      metadata: {
-        originalModuleId: originalModule._id,
-      },
-    });
 
     res.status(201).json(newModule);
   } catch (error) {
