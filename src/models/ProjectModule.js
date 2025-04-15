@@ -41,8 +41,30 @@ const fieldSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const sectionSchema = new mongoose.Schema(
+  {
+    templateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ModuleTemplate',
+      required: true,
+    },
+    templateName: {
+      type: String,
+      required: true,
+    },
+    templateDescription: String,
+    fields: [fieldSchema],
+    sectionId: {
+      type: String,
+      required: true,
+    },
+  },
+  { _id: false },
+);
+
 const contentSnapshotSchema = new mongoose.Schema(
   {
+    sections: [sectionSchema],
     fields: [fieldSchema],
     fileId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -199,8 +221,16 @@ projectModuleSchema.pre('validate', function (next) {
 
   if (moduleType === 'file' && !content.fileId) {
     return next(new Error('File ID is required for file modules'));
-  } else if (moduleType === 'template' && !content.templateId) {
-    return next(new Error('Template ID is required for template modules'));
+  } else if (moduleType === 'template') {
+    // For template modules, we now check if there are sections in the latest version
+    const latestVersion = this.versions[this.versions.length - 1];
+    if (
+      !latestVersion ||
+      !latestVersion.contentSnapshot.sections ||
+      latestVersion.contentSnapshot.sections.length === 0
+    ) {
+      return next(new Error('At least one section is required for template modules'));
+    }
   } else if (moduleType === 'figma' && !content.figmaUrl) {
     return next(new Error('Figma URL is required for figma modules'));
   }
