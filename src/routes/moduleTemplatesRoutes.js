@@ -3,6 +3,7 @@ import createModuleTemplate from '../controllers/module-templates/createModuleTe
 import deleteModuleTemplate from '../controllers/module-templates/deleteModuleTemplate.js';
 import getModuleTemplateById from '../controllers/module-templates/getModuleTemplateById.js';
 import getModuleTemplates from '../controllers/module-templates/getModuleTemplates.js';
+import updateModuleTemplate from '../controllers/module-templates/updateModuleTemplate.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -15,4 +16,5 @@ router.get('/', getModuleTemplates);
 router.get('/:id', getModuleTemplateById);
 router.post('/', createModuleTemplate);
 router.delete('/:id', deleteModuleTemplate);
+router.put('/:id', updateModuleTemplate);
 export default router;
