@@ -49,7 +49,7 @@ router.delete('/:id', deleteProject);
 router.post('/:projectId/invoices', createProjectInvoice);
 router.get('/:projectId/invoices', getProjectInvoices);
 router.patch('/:projectId/invoices/:invoiceId', archiveProjectInvoice);
-router.delete('/invoices/:invoiceId', deleteProjectInvoice);
+router.delete('/:projectId/invoices/:invoiceId', deleteProjectInvoice);
 
 // Project participants routes
 router.post('/:projectId/participants', addParticipant);
