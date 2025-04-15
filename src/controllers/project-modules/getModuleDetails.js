@@ -10,7 +10,6 @@ const getModuleDetails = async (req, res, next) => {
 
     const module = await ProjectModule.findById(moduleId)
       .populate('content.fileId')
-      .populate('content.templateId')
       .populate('addedBy')
       .populate('versions.updatedBy')
       .populate('versions.contentSnapshot.fileId');
@@ -19,92 +18,105 @@ const getModuleDetails = async (req, res, next) => {
       throw new AppError('Module not found', 404);
     }
 
-    // If it's a template module, process the fields including relations
+    // If it's a template module, process the sections and their fields including relations
     if (module.moduleType === 'template') {
-      // Get the fields to process - either from versions or from content
-      let fieldsToProcess = [];
-
-      if (module.versions && module.versions.length > 0) {
-        // If there are versions, use the latest version's fields
-        const currentVersionIndex = module.versions.findIndex(
-          (v) => v.number === module.currentVersion,
-        );
-        if (currentVersionIndex !== -1) {
-          fieldsToProcess = module.versions[currentVersionIndex].contentSnapshot.fields || [];
-        }
-      } else if (module.content && module.content.fields) {
-        // If no versions yet, use the content fields directly
-        fieldsToProcess = module.content.fields;
-      }
-
-      // Process each field to handle relations
-      const processedFields = await Promise.all(
-        fieldsToProcess.map(async (field) => {
-          if (field.fieldType === 'relation' && field.fieldValue) {
-            // Get the related table
-            const relatedTable = await Table.findById(field.relationType);
-
-            if (relatedTable) {
-              // Create a map of column IDs to their names
-              const columnNameMap = {};
-              relatedTable.columns.forEach((col) => {
-                columnNameMap[col.id] = col.name;
-              });
-
-              // Process single or multiple relations
-              const processRelationValue = async (value) => {
-                if (!value || !value.rowId) return null;
-
-                // Get the row
-                const row = await Row.findById(value.rowId);
-                if (!row) return null;
-
-                // Get all records for this row
-                const records = await Record.find({
-                  tableId: field.relationType,
-                  rowId: value.rowId,
-                });
-
-                // Create a map of column values with proper names
-                const columnValues = {};
-                records.forEach((record) => {
-                  const columnName = columnNameMap[record.columnId];
-                  if (columnName) {
-                    columnValues[columnName] = record.values.get(record.columnId);
-                  }
-                });
-
-                return {
-                  rowId: value.rowId,
-                  displayValues: columnValues,
-                  selectedAt: value.selectedAt,
-                };
-              };
-
-              if (field.multiple) {
-                // Process multiple relations
-                field.fieldValue = await Promise.all(field.fieldValue.map(processRelationValue));
-                field.fieldValue = field.fieldValue.filter(Boolean); // Remove null values
-              } else {
-                // Process single relation
-                field.fieldValue = await processRelationValue(field.fieldValue);
-              }
-            }
-          }
-          return field;
-        }),
+      // Get the current version's sections
+      const currentVersionIndex = module.versions.findIndex(
+        (v) => v.number === module.currentVersion,
       );
 
-      // Update the appropriate fields array
-      if (module.versions && module.versions.length > 0) {
-        const currentVersionIndex = module.versions.findIndex(
-          (v) => v.number === module.currentVersion,
+      if (currentVersionIndex !== -1) {
+        const currentVersion = module.versions[currentVersionIndex];
+        const sections = currentVersion.contentSnapshot.sections || [];
+
+        // Process each section's fields
+        const processedSections = await Promise.all(
+          sections.map(async (section) => {
+            const processedFields = await Promise.all(
+              section.fields.map(async (field) => {
+                if (field.fieldType === 'relation' && field.fieldValue) {
+                  // Get the related table
+                  const relatedTable = await Table.findById(field.relationType);
+
+                  if (relatedTable) {
+                    // Create a map of column IDs to their names
+                    const columnNameMap = {};
+                    relatedTable.columns.forEach((col) => {
+                      columnNameMap[col.id] = col.name;
+                    });
+
+                    // Process single or multiple relations
+                    const processRelationValue = async (value) => {
+                      if (!value) return null;
+
+                      // Handle both string ID and object formats
+                      const rowId = typeof value === 'string' ? value : value.rowId;
+                      if (!rowId) return null;
+
+                      // Get the row
+                      const row = await Row.findById(rowId);
+                      if (!row) return null;
+
+                      // Get all records for this row
+                      const records = await Record.find({
+                        tableId: field.relationType,
+                        rowId: rowId,
+                      });
+
+                      // Create a map of column values with proper names
+                      const columnValues = {};
+                      records.forEach((record) => {
+                        const columnName = columnNameMap[record.columnId];
+                        if (columnName) {
+                          columnValues[columnName] = record.values.get(record.columnId);
+                        }
+                      });
+
+                      return {
+                        rowId: rowId,
+                        displayValues: columnValues,
+                        selectedAt:
+                          typeof value === 'object' ? value.selectedAt : new Date().toISOString(),
+                      };
+                    };
+
+                    if (field.multiple) {
+                      // Process multiple relations
+                      field.fieldValue = await Promise.all(
+                        field.fieldValue.map(processRelationValue),
+                      );
+                      field.fieldValue = field.fieldValue.filter(Boolean); // Remove null values
+                    } else {
+                      // Process single relation
+                      field.fieldValue = await processRelationValue(field.fieldValue);
+                    }
+
+                    // Add additional metadata about the relation
+                    field.relationMetadata = {
+                      tableId: field.relationType,
+                      tableName: relatedTable.name,
+                      tableDescription: relatedTable.description,
+                      columns: relatedTable.columns.map((col) => ({
+                        id: col.id,
+                        name: col.name,
+                        type: col.type,
+                      })),
+                    };
+                  }
+                }
+                return field;
+              }),
+            );
+
+            return {
+              ...section,
+              fields: processedFields,
+            };
+          }),
         );
-        if (currentVersionIndex !== -1) {
-          module.versions[currentVersionIndex].contentSnapshot.fields = processedFields;
-        }
-      } else {
-        module.content.fields = processedFields;
+
+        // Update the current version's sections with processed fields
+        module.versions[currentVersionIndex].contentSnapshot.sections = processedSections;
       }
     } else if (module.moduleType === 'figma') {
       // For Figma modules, ensure we have the latest version's content

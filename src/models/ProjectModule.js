@@ -65,7 +65,6 @@ const sectionSchema = new mongoose.Schema(
 const contentSnapshotSchema = new mongoose.Schema(
   {
     sections: [sectionSchema],
-    fields: [fieldSchema],
     fileId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'File',
