@@ -2,7 +2,6 @@ import ProjectModule from '../../models/ProjectModule.js';
 
 const getProjectModules = async (req, res) => {
   try {
-    console.log('getProjectModules');
     const { projectId } = req.params;
     const projectModules = await ProjectModule.find({ project: projectId })
       .populate('content.fileId')

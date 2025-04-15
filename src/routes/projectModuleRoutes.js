@@ -2,6 +2,7 @@ import express from 'express';
 import addModuleToProject from '../controllers/project-modules/addModuleToProject.js';
 import addTemplatedModuleToProject from '../controllers/project-modules/addTemplatedModuleToProject.js';
 import deleteModuleFromProject from '../controllers/project-modules/deleteModuleFromProject.js';
+import duplicateModule from '../controllers/project-modules/duplicateModule.js';
 import getAllProjectModules from '../controllers/project-modules/getAllProjectModules.js';
 import getModuleDetails from '../controllers/project-modules/getModuleDetails.js';
 import getProjectModules from '../controllers/project-modules/getProjectModules.js';
@@ -32,5 +33,7 @@ router.get('/', getAllProjectModules);
 router.get('/module/:moduleId', getModuleDetails);
 
 router.patch('/:moduleId/restore-version', restoreModuleVersion);
+
+router.post('/:moduleId/duplicate', duplicateModule);
 
 export default router;
