@@ -44,7 +44,13 @@ const updateProjectModule = async (req, res, next) => {
       };
     });
 
-    const newVersionNumber = module.currentVersion + 1;
+    // Find the latest version number
+    const latestVersion = module.versions.reduce(
+      (max, version) => (version.number > max ? version.number : max),
+      0,
+    );
+
+    const newVersionNumber = latestVersion + 1;
     module.versions.push({
       number: newVersionNumber,
       contentSnapshot: {
