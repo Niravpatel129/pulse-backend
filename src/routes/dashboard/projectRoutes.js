@@ -8,6 +8,7 @@ import { createProjectInvoice } from '../../controllers/project/createProjectInv
 import { deleteCollaborator } from '../../controllers/project/deleteCollaborator.js';
 import { deleteParticipant } from '../../controllers/project/deleteParticipant.js';
 import { deleteProject } from '../../controllers/project/deleteProject.js';
+import { deleteProjectInvoice } from '../../controllers/project/deleteProjectInvoice.js';
 import { deleteTeamMember } from '../../controllers/project/deleteTeamMember.js';
 import { getCollaborators } from '../../controllers/project/getCollaborators.js';
 import { getParticipants } from '../../controllers/project/getParticipants.js';
@@ -48,6 +49,7 @@ router.delete('/:id', deleteProject);
 router.post('/:projectId/invoices', createProjectInvoice);
 router.get('/:projectId/invoices', getProjectInvoices);
 router.patch('/:projectId/invoices/:invoiceId', archiveProjectInvoice);
+router.delete('/invoices/:invoiceId', deleteProjectInvoice);
 
 // Project participants routes
 router.post('/:projectId/participants', addParticipant);

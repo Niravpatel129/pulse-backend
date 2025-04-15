@@ -6,6 +6,7 @@ import ApiResponse from '../../utils/apiResponse.js';
 export const getProjectInvoices = async (req, res, next) => {
   try {
     const { projectId } = req.params;
+    console.log('🚀 projectId:', projectId);
 
     // Check if project exists
     const project = await Project.findById(projectId);
