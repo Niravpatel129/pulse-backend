@@ -3,7 +3,7 @@ import ProjectModule from '../../models/ProjectModule.js';
 
 const addTemplatedModuleToProject = async (req, res, next) => {
   try {
-    const { name, description, sections, formValues } = req.body;
+    const { name, sections, formValues } = req.body;
     const projectId = req.params.projectId;
 
     // Validate sections

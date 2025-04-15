@@ -4,7 +4,7 @@ import AppError from '../../utils/AppError.js';
 const updateProjectModule = async (req, res, next) => {
   try {
     const { moduleId } = req.params;
-    const { status, order, fields, templateName, templateDescription } = req.body;
+    const { name, description, status, order, sections, formValues } = req.body;
 
     const module = await ProjectModule.findById(moduleId);
     if (!module) {
@@ -17,35 +17,38 @@ const updateProjectModule = async (req, res, next) => {
     }
 
     // Update basic fields
-    if (templateName !== undefined) module.name = templateName;
-    if (templateDescription !== undefined) module.description = templateDescription;
+    if (name !== undefined) module.name = name;
+    if (description !== undefined) module.description = description;
     if (status !== undefined) module.status = status;
     if (order !== undefined) module.order = order;
-    if (templateName !== undefined) module.templateName = templateName;
-    if (templateDescription !== undefined) module.templateDescription = templateDescription;
 
-    // Fields are required for templated modules
-    if (!fields) {
-      throw new AppError('Fields are required for templated modules', 400);
+    // Validate sections
+    if (!sections || !Array.isArray(sections) || sections.length === 0) {
+      throw new AppError('At least one section is required', 400);
     }
 
-    const processedFields = fields.map((field) => ({
-      templateFieldId: field.templateFieldId,
-      fieldName: field.fieldName,
-      fieldType: field.fieldType,
-      isRequired: field.isRequired,
-      description: field.description,
-      relationType: field.relationType,
-      relationTable: field.relationTable,
-      multiple: field.multiple,
-      fieldValue: field.fieldValue,
-    }));
+    // Process sections and update field values from formValues
+    const processedSections = sections.map((section) => {
+      // Get form values for this section
+      const sectionFormValues = formValues[section.sectionId] || {};
+
+      // Update field values from formValues
+      const updatedFields = section.fields.map((field) => ({
+        ...field,
+        fieldValue: sectionFormValues[field.templateFieldId] || field.fieldValue,
+      }));
+
+      return {
+        ...section,
+        fields: updatedFields,
+      };
+    });
 
     const newVersionNumber = module.currentVersion + 1;
     module.versions.push({
       number: newVersionNumber,
       contentSnapshot: {
-        fields: processedFields,
+        sections: processedSections,
       },
       updatedBy: req.user.userId,
     });
