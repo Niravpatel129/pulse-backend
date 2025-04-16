@@ -37,7 +37,7 @@ const columnSchema = new mongoose.Schema(
         'currency',
         'percent',
         'rating',
-        'created_time',
+        'time',
         'last_modified',
         'formula',
         'lookup',
