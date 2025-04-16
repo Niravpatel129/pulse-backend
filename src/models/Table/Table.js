@@ -21,23 +21,28 @@ const columnSchema = new mongoose.Schema(
       type: String,
       enum: [
         'text',
+        'single_line',
+        'long_text',
         'number',
         'date',
-        'boolean',
-        'select',
-        'multiselect',
+        'checkbox',
+        'single_select',
+        'multi_select',
         'user',
-        'file',
+        'attachment',
+        'image',
         'url',
         'email',
         'phone',
         'currency',
         'percent',
+        'rating',
+        'created_time',
+        'last_modified',
         'formula',
         'lookup',
-        'link',
       ],
-      default: 'text',
+      default: 'single_line',
     },
     isPrimaryKey: {
       type: Boolean,
@@ -47,20 +52,74 @@ const columnSchema = new mongoose.Schema(
       // For select/multiselect types
       selectOptions: [
         {
-          value: String,
+          id: String,
+          name: String,
           color: String,
         },
       ],
       // For formula type
       formula: String,
       // For currency type
-      currencySymbol: String,
+      currencySymbol: {
+        type: String,
+        default: '$',
+      },
+      // For number/currency types
+      hasDecimals: {
+        type: Boolean,
+        default: false,
+      },
+      decimalPlaces: {
+        type: Number,
+        default: 2,
+      },
+      // For number, percent, rating types
+      minValue: String,
+      maxValue: String,
+      // For date type
+      dateFormat: {
+        type: String,
+        default: 'MM/DD/YYYY',
+      },
+      // For phone type
+      phoneFormat: {
+        type: String,
+        default: 'international',
+      },
+      // For checkbox/boolean types
+      defaultChecked: {
+        type: Boolean,
+        default: false,
+      },
       // For reference/lookup type
       referencedTable: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Table',
       },
       referencedColumn: String,
+      // AG Grid options
+      headerAlignment: {
+        type: String,
+        enum: ['left', 'center', 'right'],
+        default: 'left',
+      },
+      cellAlignment: {
+        type: String,
+        enum: ['left', 'center', 'right'],
+        default: 'left',
+      },
+      minWidth: {
+        type: Number,
+        default: 60,
+      },
+      defaultWidth: {
+        type: Number,
+        default: 200,
+      },
+      showAsBadges: {
+        type: Boolean,
+        default: true,
+      },
       // Common options
       defaultValue: mongoose.Schema.Types.Mixed,
     },
@@ -75,6 +134,23 @@ const columnSchema = new mongoose.Schema(
     isHidden: {
       type: Boolean,
       default: false,
+    },
+    // AG Grid specific options
+    allowSorting: {
+      type: Boolean,
+      default: true,
+    },
+    allowFiltering: {
+      type: Boolean,
+      default: true,
+    },
+    allowEditing: {
+      type: Boolean,
+      default: true,
+    },
+    allowResizing: {
+      type: Boolean,
+      default: true,
     },
     description: {
       type: String,
@@ -186,7 +262,7 @@ tableSchema.pre('save', function (next) {
         {
           id: new mongoose.Types.ObjectId().toString(),
           name: 'Name',
-          type: 'text',
+          type: 'single_line',
           isPrimaryKey: true,
           isRequired: true,
           order: 0,

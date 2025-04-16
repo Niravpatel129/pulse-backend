@@ -34,7 +34,28 @@ const updateTableColumns = async (req, res, next) => {
       isRequired: false,
       isUnique: false,
       isHidden: false,
+      // Initialize appropriate options based on column type
+      options: {},
     };
+
+    // Add additional options based on column type
+    if (['single_select', 'multi_select'].includes(columnData.type.id)) {
+      newColumn.options.selectOptions = [];
+    } else if (columnData.type.id === 'currency') {
+      newColumn.options.currencySymbol = '$';
+      newColumn.options.hasDecimals = true;
+      newColumn.options.decimalPlaces = 2;
+    } else if (columnData.type.id === 'number') {
+      newColumn.options.hasDecimals = false;
+    } else if (columnData.type.id === 'date') {
+      newColumn.options.dateFormat = 'MM/DD/YYYY';
+    } else if (columnData.type.id === 'phone') {
+      newColumn.options.phoneFormat = 'international';
+    } else if (columnData.type.id === 'checkbox') {
+      newColumn.options.defaultChecked = false;
+    } else if (columnData.type.id === 'rating') {
+      newColumn.options.maxValue = '5';
+    }
 
     // Add the new column to the table
     table.columns.push(newColumn);
