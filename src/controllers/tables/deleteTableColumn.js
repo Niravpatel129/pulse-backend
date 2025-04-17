@@ -1,3 +1,4 @@
+import Record from '../../models/Table/Record.js';
 import Table from '../../models/Table/Table.js';
 import AppError from '../../utils/AppError.js';
 
@@ -29,6 +30,12 @@ const deleteTableColumn = async (req, res, next) => {
       return next(new AppError('Column not found in this table', 404));
     }
 
+    // Delete all records associated with this column
+    await Record.deleteMany({
+      tableId,
+      columnId,
+    });
+
     // Remove the column from the table
     table.columns.splice(columnIndex, 1);
     await table.save();
@@ -36,7 +43,7 @@ const deleteTableColumn = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: table,
-      message: 'Column deleted successfully',
+      message: 'Column and associated records deleted successfully',
     });
   } catch (error) {
     next(error);

@@ -84,11 +84,11 @@ const getModuleTemplateById = async (req, res, next) => {
                 // Use lookupFields if available, otherwise fallback to all values
                 let displayValue = '';
                 if (
-                  field.fieldSettings.lookupFields &&
-                  field.fieldSettings.lookupFields.length > 0
+                  field.fieldSettings?.lookupFields &&
+                  field.fieldSettings?.lookupFields?.length > 0
                 ) {
-                  displayValue = field.fieldSettings.lookupFields
-                    .map((fieldId) => rowValues[fieldId])
+                  displayValue = field.fieldSettings?.lookupFields
+                    ?.map((fieldId) => rowValues[fieldId])
                     .filter((value) => value !== undefined && value !== null)
                     .join(' - ');
                 } else {

@@ -11,7 +11,17 @@ const updateModuleTemplate = async (req, res, next) => {
   try {
     const { id } = req.params;
     const workspaceId = req.workspace._id;
-    const updateData = req.body;
+    console.log('🚀 req.body.lookupFields:', req.body.lookupFields);
+
+    const updateData = {
+      ...req.body,
+      fieldSettings: {
+        ...req.body.fieldSettings,
+        lookupFields: req.body.lookupFields || [],
+      },
+    };
+
+    console.log('🚀 updateData:', updateData);
 
     // Find the module template
     const moduleTemplate = await ModuleTemplate.findOne({
