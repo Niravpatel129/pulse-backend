@@ -3,7 +3,7 @@ import ProjectModule from '../../models/ProjectModule.js';
 
 const addTemplatedModuleToProject = async (req, res, next) => {
   try {
-    const { name, sections, formValues } = req.body;
+    const { name, sections } = req.body;
     const projectId = req.params.projectId;
 
     // Validate sections
@@ -20,12 +20,14 @@ const addTemplatedModuleToProject = async (req, res, next) => {
           throw new Error(`Template not found for section ${section.sectionId}`);
         }
 
-        // Get form values for this section
-        const sectionFormValues = formValues[section.templateId] || {};
+        // Get form values for this section from the nested formValues object
+        const sectionFormValues = section.formValues || {};
 
         // Process fields for this section
         const processedFields = template.fields.map((field) => {
+          // Get the field value using the field ID as key in the formValues object
           const fieldValue = sectionFormValues[field._id.toString()];
+
           return {
             templateFieldId: field._id,
             fieldName: field.name,
@@ -39,6 +41,7 @@ const addTemplatedModuleToProject = async (req, res, next) => {
           };
         });
 
+        console.log('🚀 processedFields:', processedFields);
         return {
           templateId: section.templateId,
           templateName: section.templateName || template.name,
