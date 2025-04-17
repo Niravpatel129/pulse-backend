@@ -114,44 +114,89 @@ const getModuleTemplateById = async (req, res, next) => {
                 let fields = [];
 
                 if (relatedTable && relatedTable.columns) {
-                  // Include all columns from the related table, even if they don't have values
-                  fields = relatedTable.columns
-                    .map((column) => {
-                      if (!column) return null;
+                  // If lookupFields is available, only include those fields
+                  if (
+                    field.fieldSettings?.lookupFields &&
+                    field.fieldSettings?.lookupFields?.length > 0
+                  ) {
+                    fields = field.fieldSettings.lookupFields
+                      .map((fieldId) => {
+                        const column = relatedTable.columns.find(
+                          (col) => col && col.id === fieldId,
+                        );
+                        if (!column) return null;
 
-                      const fieldId = column.id;
+                        const value = rowValues[fieldId] || '';
+
+                        return {
+                          id: fieldId,
+                          value: value,
+                          label: column.name || 'Field',
+                          type: column.type || 'text',
+                        };
+                      })
+                      .filter(Boolean);
+                  } else {
+                    // Include all columns from the related table, even if they don't have values
+                    fields = relatedTable.columns
+                      .map((column) => {
+                        if (!column) return null;
+
+                        const fieldId = column.id;
+                        const value = rowValues[fieldId] || '';
+
+                        return {
+                          id: fieldId,
+                          value: value,
+                          label: column.name || 'Field',
+                          type: column.type || 'text',
+                        };
+                      })
+                      .filter(Boolean); // Remove any null values from the array
+                  }
+                } else {
+                  // Fallback to the previous implementation if columns aren't available
+                  // If lookupFields is available, only include those fields
+                  if (
+                    field.fieldSettings?.lookupFields &&
+                    field.fieldSettings?.lookupFields?.length > 0
+                  ) {
+                    fields = field.fieldSettings.lookupFields.map((fieldId) => {
                       const value = rowValues[fieldId] || '';
+                      let columnName = 'Field';
+                      let columnType = 'text';
 
                       return {
                         id: fieldId,
                         value: value,
-                        label: column.name || 'Field',
-                        type: column.type || 'text',
+                        label: columnName,
+                        type: columnType,
                       };
-                    })
-                    .filter(Boolean); // Remove any null values from the array
-                } else {
-                  // Fallback to the previous implementation if columns aren't available
-                  fields = Object.entries(rowValues).map(([fieldId, value]) => {
-                    let columnName = 'Field';
-                    let columnType = 'text';
+                    });
+                  } else {
+                    fields = Object.entries(rowValues).map(([fieldId, value]) => {
+                      let columnName = 'Field';
+                      let columnType = 'text';
 
-                    if (relatedTable && relatedTable.columns) {
-                      const column = relatedTable.columns.find((col) => col && col.id === fieldId);
+                      if (relatedTable && relatedTable.columns) {
+                        const column = relatedTable.columns.find(
+                          (col) => col && col.id === fieldId,
+                        );
 
-                      if (column) {
-                        columnName = column.name || 'Field';
-                        columnType = column.type || 'text';
+                        if (column) {
+                          columnName = column.name || 'Field';
+                          columnType = column.type || 'text';
+                        }
                       }
-                    }
 
-                    return {
-                      id: fieldId,
-                      value: value || '',
-                      label: columnName,
-                      type: columnType,
-                    };
-                  });
+                      return {
+                        id: fieldId,
+                        value: value || '',
+                        label: columnName,
+                        type: columnType,
+                      };
+                    });
+                  }
                 }
 
                 return {
