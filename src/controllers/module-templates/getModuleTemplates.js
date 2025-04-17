@@ -27,6 +27,7 @@ const getModuleTemplates = async (req, res, next) => {
       }
       return templateObj;
     });
+    console.log('🚀 processedModuleTemplates:', processedModuleTemplates[0].fields);
 
     res.status(200).json({
       success: true,

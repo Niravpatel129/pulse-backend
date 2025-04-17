@@ -81,10 +81,22 @@ const getModuleTemplateById = async (req, res, next) => {
               processedField.selectOptions = rows.map((row) => {
                 const rowValues = recordMap.get(row._id.toString()) || {};
 
-                // Convert all values to a single string for display
-                const displayValue = Object.values(rowValues)
-                  .filter((value) => value !== undefined && value !== null)
-                  .join(', ');
+                // Use lookupFields if available, otherwise fallback to all values
+                let displayValue = '';
+                if (
+                  field.fieldSettings.lookupFields &&
+                  field.fieldSettings.lookupFields.length > 0
+                ) {
+                  displayValue = field.fieldSettings.lookupFields
+                    .map((fieldId) => rowValues[fieldId])
+                    .filter((value) => value !== undefined && value !== null)
+                    .join(' - ');
+                } else {
+                  // Fallback to all values
+                  displayValue = Object.values(rowValues)
+                    .filter((value) => value !== undefined && value !== null)
+                    .join(', ');
+                }
 
                 return {
                   value: row._id.toString(),

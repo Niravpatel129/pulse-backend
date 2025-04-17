@@ -27,7 +27,9 @@ const createModuleTemplate = async (req, res, next) => {
           description: field.description,
           required: field.required || false,
           options: field.options || [],
-          fieldSettings: field.fieldSettings || {},
+          fieldSettings: field.fieldSettings || {
+            lookupFields: field.lookupFields || [],
+          },
         };
 
         // Handle relation type fields
