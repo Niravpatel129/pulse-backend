@@ -77,7 +77,7 @@ const getModuleTemplateById = async (req, res, next) => {
                 rowValues[record.columnId] = record.values.get(record.columnId);
               });
 
-              // Create select options from the rows
+              // Create select options and popover options from the rows
               processedField.selectOptions = rows.map((row) => {
                 const rowValues = recordMap.get(row._id.toString()) || {};
 
@@ -104,11 +104,47 @@ const getModuleTemplateById = async (req, res, next) => {
                   rowData: rowValues,
                 };
               });
+
+              // Create popover options with a cleaner structure
+              processedField.popoverOptions = rows.map((row) => {
+                const rowValues = recordMap.get(row._id.toString()) || {};
+
+                // Transform the row values into a clean array of field objects
+                const fields = Object.entries(rowValues).map(([fieldId, value]) => {
+                  // Get column info from the related table if available
+                  let columnName = 'Field';
+                  let columnType = 'text';
+
+                  if (relatedTable && relatedTable.columns) {
+                    const column = relatedTable.columns.find((col) => col && col.id === fieldId);
+                    console.log('🚀 column:', column);
+
+                    if (column) {
+                      columnName = column.name || 'Field';
+                      columnType = column.type || 'text';
+                    }
+                  }
+
+                  return {
+                    id: fieldId,
+                    value: value || '',
+                    label: columnName,
+                    type: columnType,
+                  };
+                });
+
+                return {
+                  rowId: row._id.toString(),
+                  fields,
+                };
+              });
             } else {
               processedField.selectOptions = [];
+              processedField.popoverOptions = [];
             }
           } else {
             processedField.selectOptions = [];
+            processedField.popoverOptions = [];
           }
         }
 
