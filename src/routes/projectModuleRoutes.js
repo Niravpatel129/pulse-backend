@@ -10,7 +10,7 @@ import restoreModuleVersion from '../controllers/project-modules/restoreModuleVe
 import updateModuleDetails from '../controllers/project-modules/updateModuleDetails.js';
 import updateModuleFigma from '../controllers/project-modules/updateModuleFigma.js';
 import updateModuleFile from '../controllers/project-modules/updateModuleFile.js';
-import updateProjectModule from '../controllers/project-modules/updateProjectModule.js';
+import updateTemplatedModule from '../controllers/project-modules/updateTemplatedModule.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -20,9 +20,9 @@ router.use(authenticate);
 router.use(extractWorkspace);
 
 router.post('/templated-module/:projectId', addTemplatedModuleToProject);
+router.put('/templated-module/:moduleId', updateTemplatedModule);
 router.post('/', addModuleToProject);
 
-router.put('/templated-module/:moduleId', updateProjectModule);
 router.patch('/:moduleId', updateModuleDetails);
 router.patch('/:moduleId/file', updateModuleFile);
 router.patch('/:moduleId/figma', updateModuleFigma);
