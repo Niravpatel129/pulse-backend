@@ -110,28 +110,49 @@ const getModuleTemplateById = async (req, res, next) => {
                 const rowValues = recordMap.get(row._id.toString()) || {};
 
                 // Transform the row values into a clean array of field objects
-                const fields = Object.entries(rowValues).map(([fieldId, value]) => {
-                  // Get column info from the related table if available
-                  let columnName = 'Field';
-                  let columnType = 'text';
+                // Make sure all columns from the related table are included
+                let fields = [];
 
-                  if (relatedTable && relatedTable.columns) {
-                    const column = relatedTable.columns.find((col) => col && col.id === fieldId);
-                    console.log('🚀 column:', column);
+                if (relatedTable && relatedTable.columns) {
+                  // Include all columns from the related table, even if they don't have values
+                  fields = relatedTable.columns
+                    .map((column) => {
+                      if (!column) return null;
 
-                    if (column) {
-                      columnName = column.name || 'Field';
-                      columnType = column.type || 'text';
+                      const fieldId = column.id;
+                      const value = rowValues[fieldId] || '';
+
+                      return {
+                        id: fieldId,
+                        value: value,
+                        label: column.name || 'Field',
+                        type: column.type || 'text',
+                      };
+                    })
+                    .filter(Boolean); // Remove any null values from the array
+                } else {
+                  // Fallback to the previous implementation if columns aren't available
+                  fields = Object.entries(rowValues).map(([fieldId, value]) => {
+                    let columnName = 'Field';
+                    let columnType = 'text';
+
+                    if (relatedTable && relatedTable.columns) {
+                      const column = relatedTable.columns.find((col) => col && col.id === fieldId);
+
+                      if (column) {
+                        columnName = column.name || 'Field';
+                        columnType = column.type || 'text';
+                      }
                     }
-                  }
 
-                  return {
-                    id: fieldId,
-                    value: value || '',
-                    label: columnName,
-                    type: columnType,
-                  };
-                });
+                    return {
+                      id: fieldId,
+                      value: value || '',
+                      label: columnName,
+                      type: columnType,
+                    };
+                  });
+                }
 
                 return {
                   rowId: row._id.toString(),
