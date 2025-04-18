@@ -58,6 +58,7 @@ app.use(
       const allowedOrigins = [
         /^https?:\/\/(?:[\w-]+\.)*hourblock\.com(?::\d+)?$/,
         /^http:\/\/localhost(?::\d+)?$/,
+        /^http:\/\/(?:[\w-]+\.)*localhost(?::\d+)?$/,
         /^https:\/\/(?:[\w-]+\.)*hourblock\.com$/,
         /^https?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
         /^http?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
