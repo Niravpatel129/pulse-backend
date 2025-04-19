@@ -82,7 +82,7 @@ const leadFormSchema = new mongoose.Schema(
       ref: 'Workspace',
       required: true,
     },
-    formElements: [formElementSchema],
+    elements: [formElementSchema],
     status: {
       type: String,
       enum: ['draft', 'published', 'archived'],
