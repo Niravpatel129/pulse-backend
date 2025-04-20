@@ -16,11 +16,20 @@ export const updateLeadForm = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to update this form' });
     }
 
-    // Ensure IDs for new form elements
-    if (req.body.formElements) {
-      req.body.formElements.forEach((element) => {
+    // Ensure IDs for new elements
+    if (req.body.elements) {
+      req.body.elements.forEach((element) => {
         if (!element.id) {
           element.id = generateId();
+        }
+      });
+    }
+
+    // Ensure IDs for new automations
+    if (req.body.automations) {
+      req.body.automations.forEach((automation) => {
+        if (!automation.id) {
+          automation.id = generateId();
         }
       });
     }

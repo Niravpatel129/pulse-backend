@@ -66,6 +66,32 @@ const formElementSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const automationSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    type: {
+      type: String,
+      required: true,
+    },
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+    config: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+  },
+  { _id: false },
+);
+
 const leadFormSchema = new mongoose.Schema(
   {
     title: {
@@ -83,6 +109,7 @@ const leadFormSchema = new mongoose.Schema(
       required: true,
     },
     elements: [formElementSchema],
+    automations: [automationSchema],
     status: {
       type: String,
       enum: ['draft', 'published', 'archived'],

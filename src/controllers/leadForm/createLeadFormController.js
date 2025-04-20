@@ -7,20 +7,29 @@ export const createLeadForm = async (req, res) => {
   try {
     const workspace = req.workspace;
 
-    // Ensure every form element has an ID
-    const formElements = req.body.formElements || [];
-    formElements.forEach((element) => {
+    // Ensure every element has an ID
+    const elements = req.body.elements || [];
+    elements.forEach((element) => {
       if (!element.id) {
         element.id = generateId();
       }
     });
 
+    // Ensure every automation has an ID
+    const automations = req.body.automations || [];
+    automations.forEach((automation) => {
+      if (!automation.id) {
+        automation.id = generateId();
+      }
+    });
+
     const leadForm = new LeadForm({
       ...req.body,
-      formElements,
+      elements,
+      automations,
       createdBy: req.user.userId,
       workspace: workspace._id,
-      status: 'published',
+      status: req.body.status || 'published',
     });
 
     await leadForm.save();
