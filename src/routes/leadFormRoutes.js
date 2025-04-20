@@ -1,5 +1,7 @@
 import express from 'express';
+import deleteWorkspaceSubmission from '../controllers/leadForm/deleteWorkspaceSubmission.js';
 import { getPublicLeadForm } from '../controllers/leadForm/getPublicLeadForm.js';
+import getWorkspaceSubmissions from '../controllers/leadForm/getWorkspaceSubmissions.js';
 import {
   archiveLeadForm,
   createLeadForm,
@@ -32,6 +34,10 @@ router.put('/:id', updateLeadForm);
 router.delete('/:id', deleteLeadForm);
 router.put('/:id/publish', publishLeadForm);
 router.put('/:id/archive', archiveLeadForm);
+
+// Get all workspace submittions
+router.get('/workspace/submissions', authenticate, getWorkspaceSubmissions); // Protected
+router.delete('/submissions/:id', authenticate, deleteWorkspaceSubmission); // Protected
 
 // Submission routes
 router.get('/p/:id', getPublicLeadForm);
