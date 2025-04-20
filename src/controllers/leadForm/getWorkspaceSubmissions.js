@@ -11,7 +11,7 @@ const getWorkspaceSubmissions = async (req, res) => {
 
     // Inject formTitle into each submission
     const formsWithTitleInSubmissions = forms.map((form) => {
-      const { title, submissions = [], ...rest } = form;
+      const { title, _id, submissions = [], ...rest } = form;
 
       // Add the formTitle to each submission
       const updatedSubmissions = submissions.map((submission) => ({
@@ -22,6 +22,7 @@ const getWorkspaceSubmissions = async (req, res) => {
       return {
         ...rest,
         title,
+        formId: _id,
         submissions: updatedSubmissions,
       };
     });
