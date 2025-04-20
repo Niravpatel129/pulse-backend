@@ -1,4 +1,5 @@
 import express from 'express';
+import { getPublicLeadForm } from '../controllers/leadForm/getPublicLeadForm.js';
 import {
   archiveLeadForm,
   createLeadForm,
@@ -32,6 +33,7 @@ router.put('/:id/publish', publishLeadForm);
 router.put('/:id/archive', archiveLeadForm);
 
 // Submission routes
+router.get('/p/:id', getPublicLeadForm);
 router.post('/:id/submit', submitLeadForm); // Public route (no auth required)
 router.get('/:id/submissions', authenticate, getFormSubmissions); // Protected
 router.get('/:formId/submissions/:submissionId', authenticate, getSubmission); // Protected
