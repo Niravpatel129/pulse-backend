@@ -29,8 +29,13 @@ const upload = multer({
 // Add error handling wrapper
 const uploadWithErrorHandling = (field) => {
   return (req, res, next) => {
+    console.log(
+      `Upload middleware invoked with field: ${field}, Content-Type: ${req.headers['content-type']}`,
+    );
+
     // Handle lead form submissions with dynamic file field names
     if (field === 'file') {
+      console.log('Using dynamic file upload (any field)');
       const dynamicUpload = upload.any();
       dynamicUpload(req, res, (err) => {
         if (err instanceof multer.MulterError) {
@@ -47,6 +52,15 @@ const uploadWithErrorHandling = (field) => {
             message: err.message,
           });
         }
+
+        console.log(`Files processed: ${req.files ? req.files.length : 0}`);
+        if (req.files && req.files.length > 0) {
+          console.log(
+            'Files received:',
+            req.files.map((f) => f.fieldname),
+          );
+        }
+
         next();
       });
     } else {
