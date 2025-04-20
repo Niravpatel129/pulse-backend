@@ -14,6 +14,10 @@ export const getLeadForms = async (req, res) => {
 
     const leadForms = await LeadForm.find(query)
       .populate('createdBy', 'name email')
+      .select(
+        '-submissions.formValues -submissions.clientEmail -submissions.clientName -submissions.clientPhone -submissions.clientCompany -submissions.clientAddress',
+      )
+      .lean()
       .sort({ createdAt: -1 });
 
     res.json(leadForms);
