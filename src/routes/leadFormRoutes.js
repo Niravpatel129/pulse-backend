@@ -15,6 +15,7 @@ import {
   submitLeadForm,
 } from '../controllers/leadForm/submissionController.js';
 import { authenticate } from '../middleware/auth.js';
+import uploadWithErrorHandling from '../middleware/upload.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
@@ -34,7 +35,7 @@ router.put('/:id/archive', archiveLeadForm);
 
 // Submission routes
 router.get('/p/:id', getPublicLeadForm);
-router.post('/:id/submit', submitLeadForm); // Public route (no auth required)
+router.post('/:id/submit', uploadWithErrorHandling('file'), submitLeadForm); // Public route (no auth required)
 router.get('/:id/submissions', authenticate, getFormSubmissions); // Protected
 router.get('/:formId/submissions/:submissionId', authenticate, getSubmission); // Protected
 

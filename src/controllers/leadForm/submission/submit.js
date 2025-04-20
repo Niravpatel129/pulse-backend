@@ -1,6 +1,8 @@
+import File from '../../../models/fileModel.js';
 import LeadForm from '../../../models/LeadForm.js';
 import User from '../../../models/User.js';
 import { handleError } from '../../../utils/errorHandler.js';
+import { firebaseStorage } from '../../../utils/firebase.js';
 
 // Submit a lead form
 export const submitLeadForm = async (req, res) => {
@@ -13,7 +15,9 @@ export const submitLeadForm = async (req, res) => {
 
     if (req.body.data) {
       // New payload structure with nested data object
-      const { data } = req.body;
+      const { data } =
+        typeof req.body.data === 'string' ? { data: JSON.parse(req.body.data) } : req.body;
+
       formValues = { ...data };
 
       // Extract client details from data if present
@@ -29,6 +33,55 @@ export const submitLeadForm = async (req, res) => {
       if (clientPhone) delete formValues.phone;
       if (clientCompany) delete formValues.company;
       if (clientAddress) delete formValues.address;
+
+      // Process uploaded files from multer
+      if (req.files && req.files.length > 0) {
+        // Find the form to get the workspace ID
+        const leadForm = await LeadForm.findById(id);
+        if (!leadForm) {
+          return res
+            .status(404)
+            .json({ message: 'Form not found or not available for submissions' });
+        }
+
+        for (const file of req.files) {
+          if (file.fieldname.startsWith('file_')) {
+            const elementId = file.fieldname.replace('file_', '');
+
+            // Generate storage path for the file
+            const workspaceId = leadForm.workspace;
+            const storagePath = firebaseStorage.generatePath(workspaceId, file.originalname);
+
+            // Upload file to Firebase storage
+            const { url, storagePath: path } = await firebaseStorage.uploadFile(
+              file.buffer,
+              storagePath,
+              file.mimetype,
+            );
+
+            // Create file record in database
+            const fileRecord = await File.create({
+              name: file.originalname,
+              originalName: file.originalname,
+              storagePath: path,
+              downloadURL: url,
+              contentType: file.mimetype,
+              size: file.size,
+              workspaceId,
+              uploadedBy: req.user ? req.user.userId : null,
+            });
+
+            // Store file reference in formValues
+            formValues[elementId] = {
+              fileId: fileRecord._id,
+              fileName: file.originalname,
+              fileUrl: url,
+              fileSize: file.size,
+              fileType: file.mimetype,
+            };
+          }
+        }
+      }
     } else {
       // Original payload structure
       ({ formValues, clientEmail, clientName, clientPhone, clientCompany, clientAddress } =
@@ -51,6 +104,14 @@ export const submitLeadForm = async (req, res) => {
       if (element.required && element.type !== 'Client Details') {
         // Check if the required field is missing
         if (!formValues || !formValues[element.id]) {
+          // Skip file validation if there's a corresponding file in req.files
+          if (
+            element.type === 'File Upload' &&
+            req.files &&
+            req.files.some((file) => file.fieldname === `file_${element.id}`)
+          ) {
+            return;
+          }
           missingFields.push(element.title);
         }
       } else if (element.type === 'Client Details' && element.required) {

@@ -9,6 +9,7 @@ const fileFilter = (req, file, cb) => {
     originalname: file.originalname,
     mimetype: file.mimetype,
     size: file.size,
+    fieldname: file.fieldname,
   });
 
   // Allow all file types
@@ -28,25 +29,47 @@ const upload = multer({
 // Add error handling wrapper
 const uploadWithErrorHandling = (field) => {
   return (req, res, next) => {
-    const uploadMiddleware = upload.array(field);
-
-    uploadMiddleware(req, res, (err) => {
-      if (err instanceof multer.MulterError) {
-        console.error('Multer error:', err);
-        return res.status(400).json({
-          error: true,
-          message: `File upload error: ${err.message}`,
-          code: err.code,
-        });
-      } else if (err) {
-        console.error('Upload error:', err);
-        return res.status(400).json({
-          error: true,
-          message: err.message,
-        });
-      }
-      next();
-    });
+    // Handle lead form submissions with dynamic file field names
+    if (field === 'file') {
+      const dynamicUpload = upload.any();
+      dynamicUpload(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+          console.error('Multer error:', err);
+          return res.status(400).json({
+            error: true,
+            message: `File upload error: ${err.message}`,
+            code: err.code,
+          });
+        } else if (err) {
+          console.error('Upload error:', err);
+          return res.status(400).json({
+            error: true,
+            message: err.message,
+          });
+        }
+        next();
+      });
+    } else {
+      // Standard upload for specific field
+      const uploadMiddleware = upload.array(field);
+      uploadMiddleware(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+          console.error('Multer error:', err);
+          return res.status(400).json({
+            error: true,
+            message: `File upload error: ${err.message}`,
+            code: err.code,
+          });
+        } else if (err) {
+          console.error('Upload error:', err);
+          return res.status(400).json({
+            error: true,
+            message: err.message,
+          });
+        }
+        next();
+      });
+    }
   };
 };
 
