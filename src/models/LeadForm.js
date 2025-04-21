@@ -1,22 +1,5 @@
 import mongoose from 'mongoose';
 
-export const SubmissionSchema = new mongoose.Schema({
-  submittedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-  },
-  clientEmail: String,
-  clientName: String,
-  clientPhone: String,
-  clientCompany: String,
-  clientAddress: String,
-  submittedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  formValues: mongoose.Schema.Types.Mixed,
-});
-
 const formElementSchema = new mongoose.Schema(
   {
     id: {
@@ -144,7 +127,12 @@ const leadFormSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    submissions: [SubmissionSchema],
+    submissions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Submission',
+      },
+    ],
   },
   {
     timestamps: true,

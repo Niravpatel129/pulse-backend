@@ -1,4 +1,5 @@
 import LeadForm from '../../../models/LeadForm.js';
+import Submission from '../../../models/LeadForm/SubmissionSchema.js';
 import { handleError } from '../../../utils/errorHandler.js';
 
 // Get a specific submission
@@ -6,10 +7,8 @@ export const getSubmission = async (req, res) => {
   try {
     const { formId, submissionId } = req.params;
 
-    const leadForm = await LeadForm.findById(formId).populate(
-      'submissions.submittedBy',
-      'name email',
-    );
+    // Find the lead form
+    const leadForm = await LeadForm.findById(formId);
 
     if (!leadForm) {
       return res.status(404).json({ message: 'Lead form not found' });
@@ -20,7 +19,16 @@ export const getSubmission = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to view submissions for this form' });
     }
 
-    const submission = leadForm.submissions.id(submissionId);
+    // Check if the submission ID is in the form's submissions array
+    if (!leadForm.submissions.includes(submissionId)) {
+      return res.status(404).json({ message: 'Submission not found for this form' });
+    }
+
+    // Find the submission by ID and populate the submittedBy field
+    const submission = await Submission.findById(submissionId).populate(
+      'submittedBy',
+      'name email',
+    );
 
     if (!submission) {
       return res.status(404).json({ message: 'Submission not found' });

@@ -238,7 +238,7 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
 
     // Form values submitted by the user
     const formValues = submission.formValues || {};
-    console.log('🚀 submission:', submission);
+    console.log('🚀 submission:', submission.submissionId);
 
     // Process project name template if provided
     let projectName = 'New Project';
@@ -263,7 +263,6 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
 
     // Add client as a collaborator if email is provided
     if (submission.clientEmail) {
-      console.log('🚀 submission.clientEmail:', submission.clientEmail);
       // find the client in user model, and if not found, create a new user
       const client = await User.findOne({ email: submission.clientEmail });
       let user;
@@ -345,8 +344,10 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
       );
 
       await Note.create({
+        type: 'project_submission',
         content: processedDescription,
         project: project._id,
+        submission: submission._id,
         isSystem: true,
       });
     }

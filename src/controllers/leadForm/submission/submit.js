@@ -1,5 +1,6 @@
 import File from '../../../models/fileModel.js';
 import LeadForm from '../../../models/LeadForm.js';
+import Submission from '../../../models/LeadForm/SubmissionSchema.js';
 import User from '../../../models/User.js';
 import { processAutomations } from '../../../utils/automationProcessor.js';
 import { handleError } from '../../../utils/errorHandler.js';
@@ -665,8 +666,12 @@ export const submitLeadForm = async (req, res) => {
       }
     }
 
-    // Create submission object with cleaned form values
-    const submission = {
+    console.log('Final submission object created with cleaned values');
+
+    // Create a new Submission document using the model
+    const newSubmission = new Submission({
+      workspace: leadForm.workspace,
+      leadForm: leadForm._id,
       submittedAt: new Date(),
       formValues: cleanedFormValues,
       clientEmail,
@@ -674,29 +679,29 @@ export const submitLeadForm = async (req, res) => {
       clientPhone,
       clientCompany,
       clientAddress,
-    };
+    });
 
     // Add submittedBy if the user is authenticated
     if (req.user && req.user.userId) {
-      submission.submittedBy = req.user.userId;
+      newSubmission.submittedBy = req.user.userId;
     }
 
-    console.log('Final submission object created with cleaned values');
+    // Save the submission document
+    const savedSubmission = await newSubmission.save();
 
-    // Add the submission to the form
-    leadForm.submissions.push(submission);
+    // Add the submission reference to the form
+    leadForm.submissions.push(savedSubmission._id);
     await leadForm.save();
 
-    const submissionId = leadForm.submissions[leadForm.submissions.length - 1]._id;
-    console.log(`Submission saved with ID: ${submissionId}`);
+    console.log(`Submission saved with ID: ${savedSubmission._id}`);
 
     // Process automations for this submission
     try {
       console.log('Triggering automations for form submission');
       const automationResults = await processAutomations(
         leadForm.toJSON(),
-        submission,
-        submissionId,
+        newSubmission.toJSON(),
+        savedSubmission._id,
       );
       console.log(`Automation processing completed with ${automationResults.length} results`);
     } catch (error) {
@@ -734,7 +739,7 @@ export const submitLeadForm = async (req, res) => {
 
     res.status(201).json({
       message: 'Form submitted successfully',
-      submissionId: submissionId,
+      submissionId: savedSubmission._id,
     });
   } catch (error) {
     handleError(res, error);
