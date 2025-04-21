@@ -1,4 +1,3 @@
-import Row from '../../models/Table/Row.js';
 import Table from '../../models/Table/Table.js';
 import AppError from '../../utils/AppError.js';
 
@@ -18,29 +17,29 @@ const createTable = async (req, res, next) => {
       throw new AppError('Table name is required', 400);
     }
 
-    // Create the table
+    // // Create the table
     const table = await Table.create({
       name,
       workspace: workspaceId,
       createdBy: userId,
     });
 
-    // Create an initial row for the table
-    const initialRow = await Row.create({
-      tableId: table._id,
-      position: 1,
-      createdBy: userId,
-    });
+    // // Create an initial row for the table
+    // const initialRow = await Row.create({
+    //   tableId: table._id,
+    //   position: 1,
+    //   createdBy: userId,
+    // });
 
     // Add the row to the response
-    const tableWithRow = {
-      ...table.toObject(),
-      initialRow,
-    };
+    // const tableWithRow = {
+    //   ...table.toObject(),
+    //   initialRow,
+    // };
 
     res.status(201).json({
       success: true,
-      data: tableWithRow,
+      data: table.toObject(),
       message: 'Table created successfully with initial row',
     });
   } catch (error) {
