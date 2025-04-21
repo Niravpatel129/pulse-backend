@@ -5,6 +5,7 @@
 
 import Note from '../models/Note.js';
 import Participant from '../models/Participant.js';
+import PipelineSettings from '../models/pipelineSettings.js';
 import Project from '../models/Project.js';
 import User from '../models/User.js';
 import emailService from '../services/emailService.js';
@@ -324,12 +325,23 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
       // }
     }
 
+    let pipelineSettings = await PipelineSettings.findOne({ workspace: leadForm.workspace });
     if (config.initialStage) {
       projectData.stage = config.initialStage;
+    } else {
+      // Find the first stage from pipeline settings as fallback
+      if (pipelineSettings && pipelineSettings.stages && pipelineSettings.stages.length > 0) {
+        projectData.stage = pipelineSettings.stages[0]._id;
+      }
     }
 
     if (config.initialStatus) {
       projectData.status = config.initialStatus;
+    } else {
+      // Find the first status from pipeline settings as fallback
+      if (pipelineSettings && pipelineSettings.statuses && pipelineSettings.statuses.length > 0) {
+        projectData.status = pipelineSettings.statuses[0]._id;
+      }
     }
 
     // Create the project
