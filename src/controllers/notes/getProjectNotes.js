@@ -12,6 +12,7 @@ export const getProjectNotes = async (req, res, next) => {
     const notes = await Note.find({ project: projectId })
       .populate('createdBy', 'name email avatar')
       .populate('attachments')
+      .populate('submission')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
