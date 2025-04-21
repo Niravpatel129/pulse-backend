@@ -7,6 +7,7 @@ import Note from '../models/Note.js';
 import Participant from '../models/Participant.js';
 import Project from '../models/Project.js';
 import User from '../models/User.js';
+import { mapTemplateVariables } from './templateUtils.js';
 
 /**
  * Process automations for a form submission
@@ -157,43 +158,6 @@ const executeSlackAutomation = async (config, leadForm, submission) => {
 };
 
 /**
- * Map template variables in a string to values from submission data
- * @param {String} template - The template string containing variables like {{variable_name}}
- * @param {Object} submission - The submission data
- * @param {Object} projectData - Optional project data for additional context
- * @returns {String} - The processed string with variables replaced
- */
-const mapTemplateVariables = (template, submission, projectData = {}) => {
-  if (!template) return '';
-
-  // Create a mapping of variable names to values
-  const variableMap = {
-    client_name: submission.clientName || 'Client',
-    client_email: submission.clientEmail || '',
-    client_phone: submission.clientPhone || '',
-    client_company: submission.clientCompany || '',
-    project_name: projectData.name || 'New Project',
-    submission_date: new Date().toLocaleDateString(),
-    form_name: submission.formName || '',
-  };
-
-  // Add all form values to the variable map
-  if (submission.formValues) {
-    Object.entries(submission.formValues).forEach(([key, field]) => {
-      if (field && field.label && field.value !== undefined) {
-        const safeKey = field.label.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        variableMap[safeKey] = field.value;
-      }
-    });
-  }
-
-  // Replace all {{variable}} instances with their corresponding values
-  return template.replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, variableName) => {
-    return variableMap[variableName] !== undefined ? variableMap[variableName] : match;
-  });
-};
-
-/**
  * Execute project creation automation
  * @param {Object} config - Project creation automation configuration
  * @param {Object} leadForm - The lead form document
@@ -223,9 +187,17 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
     const formValues = submission.formValues || {};
     console.log('🚀 submission:', submission);
 
+    // Process project name template if provided
+    let projectName = 'New Project';
+    if (config.projectNameTemplate) {
+      projectName = mapTemplateVariables(config.projectNameTemplate, submission);
+    } else if (nameField) {
+      projectName = getFieldValue(formValues, nameField) || 'New Project';
+    }
+
     // Build the project data
     const projectData = {
-      name: getFieldValue(formValues, nameField) || 'New Project',
+      name: projectName,
       workspace: leadForm.workspace,
       description: getFieldValue(formValues, descriptionField) || '',
       projectType: getFieldValue(formValues, projectTypeField) || defaultProjectType || 'General',
