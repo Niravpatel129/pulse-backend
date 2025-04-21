@@ -17,10 +17,14 @@ const noteSchema = new mongoose.Schema(
       ref: 'Project',
       required: true,
     },
+    isSystem: {
+      type: Boolean,
+      default: false,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false,
     },
   },
   {

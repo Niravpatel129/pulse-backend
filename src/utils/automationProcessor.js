@@ -3,6 +3,7 @@
  * This utility checks for automations configured on a form and executes them
  */
 
+import Note from '../models/Note.js';
 import Participant from '../models/Participant.js';
 import Project from '../models/Project.js';
 import User from '../models/User.js';
@@ -239,7 +240,6 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
           participant: newParticipant._id,
         },
       ];
-      console.log('🚀 newParticipant:', newParticipant);
 
       // projectData.collaborators = [
       //   {
@@ -275,6 +275,14 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
 
     // Create the project
     const project = await Project.create(projectData);
+
+    if (config.description) {
+      await Note.create({
+        content: config.description,
+        project: project._id,
+        isSystem: true,
+      });
+    }
 
     return {
       manager: leadForm.createdBy,
