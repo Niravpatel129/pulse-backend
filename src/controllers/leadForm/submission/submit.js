@@ -1,6 +1,7 @@
 import File from '../../../models/fileModel.js';
 import LeadForm from '../../../models/LeadForm.js';
 import User from '../../../models/User.js';
+import { processAutomations } from '../../../utils/automationProcessor.js';
 import { handleError } from '../../../utils/errorHandler.js';
 import { firebaseStorage } from '../../../utils/firebase.js';
 
@@ -85,6 +86,7 @@ export const submitLeadForm = async (req, res) => {
 
         // Find the form to get the workspace ID
         const leadForm = await LeadForm.findById(id);
+
         if (!leadForm) {
           return res
             .status(404)
@@ -107,11 +109,6 @@ export const submitLeadForm = async (req, res) => {
           (key) => key.endsWith('_count') && key.startsWith('file_element-'),
         );
         const isMultipleFileUpload = fileCountFields.length > 0;
-
-        console.log(
-          `Multiple file upload detected: ${isMultipleFileUpload}`,
-          isMultipleFileUpload ? `Count fields: ${fileCountFields}` : '',
-        );
 
         // Process each uploaded file
         for (const file of req.files) {
@@ -692,6 +689,20 @@ export const submitLeadForm = async (req, res) => {
 
     const submissionId = leadForm.submissions[leadForm.submissions.length - 1]._id;
     console.log(`Submission saved with ID: ${submissionId}`);
+
+    // Process automations for this submission
+    try {
+      console.log('Triggering automations for form submission');
+      const automationResults = await processAutomations(
+        leadForm.toJSON(),
+        submission,
+        submissionId,
+      );
+      console.log(`Automation processing completed with ${automationResults.length} results`);
+    } catch (error) {
+      console.error('Error processing automations:', error);
+      // Continue with the response even if automations fail
+    }
 
     // Send notification email if enabled
     if (leadForm.notifyOnSubmission) {
