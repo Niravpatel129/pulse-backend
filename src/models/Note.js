@@ -2,6 +2,10 @@ import mongoose from 'mongoose';
 
 const noteSchema = new mongoose.Schema(
   {
+    type: {
+      type: String,
+      default: 'note',
+    },
     content: {
       type: String,
       required: true,
