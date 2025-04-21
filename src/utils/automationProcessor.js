@@ -18,14 +18,10 @@ import { mapTemplateVariables } from './templateUtils.js';
  */
 export const processAutomations = async (leadForm, submission, submissionId) => {
   try {
-    console.log(`Starting automation processing for submission ${submissionId}`);
-
     if (!leadForm.automations || leadForm.automations.length === 0) {
       console.log('No automations configured for this form');
       return [];
     }
-
-    console.log(`Found ${leadForm.automations.length} automations to process`);
 
     const results = [];
 
@@ -35,10 +31,6 @@ export const processAutomations = async (leadForm, submission, submissionId) => 
         console.log(`Skipping disabled automation: ${automation.name} (${automation.id})`);
         continue;
       }
-
-      console.log(
-        `Processing automation: ${automation.name} (${automation.id}) of type ${automation.type}`,
-      );
 
       try {
         const result = await executeAutomation(automation, leadForm, submission, submissionId);
@@ -279,8 +271,6 @@ const executeCreateProjectAutomation = async (config, leadForm, submission) => {
     if (config.initialStatus) {
       projectData.status = config.initialStatus;
     }
-
-    console.log('Creating project with data:', projectData);
 
     // Create the project
     const project = await Project.create(projectData);
