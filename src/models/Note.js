@@ -6,6 +6,10 @@ const noteSchema = new mongoose.Schema(
       type: String,
       default: 'note',
     },
+    submission: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Submission',
+    },
     content: {
       type: String,
       required: true,
