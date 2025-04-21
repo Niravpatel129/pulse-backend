@@ -102,14 +102,50 @@ export const submitLeadForm = async (req, res) => {
           })),
         );
 
+        // Check if we have any file_element-*_count fields in the request
+        const fileCountFields = Object.keys(req.body).filter(
+          (key) => key.endsWith('_count') && key.startsWith('file_element-'),
+        );
+        const isMultipleFileUpload = fileCountFields.length > 0;
+
+        console.log(
+          `Multiple file upload detected: ${isMultipleFileUpload}`,
+          isMultipleFileUpload ? `Count fields: ${fileCountFields}` : '',
+        );
+
         // Process each uploaded file
         for (const file of req.files) {
           if (file.fieldname.startsWith('file_')) {
             // Extract elementId from the fieldname
             let elementId;
+            let fileIndex = null;
 
-            // For new format (file_element-XXXXX), assign to the first File Upload element found
-            if (file.fieldname.startsWith('file_element-')) {
+            // For new multiple file format (file_element-XXXXX_0, file_element-XXXXX_1, etc.)
+            if (file.fieldname.includes('_') && /file_element-.*_\d+/.test(file.fieldname)) {
+              // Extract element ID and file index
+              const parts = file.fieldname.split('_');
+              const indexPart = parts[parts.length - 1];
+              fileIndex = parseInt(indexPart, 10);
+
+              // Reconstruct the base element ID without the index
+              const baseFieldName = file.fieldname.substring(0, file.fieldname.lastIndexOf('_'));
+
+              if (fileElements.length > 0) {
+                // Use the first file upload element's ID
+                elementId = fileElements[0].id;
+                console.log(
+                  `Using first file element ID for upload: ${elementId}, index: ${fileIndex}`,
+                );
+              } else {
+                // No file elements, use the title as ID
+                elementId = 'New File Upload';
+                console.log(
+                  `No file elements found, using default ID: ${elementId}, index: ${fileIndex}`,
+                );
+              }
+            }
+            // For new single file format (file_element-XXXXX)
+            else if (file.fieldname.startsWith('file_element-')) {
               if (fileElements.length > 0) {
                 // Use the first file upload element's ID
                 elementId = fileElements[0].id;
@@ -125,7 +161,11 @@ export const submitLeadForm = async (req, res) => {
               console.log(`Using extracted element ID from field name: ${elementId}`);
             }
 
-            console.log(`Processing file upload with elementId: ${elementId}`);
+            console.log(
+              `Processing file upload with elementId: ${elementId}, index: ${
+                fileIndex !== null ? fileIndex : 'N/A'
+              }`,
+            );
 
             // Generate storage path for the file
             const workspaceId = leadForm.workspace;
@@ -150,8 +190,8 @@ export const submitLeadForm = async (req, res) => {
               uploadedBy: req.user ? req.user.userId : null,
             });
 
-            // Save file reference to be used later when building the cleaned form values
-            fileReferences[elementId] = {
+            // Create file data object
+            const fileData = {
               fileId: fileRecord._id,
               fileName: file.originalname,
               fileUrl: url,
@@ -159,7 +199,28 @@ export const submitLeadForm = async (req, res) => {
               fileType: file.mimetype,
             };
 
-            console.log(`File reference stored for element ID: ${elementId}`);
+            // Save file reference to be used later when building the cleaned form values
+            if (fileIndex !== null) {
+              // For multiple files per element, store as array
+              if (!fileReferences[elementId]) {
+                fileReferences[elementId] = [];
+              }
+
+              // Ensure the array is large enough to hold the file at this index
+              while (fileReferences[elementId].length <= fileIndex) {
+                fileReferences[elementId].push(null);
+              }
+
+              // Store the file data at the specific index
+              fileReferences[elementId][fileIndex] = fileData;
+              console.log(
+                `File reference stored for element ID: ${elementId} at index: ${fileIndex}`,
+              );
+            } else {
+              // For single file per element, store directly
+              fileReferences[elementId] = fileData;
+              console.log(`File reference stored for element ID: ${elementId}`);
+            }
           }
         }
       }
@@ -284,6 +345,21 @@ export const submitLeadForm = async (req, res) => {
               processedKeys.add(element.id);
               return;
             }
+
+            // Check if we have a file_element-*_count field for this element
+            if (
+              element.type === 'File Upload' &&
+              req.body &&
+              Object.keys(req.body).some(
+                (key) => key.endsWith('_count') && key.startsWith('file_element-'),
+              )
+            ) {
+              // We have a file count field, so there are files being uploaded
+              console.log(`Found file count field for element ${element.id}, skipping validation`);
+              processedKeys.add(element.id);
+              return;
+            }
+
             missingFields.push(element.title);
           }
         } else {
@@ -446,13 +522,19 @@ export const submitLeadForm = async (req, res) => {
 
           // Check if this is a file upload field
           if (
-            Object.keys(value).length === 0 &&
+            (Object.keys(value).length === 0 ||
+              (Array.isArray(value) &&
+                value.every(
+                  (item) => typeof item === 'object' && Object.keys(item).length === 0,
+                ))) &&
             leadForm.elements.some(
               (el) => el.type === 'File Upload' && (el.id === key || el.title === key),
             )
           ) {
             console.log(
-              `Empty object for file upload field ${key}, will be populated by file upload logic`,
+              `Empty object${
+                Array.isArray(value) ? ' array' : ''
+              } for file upload field ${key}, will be populated by file upload logic`,
             );
 
             const matchingElement = leadForm.elements.find(
@@ -461,11 +543,20 @@ export const submitLeadForm = async (req, res) => {
 
             if (matchingElement) {
               // Store with proper structure but empty value for now
+              // If it's an array of empty objects, we're dealing with a multiple file upload
+              const isMultipleFiles = Array.isArray(value);
+
               cleanedFormValues[matchingElement.id] = {
                 id: matchingElement.id,
                 label: matchingElement.title,
-                value: {},
+                value: isMultipleFiles ? [] : {}, // Empty array for multiple files, empty object for single file
               };
+
+              console.log(
+                `Created placeholder for file upload field ${matchingElement.id}, type: ${
+                  isMultipleFiles ? 'multiple' : 'single'
+                }`,
+              );
             } else {
               // Just store as-is if no match
               cleanedFormValues[key] = {
@@ -522,24 +613,57 @@ export const submitLeadForm = async (req, res) => {
       }
 
       for (const [elementId, fileData] of Object.entries(fileReferences)) {
-        // If we already have an element entry, update its value
-        if (cleanedFormValues[elementId]) {
-          console.log(`Updating existing element ${elementId} with file data`);
-          cleanedFormValues[elementId].value = fileData;
-        } else {
-          // Find the element info
-          const elementInfo = elementInfoMap[elementId] || {
-            id: elementId,
-            title: fileElements.find((el) => el.id === elementId)?.title || 'File Upload',
-          };
+        // Find the element info
+        const elementInfo = elementInfoMap[elementId] || {
+          id: elementId,
+          title: fileElements.find((el) => el.id === elementId)?.title || 'File Upload',
+        };
 
-          // Create a new entry
-          console.log(`Creating new element ${elementId} with file data`);
-          cleanedFormValues[elementId] = {
-            id: elementId,
-            label: elementInfo.title,
-            value: fileData,
-          };
+        // Check if this is a multiple file upload (array of files)
+        const isMultipleFiles = Array.isArray(fileData);
+
+        console.log(
+          `Processing file reference for element ${elementId}, isMultipleFiles: ${isMultipleFiles}`,
+        );
+
+        if (isMultipleFiles) {
+          // Filter out any null entries (could happen if files aren't uploaded in sequential order)
+          const validFiles = fileData.filter((file) => file !== null);
+
+          if (validFiles.length > 0) {
+            // If we already have an element entry, update its value
+            if (cleanedFormValues[elementId]) {
+              console.log(
+                `Updating existing element ${elementId} with multiple file data (${validFiles.length} files)`,
+              );
+              cleanedFormValues[elementId].value = validFiles;
+            } else {
+              // Create a new entry
+              console.log(
+                `Creating new element ${elementId} with multiple file data (${validFiles.length} files)`,
+              );
+              cleanedFormValues[elementId] = {
+                id: elementId,
+                label: elementInfo.title,
+                value: validFiles,
+              };
+            }
+          }
+        } else {
+          // Single file case
+          // If we already have an element entry, update its value
+          if (cleanedFormValues[elementId]) {
+            console.log(`Updating existing element ${elementId} with single file data`);
+            cleanedFormValues[elementId].value = fileData;
+          } else {
+            // Create a new entry
+            console.log(`Creating new element ${elementId} with single file data`);
+            cleanedFormValues[elementId] = {
+              id: elementId,
+              label: elementInfo.title,
+              value: fileData,
+            };
+          }
         }
       }
     }
