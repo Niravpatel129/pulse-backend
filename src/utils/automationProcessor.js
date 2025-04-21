@@ -7,6 +7,7 @@ import Note from '../models/Note.js';
 import Participant from '../models/Participant.js';
 import Project from '../models/Project.js';
 import User from '../models/User.js';
+import emailService from '../services/emailService.js';
 import { mapTemplateVariables } from './templateUtils.js';
 
 /**
@@ -78,6 +79,7 @@ const executeAutomation = async (automation, leadForm, submission, submissionId)
 
   switch (type) {
     case 'email':
+    case 'send_email':
       return await executeEmailAutomation(config, leadForm, submission);
 
     case 'webhook':
@@ -106,8 +108,67 @@ const executeAutomation = async (automation, leadForm, submission, submissionId)
  */
 const executeEmailAutomation = async (config, leadForm, submission) => {
   console.log('Executing email automation');
-  // Placeholder for email sending logic
-  return { status: 'email_scheduled' };
+
+  try {
+    // Extract email configuration
+    const { subject, body, ccTeam, fieldMappings = {} } = config;
+
+    // Get client email from submission
+    if (!submission.clientEmail) {
+      throw new Error('Client email is required for email automation');
+    }
+
+    // Create context with all available data for template variables
+    const templateContext = {
+      ...submission,
+      formName: leadForm.name,
+      workspace: leadForm.workspace,
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString(),
+    };
+
+    // Process templates in subject and body
+    const processedSubject = mapTemplateVariables(subject, templateContext);
+    const processedBody = mapTemplateVariables(body, templateContext);
+
+    // Format body as HTML
+    const htmlBody = processedBody.replace(/\n/g, '<br>');
+
+    // Build email data
+    const emailData = {
+      to: submission.clientEmail,
+      subject: processedSubject,
+      html: htmlBody,
+      headers: {},
+    };
+
+    // Set reply-to if available
+    if (process.env.DEFAULT_EMAIL_REPLY_TO) {
+      emailData.headers['Reply-To'] = process.env.DEFAULT_EMAIL_REPLY_TO;
+    }
+
+    // Add CC if needed
+    if (ccTeam && leadForm.createdBy) {
+      // Find the user who created the form to CC them
+      const creator = await User.findById(leadForm.createdBy);
+      if (creator && creator.email) {
+        emailData.cc = creator.email;
+      }
+    }
+
+    console.log('Sending email with emailService:', emailData);
+    const result = await emailService.sendEmail(emailData);
+
+    return {
+      status: 'email_sent',
+      to: emailData.to,
+      subject: emailData.subject,
+      messageId: result.result?.messageId,
+    };
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
 };
 
 /**
