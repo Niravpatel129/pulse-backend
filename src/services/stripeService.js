@@ -22,6 +22,7 @@ class StripeService {
       });
       return response.data;
     } catch (error) {
+      console.log('🚀 error:', error);
       throw new Error(
         `Failed to create Stripe Connect account: ${
           error.response?.data?.error?.message || error.message
