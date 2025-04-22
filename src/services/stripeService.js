@@ -42,6 +42,7 @@ class StripeService {
       });
       return response.data;
     } catch (error) {
+      console.log('🚀 error:', error);
       throw new Error(
         `Failed to create account link: ${error.response?.data?.error?.message || error.message}`,
       );
