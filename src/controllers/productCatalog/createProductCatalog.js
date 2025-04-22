@@ -7,6 +7,7 @@ export const createProductCatalog = async (req, res, next) => {
 
     const product = await ProductCatalog.create({
       name,
+      discount,
       quantity,
       price,
       projects: projects || [],
