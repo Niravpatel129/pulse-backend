@@ -253,38 +253,6 @@ const tableSchema = new mongoose.Schema(
 tableSchema.index({ workspace: 1 });
 tableSchema.index({ name: 'text', description: 'text' });
 
-// Pre-save hook to ensure a primary key column exists (defaults to 'Name')
-tableSchema.pre('save', function (next) {
-  if (this.isNew) {
-    // Create default "Name" column as primary key if no columns exist
-    if (!this.columns || this.columns.length === 0) {
-      this.columns = [
-        {
-          id: new mongoose.Types.ObjectId().toString(),
-          name: 'Name',
-          type: 'single_line',
-          isPrimaryKey: true,
-          isRequired: true,
-          order: 0,
-        },
-      ];
-    }
-
-    // Create default grid view if no views exist
-    if (!this.views || this.views.length === 0) {
-      this.views = [
-        {
-          id: new mongoose.Types.ObjectId().toString(),
-          name: 'Grid view',
-          type: 'grid',
-          visibleColumns: this.columns.map((col) => col.id),
-        },
-      ];
-    }
-  }
-  next();
-});
-
 const Table = mongoose.model('Table', tableSchema);
 
 // Cascade delete records when a table is deleted
