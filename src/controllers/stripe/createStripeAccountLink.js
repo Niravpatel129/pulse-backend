@@ -25,8 +25,8 @@ export const createStripeAccountLink = asyncHandler(async (req, res) => {
   // Create account link using the service
   const accountLink = await StripeService.createAccountLink(
     connectAccount.accountId,
-    `${process.env.FRONTEND_URL}/invoices/refresh`,
-    `${process.env.FRONTEND_URL}/invoices/return`,
+    `https://${process.env.FRONTEND_URL}/invoices/refresh`,
+    `https://${process.env.FRONTEND_URL}/invoices/return`,
   );
 
   res.status(200).json({
