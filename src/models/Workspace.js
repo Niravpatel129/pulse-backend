@@ -8,6 +8,12 @@ const workspaceSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
+    subdomain: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+    },
     description: {
       type: String,
       default: '',

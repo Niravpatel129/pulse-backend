@@ -1,9 +1,8 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import StripeConnectAccount from '../../models/StripeConnectAccount.js';
 import User from '../../models/User.js';
+import Workspace from '../../models/Workspace.js';
 import StripeService from '../../services/stripeService.js';
-import { getWorkspaceUrl } from './helpers/urlHelpers.js';
-
 // @desc    Create a Stripe Connect account and return onboarding URL
 // @route   POST /api/stripe/connect/create-account
 // @access  Private
@@ -16,13 +15,15 @@ export const createStripeAccount = asyncHandler(async (req, res) => {
   const user = await User.findById(userId);
   const email = user.email;
 
+  // find workspace name from workspaceId
+  const workspace = await Workspace.findById(workspaceId);
+  const workspaceName = workspace.name || workspace.subdomain;
+
   // Get workspace URL from request host
-  const workspaceUrl = getWorkspaceUrl(req);
-  const refreshUrl = `${workspaceUrl}/invoices/refresh`;
-  const returnUrl = `${workspaceUrl}/invoices/return`;
+  const refreshUrl = `https://${workspaceName}.hourblock.com/invoices/refresh`;
+  const returnUrl = `https://${workspaceName}.hourblock.com/invoices/return`;
 
   console.log('Request Host:', req.headers.host);
-  console.log('Workspace URL:', workspaceUrl);
   console.log('Return URL:', returnUrl);
   console.log('Refresh URL:', refreshUrl);
 
