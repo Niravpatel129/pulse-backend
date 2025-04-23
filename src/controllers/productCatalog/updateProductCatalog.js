@@ -3,7 +3,7 @@ import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 
 export const updateProductCatalog = catchAsync(async (req, res, next) => {
-  const { name, quantity, price, projects, modules } = req.body;
+  const { name, quantity, price, projects, modules, discount } = req.body;
 
   const product = await ProductCatalog.findByIdAndUpdate(
     req.params.id,
@@ -13,6 +13,7 @@ export const updateProductCatalog = catchAsync(async (req, res, next) => {
       price,
       projects: projects || [],
       modules: modules || [],
+      discount,
     },
     {
       new: true,
