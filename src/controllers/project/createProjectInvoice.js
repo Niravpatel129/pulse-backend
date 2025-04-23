@@ -8,7 +8,7 @@ import ApiResponse from '../../utils/apiResponse.js';
 export const createProjectInvoice = async (req, res, next) => {
   try {
     const { projectId } = req.params;
-    const { clientId, items, deliveryMethod, memo, footer, tax } = req.body;
+    const { clientId, items, deliveryMethod, memo, footer, tax, discount } = req.body;
 
     // Check if project exists
     const project = await Project.findById(projectId);
@@ -36,6 +36,7 @@ export const createProjectInvoice = async (req, res, next) => {
     // Fetch product details for each item
     const productDetails = [];
     let subtotal = 0;
+    let totalProductDiscounts = 0;
 
     // Validate that all items exist in ProductCatalog
     for (const itemId of items) {
@@ -44,16 +45,30 @@ export const createProjectInvoice = async (req, res, next) => {
         throw new ApiError(400, `Product with ID ${itemId} not found in catalog`);
       }
 
+      // Calculate product discount if available
+      const productPrice = product.price || 0;
+      const productDiscount = product.discount || 0;
+      const discountedPrice = productPrice - (productPrice * productDiscount) / 100;
+
+      totalProductDiscounts += (productPrice * productDiscount) / 100;
+      subtotal += discountedPrice;
+
       productDetails.push(product._id);
-      subtotal += product.price || 0;
     }
 
     const workspace = await Workspace.findById(req.workspace._id);
     const invoiceSettings = workspace.invoiceSettings || {};
 
+    // Calculate additional invoice-level discount if provided
+    const invoiceDiscountValue = discount ? (subtotal * discount) / 100 : 0;
+    const subtotalAfterDiscount = subtotal - invoiceDiscountValue;
+
+    // Calculate total discount (product-level + invoice-level)
+    const totalDiscountValue = totalProductDiscounts + invoiceDiscountValue;
+
     // Calculate tax amount if tax is provided
-    const taxAmount = tax ? (subtotal * tax.rate) / 100 : 0;
-    const total = subtotal + taxAmount;
+    const taxAmount = tax ? (subtotalAfterDiscount * tax.rate) / 100 : 0;
+    const total = subtotalAfterDiscount + taxAmount;
 
     // Generate invoice number (you might want to implement a more sophisticated system)
     const invoiceNumber = `INV-${Date.now()}`;
@@ -68,7 +83,8 @@ export const createProjectInvoice = async (req, res, next) => {
       project: projectId,
       client: clientId,
       items: productDetails,
-      subtotal,
+      subtotal: subtotal + totalProductDiscounts, // Original subtotal before product discounts
+      discount: totalDiscountValue,
       tax: taxAmount,
       total,
       status: 'open',
