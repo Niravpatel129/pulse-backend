@@ -10,6 +10,7 @@ export const getInvoice = catchAsync(async (req, res, next) => {
 
     const invoice = await Invoice.findById(req.params.id)
       .populate('client', 'name email')
+      .populate('items', 'name description price discount')
       .populate('project', 'name')
       .populate('createdBy', 'name');
 

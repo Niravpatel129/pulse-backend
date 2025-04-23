@@ -22,6 +22,10 @@ const invoiceSchema = new mongoose.Schema(
         ref: 'ProductCatalog',
       },
     ],
+    discount: {
+      type: Number,
+      default: 0,
+    },
     subtotal: {
       type: Number,
       required: true,

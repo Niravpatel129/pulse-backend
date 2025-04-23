@@ -26,6 +26,7 @@ export const createInvoice = catchAsync(async (req, res, next) => {
     // Calculate totals
     const subtotal = products.reduce((sum, product) => sum + product.price * product.quantity, 0);
     const total = subtotal; // You can add tax or other calculations here if needed
+    const discount = products.reduce((sum, product) => sum + product.discount, 0);
 
     const invoiceNumber = await generateInvoiceNumber(req.workspace._id);
 
@@ -35,6 +36,7 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       items: itemIds,
       subtotal,
       total,
+      discount,
       status,
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       currency: 'USD',
