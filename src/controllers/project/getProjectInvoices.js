@@ -25,7 +25,7 @@ export const getProjectInvoices = async (req, res, next) => {
     // Get all invoices for the project
     const invoices = await Invoice.find({ project: projectId })
       .populate('client', 'name email')
-      .populate('items', 'name description price')
+      .populate('items', 'name description price discount')
       .sort({ createdAt: -1 });
 
     res.status(200).json(new ApiResponse(200, invoices, 'Project invoices retrieved successfully'));

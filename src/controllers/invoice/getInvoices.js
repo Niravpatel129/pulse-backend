@@ -7,7 +7,7 @@ export const getInvoices = catchAsync(async (req, res, next) => {
     const invoices = await Invoice.find({ workspace })
       .populate('client', 'name email')
       .populate('project', 'name description')
-      .populate('items', 'name quantity price projects modules')
+      .populate('items', 'name quantity price projects modules discount')
       .populate('createdBy', 'name')
       .select('invoiceNumber total status dueDate notes createdAt project modules items currency')
       .sort({ createdAt: -1 });
