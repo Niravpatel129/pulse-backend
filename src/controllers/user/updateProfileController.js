@@ -9,7 +9,7 @@ import AppError from '../../utils/AppError.js';
 export const updateProfile = async (req, res, next) => {
   try {
     // Fields that users can update
-    const { name, email, phone, jobTitle, bio } = req.body;
+    const { name, email, phone, jobTitle, bio, notificationPreferences } = req.body;
 
     // Build update object with only the fields that were provided
     const updateFields = {};
@@ -18,6 +18,7 @@ export const updateProfile = async (req, res, next) => {
     if (phone) updateFields.phone = phone;
     if (jobTitle) updateFields.jobTitle = jobTitle;
     if (bio) updateFields.bio = bio;
+    if (notificationPreferences) updateFields.notificationPreferences = notificationPreferences;
 
     // Find and update the user profile
     const user = await User.findByIdAndUpdate(
