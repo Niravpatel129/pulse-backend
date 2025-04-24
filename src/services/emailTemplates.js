@@ -3,4 +3,4 @@
  * @deprecated - Please import from './emailTemplates' directory instead
  */
 
-export * from './emailTemplates';
+export * from './emailTemplates/index.js';

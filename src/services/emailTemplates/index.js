@@ -3,7 +3,10 @@
  * All email templates are exported from here for consistency
  */
 
-export { approvalRequest } from './approvalRequest';
-export { existingUserWorkspaceInvitation } from './existingUserWorkspaceInvitation';
-export { newUserWorkspaceInvitation } from './newUserWorkspaceInvitation';
-export { scheduleInvitation } from './scheduleInvitation';
+export { approvalRequest } from './approvalRequest.js';
+export { existingUserWorkspaceInvitation } from './existingUserWorkspaceInvitation.js';
+export {
+  default as generateHourBlockEmailHtml,
+  newUserWorkspaceInvitation,
+} from './newUserWorkspaceInvitation.js';
+export { scheduleInvitation } from './scheduleInvitation.js';

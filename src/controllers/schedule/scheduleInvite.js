@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import Availability from '../../models/Availability.js';
 import BookingRequest from '../../models/BookingRequest.js';
 import emailService from '../../services/emailService.js';
-import { scheduleInvitation } from '../../services/emailTemplates.js';
+import { scheduleInvitation } from '../../services/emailTemplates/index.js';
 import AppError from '../../utils/AppError.js';
 
 /**

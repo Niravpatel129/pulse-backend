@@ -2,10 +2,7 @@ import crypto from 'crypto';
 import User from '../../models/User.js';
 import Workspace from '../../models/Workspace.js';
 import emailService from '../../services/emailService.js';
-import {
-  existingUserWorkspaceInvitation,
-  newUserWorkspaceInvitation,
-} from '../../services/emailTemplates.js';
+import { newUserWorkspaceInvitation } from '../../services/emailTemplates/index.js';
 import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
@@ -153,7 +150,16 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
         .json(new ApiResponse(200, { workspace }, 'User created and invitation sent successfully'));
     } else {
       // For existing users, send a notification email
-      const template = existingUserWorkspaceInvitation(templateParams);
+      // workspaceName,
+      // role,
+      // inviteUrl,
+      // recipientName = 'Colleague',
+      const template = newUserWorkspaceInvitation({
+        workspaceName: workspace.name,
+        role: normalizedRole,
+        inviteUrl,
+        recipientName: existingUser.username || 'Colleague',
+      });
 
       await emailService.sendEmail({
         to: email,

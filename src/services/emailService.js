@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
-import { approvalRequest } from './emailTemplates.js';
+import { approvalRequest } from './emailTemplates/index.js';
 
 dotenv.config();
 

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Template Preview</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .controls {
+      background-color: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    button {
+      background-color: #1e40af;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .preview-container {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    iframe {
+      width: 100%;
+      height: 800px;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <h2>Email Template Preview</h2>
+    <div class="form-group">
+      <label for="workspaceName">Workspace Name</label>
+      <input type="text" id="workspaceName" value="Design Team">
+    </div>
+    <div class="form-group">
+      <label for="role">Role</label>
+      <input type="text" id="role" value="Editor">
+    </div>
+    <div class="form-group">
+      <label for="inviteUrl">Invite URL</label>
+      <input type="text" id="inviteUrl" value="https://hourblock.app/invite/abc123">
+    </div>
+    <div class="form-group">
+      <label for="recipientName">Recipient Name</label>
+      <input type="text" id="recipientName" value="Colleague">
+    </div>
+    <button onclick="updatePreview()">Update Preview</button>
+  </div>
+
+  <div class="preview-container">
+    <iframe id="preview"></iframe>
+  </div>
+
+  <script>
+    function generateHtml(params) {
+      const { workspaceName, role, inviteUrl, recipientName } = params;
+      
+      const today = new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+
+      const refNumber = `HB-${Math.floor(Math.random() * 10000)
+        .toString()
+        .padStart(4, '0')}`;
+
+      return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitation to join ${workspaceName} | HourBlock</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: monospace, 'Courier New', Courier; color: #1e3a8a; background-color: #f3f4f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto; border: 1px solid #1e40af; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden;">
+          <!-- Header with postmark and stamp -->
+          <tr>
+            <td style="background-color: #1e40af; color: white; padding: 12px 16px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="margin-right: 8px; font-size: 20px; font-weight: bold; letter-spacing: -0.5px;">HB</td>
+                        <td style="width: 1px; background-color: #60a5fa; margin: 0 8px; height: 24px;"></td>
+                        <td style="font-size: 14px; letter-spacing: 0.5px; padding-left: 8px;">HOURBLOCK POST</td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="font-size: 12px; margin-right: 8px; color: #bfdbfe; padding-right: 8px;">${today}</td>
+                        <td style="background-color: white; border-radius: 2px; padding: 4px;">
+                          <span style="color: #1e40af; font-size: 12px; font-weight: bold;">OFFICIAL</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Blue decorative line -->
+          <tr>
+            <td style="height: 4px; background: linear-gradient(to right, #60a5fa, #1e40af, #60a5fa);"></td>
+          </tr>
+          
+          <!-- Envelope styling -->
+          <tr>
+            <td style="background-color: #eff6ff; padding: 24px;">
+              <!-- Address block -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td width="4" style="background-color: #1e40af;"></td>
+                  <td style="padding-left: 12px;">
+                    <div style="font-size: 14px; opacity: 0.8;">WORKSPACE INVITATION</div>
+                    <div style="font-weight: bold;">${workspaceName}</div>
+                    <div style="font-size: 14px;">Role: <span style="color: #1d4ed8;">${role}</span></div>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Message content -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: white; border: 1px solid #bfdbfe; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="font-size: 14px; margin-top: 0;">Dear ${recipientName},</p>
+                    <div style="margin: 16px 0; font-size: 14px; line-height: 1.5;">
+                      <p>
+                        You have been invited to join the workspace <span style="font-weight: bold;">"${workspaceName}"</span> with 
+                        the role of <span style="font-weight: bold;">${role}</span>.
+                      </p>
+                      <p style="margin-top: 12px;">
+                        Please use the action button below to accept this invitation and set up your account.
+                      </p>
+                    </div>
+                    
+                    <!-- Action button styled like a postal stamp -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px; margin-bottom: 16px;">
+                      <tr>
+                        <td align="center">
+                          <table cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td style="position: relative;">
+                                <table cellpadding="0" cellspacing="0" border="0" style="position: absolute; top: 2px; left: 2px; background-color: #bfdbfe; border: 2px dashed #60a5fa; border-radius: 4px; transform: rotate(2deg); z-index: 1;">
+                                  <tr>
+                                    <td style="padding: 12px 24px; opacity: 0;">
+                                      ACCEPT INVITATION
+                                    </td>
+                                  </tr>
+                                </table>
+                                <a href="${inviteUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 4px; border: 2px solid #1e3a8a; font-weight: bold; letter-spacing: 0.5px; text-decoration: none; position: relative; z-index: 2;">
+                                  ACCEPT INVITATION &rarr;
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <!-- Fallback link -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px; font-size: 12px; color: #1e40af; border-top: 1px solid #eff6ff; padding-top: 16px;">
+                      <tr>
+                        <td>
+                          <p style="margin-top: 0;">If the button doesn't work, copy and paste this link:</p>
+                          <p style="margin-top: 4px; word-break: break-all; font-weight: 300;">${inviteUrl}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Footer with postal markings -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px;">
+                <tr>
+                  <td style="font-size: 12px; color: #1d4ed8;">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="vertical-align: middle;">
+                          &#9993;
+                        </td>
+                        <td style="padding-left: 4px; vertical-align: middle;">
+                          HOURBLOCK DELIVERY SERVICE
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right">
+                    <table cellpadding="0" cellspacing="0" border="0" style="border: 1px solid #60a5fa; padding: 4px 8px; border-radius: 2px; background-color: white;">
+                      <tr>
+                        <td style="font-weight: bold;">REF:</td>
+                        <td style="padding-left: 4px;">${refNumber}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+    }
+
+    function updatePreview() {
+      const params = {
+        workspaceName: document.getElementById('workspaceName').value,
+        role: document.getElementById('role').value,
+        inviteUrl: document.getElementById('inviteUrl').value,
+        recipientName: document.getElementById('recipientName').value
+      };
+
+      const html = generateHtml(params);
+      const iframe = document.getElementById('preview');
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      
+      iframeDoc.open();
+      iframeDoc.write(html);
+      iframeDoc.close();
+    }
+
+    // Initialize preview on page load
+    document.addEventListener('DOMContentLoaded', updatePreview);
+  </script>
+</body>
+</html> 

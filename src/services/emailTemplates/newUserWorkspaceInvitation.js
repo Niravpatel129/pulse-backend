@@ -108,14 +108,14 @@ export const newUserWorkspaceInvitation = ({
                           <table cellpadding="0" cellspacing="0" border="0">
                             <tr>
                               <td style="position: relative;">
-                                <table cellpadding="0" cellspacing="0" border="0" style="position: absolute; top: 2px; left: 2px; background-color: #bfdbfe; border: 2px dashed #60a5fa; border-radius: 4px; transform: rotate(2deg);">
+                                <table cellpadding="0" cellspacing="0" border="0" style="position: absolute; top: 2px; left: 2px; background-color: #bfdbfe; border: 2px dashed #60a5fa; border-radius: 4px; transform: rotate(2deg); z-index: 1;">
                                   <tr>
                                     <td style="padding: 12px 24px; opacity: 0;">
                                       ACCEPT INVITATION
                                     </td>
                                   </tr>
                                 </table>
-                                <a href="${inviteUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 4px; border: 2px solid #1e3a8a; font-weight: bold; letter-spacing: 0.5px; text-decoration: none; position: relative;">
+                                <a href="${inviteUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 4px; border: 2px solid #1e3a8a; font-weight: bold; letter-spacing: 0.5px; text-decoration: none; position: relative; z-index: 2;">
                                   ACCEPT INVITATION &rarr;
                                 </a>
                               </td>
@@ -176,6 +176,7 @@ export const newUserWorkspaceInvitation = ({
 
 /**
  * Generate HTML for HourBlock email template - for direct use in components
+ * This is for client-side usage and should not be imported in Node.js directly
  */
 export default function generateHourBlockEmailHtml({
   workspaceName = 'Design Team',
@@ -193,7 +194,7 @@ export default function generateHourBlockEmailHtml({
     .toString()
     .padStart(4, '0')}`;
 
-  // This function returns plain HTML with inline styles for email clients
+  // Returns the same HTML template as newUserWorkspaceInvitation
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -277,14 +278,14 @@ export default function generateHourBlockEmailHtml({
                           <table cellpadding="0" cellspacing="0" border="0">
                             <tr>
                               <td style="position: relative;">
-                                <table cellpadding="0" cellspacing="0" border="0" style="position: absolute; top: 2px; left: 2px; background-color: #bfdbfe; border: 2px dashed #60a5fa; border-radius: 4px; transform: rotate(2deg);">
+                                <table cellpadding="0" cellspacing="0" border="0" style="position: absolute; top: 2px; left: 2px; background-color: #bfdbfe; border: 2px dashed #60a5fa; border-radius: 4px; transform: rotate(2deg); z-index: 1;">
                                   <tr>
                                     <td style="padding: 12px 24px; opacity: 0;">
                                       ACCEPT INVITATION
                                     </td>
                                   </tr>
                                 </table>
-                                <a href="${inviteUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 4px; border: 2px solid #1e3a8a; font-weight: bold; letter-spacing: 0.5px; text-decoration: none; position: relative;">
+                                <a href="${inviteUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 4px; border: 2px solid #1e3a8a; font-weight: bold; letter-spacing: 0.5px; text-decoration: none; position: relative; z-index: 2;">
                                   ACCEPT INVITATION &rarr;
                                 </a>
                               </td>
@@ -340,40 +341,4 @@ export default function generateHourBlockEmailHtml({
   </table>
 </body>
 </html>`;
-}
-
-// Preview component for usage in the frontend
-export function HourBlockEmailPreview() {
-  const emailHtml = generateHourBlockEmailHtml({
-    workspaceName: 'Marketing Team',
-    role: 'Editor',
-    inviteUrl: 'https://hourblock.app/invite/abc123',
-    recipientName: 'Alex',
-  });
-
-  return (
-    <div className='max-w-3xl mx-auto p-4'>
-      <div className='mb-4 p-2 bg-gray-100 rounded'>
-        <h2 className='text-lg font-bold mb-2'>Email HTML Preview</h2>
-        <p className='text-sm text-gray-600 mb-4'>
-          This is how the email will appear in email clients.
-        </p>
-        <div className='border border-gray-300 rounded bg-white'>
-          <iframe
-            srcDoc={emailHtml}
-            title='Email Preview'
-            className='w-full h-[600px]'
-            frameBorder='0'
-          />
-        </div>
-      </div>
-
-      <div className='mt-6 p-4 bg-gray-100 rounded'>
-        <h3 className='font-bold mb-2'>HTML Source Code</h3>
-        <pre className='text-xs bg-gray-800 text-gray-200 p-4 rounded overflow-auto max-h-[300px]'>
-          {emailHtml}
-        </pre>
-      </div>
-    </div>
-  );
 }
