@@ -20,6 +20,10 @@ export const deleteTeamMember = async (req, res, next) => {
       throw new ApiError(400, 'Workspace not found in request');
     }
 
+    if (req.user.userId === teamMemberId) {
+      throw new ApiError(400, 'You cannot delete yourself');
+    }
+
     // First try to find and remove from team members
     const teamMemberIndex = project.team.findIndex((t) => t.user.toString() === teamMemberId);
 
