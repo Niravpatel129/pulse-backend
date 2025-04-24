@@ -12,15 +12,12 @@ const userSchema = new mongoose.Schema(
     avatar: {
       type: String,
     },
-    // Add phone field
     phone: {
       type: String,
     },
-    // Add bio/description field
     bio: {
       type: String,
     },
-    // Add job title separate from role
     jobTitle: {
       type: String,
     },
@@ -45,7 +42,6 @@ const userSchema = new mongoose.Schema(
       enum: ['user', 'admin'],
       default: 'user',
     },
-    // Add notification preferences
     notificationPreferences: {
       type: Map,
       of: Boolean,
