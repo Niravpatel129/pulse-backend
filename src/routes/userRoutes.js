@@ -23,7 +23,12 @@ import { authenticate } from '../middleware/auth.js';
 const router = express.Router();
 
 // Set up multer for file uploads
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({
+  dest: 'uploads/',
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
 
 // Admin routes - manage all users
 router.route('/').get(getUsers).post(validateRequest(createUserSchema), createUser);

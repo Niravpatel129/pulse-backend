@@ -12,6 +12,9 @@ const userSchema = new mongoose.Schema(
     avatar: {
       type: String,
     },
+    avatarStoragePath: {
+      type: String,
+    },
     phone: {
       type: String,
     },

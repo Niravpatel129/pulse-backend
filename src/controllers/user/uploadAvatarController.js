@@ -1,7 +1,7 @@
 import fs from 'fs';
-import path from 'path';
 import User from '../../models/User.js';
 import AppError from '../../utils/AppError.js';
+import { firebaseStorage } from '../../utils/firebase.js';
 
 /**
  * Upload user avatar
@@ -31,35 +31,64 @@ export const uploadAvatar = async (req, res, next) => {
       return next(new AppError('File size should be less than 5MB', 400));
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'avatars');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    try {
+      // Get the current user to check if they have an existing avatar
+      const currentUser = await User.findById(req.user.id);
+
+      // If user has an existing avatar in Firebase, delete it
+      if (currentUser && currentUser.avatarStoragePath) {
+        try {
+          await firebaseStorage.deleteFile(currentUser.avatarStoragePath);
+        } catch (error) {
+          console.error('Failed to delete previous avatar:', error);
+          // Continue with upload even if delete fails
+        }
+      }
+
+      // Read file buffer
+      const fileBuffer = fs.readFileSync(req.file.path);
+
+      // Generate storage path for Firebase
+      const timestamp = Date.now();
+      const storagePath = `avatars/${req.user.id}/${timestamp}_${req.file.originalname.replace(
+        /[^a-zA-Z0-9.-]/g,
+        '_',
+      )}`;
+
+      // Upload to Firebase
+      const { url, storagePath: savedPath } = await firebaseStorage.uploadFile(
+        fileBuffer,
+        storagePath,
+        req.file.mimetype,
+      );
+
+      // Delete local temp file
+      fs.unlinkSync(req.file.path);
+
+      // Update user with Firebase avatar URL and storage path
+      const user = await User.findByIdAndUpdate(
+        req.user.id,
+        {
+          avatar: url,
+          avatarStoragePath: savedPath,
+        },
+        { new: true },
+      ).select('-password');
+
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+
+      res.status(200).json({
+        status: 'success',
+        data: {
+          user,
+        },
+      });
+    } catch (uploadError) {
+      console.error('Avatar upload error:', uploadError);
+      return next(new AppError(`Failed to upload avatar: ${uploadError.message}`, 500));
     }
-
-    // Rename and move file
-    const filename = `user-${req.user.id}-${Date.now()}${path.extname(req.file.originalname)}`;
-    const targetPath = path.join(uploadsDir, filename);
-
-    fs.renameSync(req.file.path, targetPath);
-
-    // Get user and update avatar field
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      { avatar: `/uploads/avatars/${filename}` },
-      { new: true },
-    ).select('-password');
-
-    if (!user) {
-      return next(new AppError('User not found', 404));
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        user,
-      },
-    });
   } catch (error) {
     // Delete the uploaded file if it exists
     if (req.file && fs.existsSync(req.file.path)) {
