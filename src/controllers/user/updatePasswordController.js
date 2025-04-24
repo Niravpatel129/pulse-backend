@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import User from '../../models/User.js';
 import AppError from '../../utils/AppError.js';
 
@@ -17,7 +17,7 @@ export const updatePassword = async (req, res, next) => {
     }
 
     // Get user with password
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id).select('+password');
 
     if (!user) {
       return next(new AppError('User not found', 404));
