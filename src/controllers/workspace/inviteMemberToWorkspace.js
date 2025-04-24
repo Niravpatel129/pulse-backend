@@ -2,6 +2,10 @@ import crypto from 'crypto';
 import User from '../../models/User.js';
 import Workspace from '../../models/Workspace.js';
 import emailService from '../../services/emailService.js';
+import {
+  existingUserWorkspaceInvitation,
+  newUserWorkspaceInvitation,
+} from '../../services/emailTemplates.js';
 import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
@@ -127,15 +131,21 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
     // Send appropriate email based on whether the user is new or existing
     const inviteUrl = `${process.env.FRONTEND_URL}/invite/workspace/${invitationToken}`;
 
+    // Prepare template parameters
+    const templateParams = {
+      workspaceName: workspace.name,
+      role: normalizedRole,
+      inviteUrl,
+    };
+
     if (isNewUser) {
       // For new users, send setup instructions
+      const template = newUserWorkspaceInvitation(templateParams);
+
       await emailService.sendEmail({
         to: email,
-        subject: `Invitation to join ${workspace.name}`,
-        html: `
-          <p>You have been invited to join the workspace "${workspace.name}" with the role of ${normalizedRole}.</p>
-          <p>Click the following link to accept the invitation and set up your password: <a href="${inviteUrl}">${inviteUrl}</a></p>
-        `,
+        subject: template.subject,
+        html: template.html,
       });
 
       return res
@@ -143,13 +153,12 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
         .json(new ApiResponse(200, { workspace }, 'User created and invitation sent successfully'));
     } else {
       // For existing users, send a notification email
+      const template = existingUserWorkspaceInvitation(templateParams);
+
       await emailService.sendEmail({
         to: email,
-        subject: `You've been added to ${workspace.name}`,
-        html: `
-          <p>You have been added to the workspace "${workspace.name}" with the role of ${normalizedRole}.</p>
-          <p>Click the following link to verify your access: <a href="${inviteUrl}">${inviteUrl}</a></p>
-        `,
+        subject: template.subject,
+        html: template.html,
       });
 
       return res

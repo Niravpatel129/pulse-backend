@@ -77,6 +77,9 @@ export const sendApprovalEmail = async (req, res) => {
       ];
     }
 
+    // Construct the approval link
+    const approvalLink = `${process.env.FRONTEND_URL}/modules/${moduleId}?approval=1`;
+
     // Send email to all client members (or fallback)
     for (const clientMember of recipientsList) {
       await emailService.sendApprovalEmail({
@@ -85,7 +88,7 @@ export const sendApprovalEmail = async (req, res) => {
         senderName: req.user.name,
         recipientEmail: clientMember.user.email,
         subject,
-        requestApproval,
+        link: approvalLink,
       });
     }
 
@@ -100,7 +103,7 @@ export const sendApprovalEmail = async (req, res) => {
         senderName: req.user.name,
         recipientEmail: member.user.email,
         subject,
-        requestApproval,
+        link: approvalLink,
       });
     }
 

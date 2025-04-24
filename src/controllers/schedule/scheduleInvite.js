@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import Availability from '../../models/Availability.js';
 import BookingRequest from '../../models/BookingRequest.js';
 import emailService from '../../services/emailService.js';
+import { scheduleInvitation } from '../../services/emailTemplates.js';
 import AppError from '../../utils/AppError.js';
 
 /**
@@ -83,24 +84,19 @@ const scheduleInvite = async (req, res, next) => {
       process.env.FRONTEND_URL || `https://${workspaceName}.hourblock.com`
     }/portal/booking/${booking._id}`;
 
-    // Send email to the client
+    // Send email to the client using the template
+    const template = scheduleInvitation({
+      meetingPurpose,
+      meetingDuration,
+      startDateRange,
+      endDateRange,
+      bookingLink,
+    });
+
     await emailService.sendEmail({
       to: primaryClientEmail,
-      subject: `Invitation to Schedule a Meeting: ${meetingPurpose}`,
-      html: `
-        <div>
-          <h2>You've Been Invited to Schedule a Meeting</h2>
-          <p>You have been invited to schedule a ${meetingDuration} minute meeting about "${meetingPurpose}".</p>
-          <p>Please select a time that works for you between ${new Date(
-            startDateRange,
-          ).toLocaleDateString()} and ${new Date(endDateRange).toLocaleDateString()}.</p>
-          </p>
-          <div>
-            <a href="${bookingLink}">Schedule Meeting</a>
-          </div>
-          <p>Thank you!</p>
-        </div>
-      `,
+      subject: template.subject,
+      html: template.html,
     });
 
     res.status(200).json({
