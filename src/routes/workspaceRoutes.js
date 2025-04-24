@@ -12,6 +12,7 @@ import {
   updateWorkspace,
 } from '../controllers/workspace/index.js';
 import { inviteMemberToWorkspace } from '../controllers/workspace/inviteMemberToWorkspace.js';
+import { updateWorkspaceMember } from '../controllers/workspace/updateWorkspaceMember.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -40,6 +41,9 @@ router.get('/members', extractWorkspace, getWorkspaceMembers);
 
 // Delete a workspace member
 router.delete('/members/:memberId', extractWorkspace, deleteWorkspaceMember);
+
+// Update a workspace member's role
+router.put('/members/:memberId', extractWorkspace, updateWorkspaceMember);
 
 // invite user to workspace
 router.post('/invite', extractWorkspace, inviteMemberToWorkspace);
