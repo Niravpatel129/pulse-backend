@@ -134,7 +134,6 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
         subject: `Invitation to join ${workspace.name}`,
         html: `
           <p>You have been invited to join the workspace "${workspace.name}" with the role of ${normalizedRole}.</p>
-          <p>An account has been created for you with the username: ${existingUser.username}</p>
           <p>Click the following link to accept the invitation and set up your password: <a href="${inviteUrl}">${inviteUrl}</a></p>
         `,
       });
