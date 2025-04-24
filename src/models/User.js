@@ -12,6 +12,18 @@ const userSchema = new mongoose.Schema(
     avatar: {
       type: String,
     },
+    // Add phone field
+    phone: {
+      type: String,
+    },
+    // Add bio/description field
+    bio: {
+      type: String,
+    },
+    // Add job title separate from role
+    jobTitle: {
+      type: String,
+    },
     isActivated: {
       type: Boolean,
       default: false,
@@ -33,6 +45,50 @@ const userSchema = new mongoose.Schema(
       enum: ['user', 'admin'],
       default: 'user',
     },
+    // Add notification preferences
+    notificationPreferences: {
+      type: Map,
+      of: Boolean,
+      default: {
+        'email-projects': true,
+        'email-tasks': true,
+        'email-calendar': false,
+        'email-billing': true,
+      },
+    },
+    // Add for security tab
+    twoFactorEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    // Add for billing tab
+    billingInfo: {
+      companyName: String,
+      billingAddress: String,
+      taxId: String,
+      billingEmail: String,
+    },
+    // Add for payment methods
+    paymentMethods: [
+      {
+        type: {
+          type: String,
+          enum: ['credit', 'debit', 'paypal'],
+        },
+        lastFour: String,
+        expiryDate: String,
+        isDefault: Boolean,
+      },
+    ],
+    // Track user sessions
+    activeSessions: [
+      {
+        deviceInfo: String,
+        location: String,
+        lastActive: Date,
+        token: String,
+      },
+    ],
     isEmailVerified: {
       type: Boolean,
       default: false,
