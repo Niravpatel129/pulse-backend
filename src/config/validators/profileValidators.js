@@ -8,6 +8,7 @@ export const updateProfile = Joi.object({
   jobTitle: Joi.string().max(100).allow(''),
   bio: Joi.string().max(500).allow(''),
   avatar: Joi.string().allow(''),
+  createdAt: Joi.date().allow(''),
   notificationPreferences: Joi.object({
     'email-billing': Joi.boolean().required(),
     'email-calendar': Joi.boolean().required(),
