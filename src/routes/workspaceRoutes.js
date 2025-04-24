@@ -1,5 +1,6 @@
 import express from 'express';
 import { addParticipant } from '../controllers/workspace/addParticipant.js';
+import { deleteWorkspaceMember } from '../controllers/workspace/deleteWorkspaceMember.js';
 import { getClients } from '../controllers/workspace/getClients.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getUser } from '../controllers/workspace/getUser.js';
@@ -36,6 +37,9 @@ router.get('/', getWorkspaces);
 
 // workspace members
 router.get('/members', extractWorkspace, getWorkspaceMembers);
+
+// Delete a workspace member
+router.delete('/members/:memberId', extractWorkspace, deleteWorkspaceMember);
 
 // invite user to workspace
 router.post('/invite', extractWorkspace, inviteMemberToWorkspace);
