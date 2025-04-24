@@ -72,6 +72,7 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
 
     // Check if user already exists
     let existingUser = await User.findOne({ email });
+    let isNewUser = false;
 
     if (existingUser) {
       // Check if user is already a member of the workspace
@@ -82,25 +83,6 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
       if (isMember) {
         throw new ApiError(400, 'User is already a member of this workspace');
       }
-
-      // Add user to workspace
-      workspace.members.push({
-        user: existingUser._id,
-        role: normalizedRole,
-      });
-
-      await workspace.save();
-
-      // Send notification email for invited user
-      await emailService.sendEmail({
-        to: email,
-        subject: `You've been added to ${workspace.name}`,
-        html: `<p>You have been added to the workspace "${workspace.name}" with the role of ${normalizedRole}.</p>`,
-      });
-
-      return res
-        .status(200)
-        .json(new ApiResponse(200, { workspace }, 'User added to workspace successfully'));
     } else {
       // Create a temporary user account
       const username = email.split('@')[0] + '-' + crypto.randomBytes(4).toString('hex');
@@ -114,40 +96,45 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
         password: Math.random().toString(36).substring(2, 15),
       });
 
-      // Generate invitation token
-      const invitationToken = crypto.randomBytes(20).toString('hex');
+      isNewUser = true;
+    }
 
-      // Add user to workspace
-      workspace.members.push({
-        user: existingUser._id,
-        role: normalizedRole,
-      });
+    // Add user to workspace immediately
+    workspace.members.push({
+      user: existingUser._id,
+      role: normalizedRole,
+    });
 
-      // Check if workspace schema has invitations field, if not, initialize it
-      if (!workspace.invitations) {
-        workspace.invitations = [];
-      }
+    // Generate invitation token
+    const invitationToken = crypto.randomBytes(20).toString('hex');
 
-      // Add invitation to workspace
-      workspace.invitations.push({
-        email,
-        role: normalizedRole,
-        token: invitationToken,
-        invitedBy: req.user.userId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      });
+    // Check if workspace schema has invitations field, if not, initialize it
+    if (!workspace.invitations) {
+      workspace.invitations = [];
+    }
 
-      await workspace.save();
+    // Add invitation to workspace for verification
+    workspace.invitations.push({
+      email,
+      role: normalizedRole,
+      token: invitationToken,
+      invitedBy: req.user.userId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+    });
 
-      // Send invitation email with account setup instructions
-      const inviteUrl = `${process.env.FRONTEND_URL}/invite/workspace/${invitationToken}`;
+    await workspace.save();
 
+    // Send appropriate email based on whether the user is new or existing
+    const inviteUrl = `${process.env.FRONTEND_URL}/invite/workspace/${invitationToken}`;
+
+    if (isNewUser) {
+      // For new users, send setup instructions
       await emailService.sendEmail({
         to: email,
         subject: `Invitation to join ${workspace.name}`,
         html: `
           <p>You have been invited to join the workspace "${workspace.name}" with the role of ${normalizedRole}.</p>
-          <p>An account has been created for you with the username: ${username}</p>
+          <p>An account has been created for you with the username: ${existingUser.username}</p>
           <p>Click the following link to accept the invitation and set up your password: <a href="${inviteUrl}">${inviteUrl}</a></p>
         `,
       });
@@ -155,6 +142,20 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
       return res
         .status(200)
         .json(new ApiResponse(200, { workspace }, 'User created and invitation sent successfully'));
+    } else {
+      // For existing users, send a notification email
+      await emailService.sendEmail({
+        to: email,
+        subject: `You've been added to ${workspace.name}`,
+        html: `
+          <p>You have been added to the workspace "${workspace.name}" with the role of ${normalizedRole}.</p>
+          <p>Click the following link to verify your access: <a href="${inviteUrl}">${inviteUrl}</a></p>
+        `,
+      });
+
+      return res
+        .status(200)
+        .json(new ApiResponse(200, { workspace }, 'User added to workspace successfully'));
     }
   } catch (error) {
     next(error);

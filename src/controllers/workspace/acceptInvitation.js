@@ -5,7 +5,7 @@ import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
 /**
- * Accept a workspace invitation
+ * Accept/verify a workspace invitation
  * @route POST /api/workspaces/invite/accept/:token
  * @access Public
  */
@@ -56,7 +56,7 @@ export const acceptWorkspaceInvitation = async (req, res, next) => {
       await user.save();
     }
 
-    // Remove the invitation from the workspace
+    // Remove the invitation from the workspace once verified
     workspace.invitations.splice(invitationIndex, 1);
     await workspace.save();
 
@@ -78,7 +78,7 @@ export const acceptWorkspaceInvitation = async (req, res, next) => {
             name: workspace.name,
           },
         },
-        'Invitation accepted successfully',
+        'Access verified successfully',
       ),
     );
   } catch (error) {

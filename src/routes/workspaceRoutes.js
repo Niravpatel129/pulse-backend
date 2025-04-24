@@ -13,6 +13,7 @@ import {
   updateWorkspace,
 } from '../controllers/workspace/index.js';
 import { inviteMemberToWorkspace } from '../controllers/workspace/inviteMemberToWorkspace.js';
+import { revokeWorkspaceInvitation } from '../controllers/workspace/revokeInvitation.js';
 import { updateWorkspaceMember } from '../controllers/workspace/updateWorkspaceMember.js';
 import { verifyWorkspaceInvitation } from '../controllers/workspace/verifyInvitation.js';
 import { authenticate } from '../middleware/auth.js';
@@ -53,6 +54,9 @@ router.put('/members/:memberId', extractWorkspace, updateWorkspaceMember);
 
 // invite user to workspace
 router.post('/invite', extractWorkspace, inviteMemberToWorkspace);
+
+// revoke workspace invitation
+router.delete('/invite/:inviteId', extractWorkspace, revokeWorkspaceInvitation);
 
 // Get a specific workspace
 router.get('/:workspaceId', getWorkspace);
