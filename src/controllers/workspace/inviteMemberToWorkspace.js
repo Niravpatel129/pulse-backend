@@ -91,7 +91,7 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
 
       await workspace.save();
 
-      // Send notification email
+      // Send notification email for invited user
       await emailService.sendEmail({
         to: email,
         subject: `You've been added to ${workspace.name}`,
@@ -103,14 +103,12 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
         .json(new ApiResponse(200, { workspace }, 'User added to workspace successfully'));
     } else {
       // Create a temporary user account
-      const tempPassword = crypto.randomBytes(10).toString('hex');
       const username = email.split('@')[0] + '-' + crypto.randomBytes(4).toString('hex');
 
       // Create new user with temporary credentials
       existingUser = await User.create({
         email,
         username,
-        password: tempPassword,
         isEmailVerified: false,
         needsPasswordChange: true,
       });
@@ -148,10 +146,8 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
         subject: `Invitation to join ${workspace.name}`,
         html: `
           <p>You have been invited to join the workspace "${workspace.name}" with the role of ${normalizedRole}.</p>
-          <p>An account has been created for you with the following credentials:</p>
-          <p>Username: ${username}</p>
-          <p>Temporary Password: ${tempPassword}</p>
-          <p>Click the following link to accept the invitation and set up your account: <a href="${inviteUrl}">${inviteUrl}</a></p>
+          <p>An account has been created for you with the username: ${username}</p>
+          <p>Click the following link to accept the invitation and set up your password: <a href="${inviteUrl}">${inviteUrl}</a></p>
         `,
       });
 
