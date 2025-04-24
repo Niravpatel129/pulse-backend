@@ -27,10 +27,35 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
       throw new ApiError(400, 'Invalid role. Must be one of: owner, admin, moderator, client');
     }
 
-    // Check if workspace exists
+    // Check if workspace exists - make sure to select the subdomain field too
     const workspace = await Workspace.findById(workspaceId);
     if (!workspace) {
       throw new ApiError(404, 'Workspace not found');
+    }
+
+    // Ensure subdomain is present
+    if (!workspace.subdomain) {
+      // Generate subdomain from workspace name
+      const generatedSubdomain = workspace.name
+        .toLowerCase()
+        .replace(/\s+/g, '-') // Replace spaces with dashes
+        .replace(/[^a-z0-9-]/g, ''); // Remove special characters
+
+      workspace.subdomain = generatedSubdomain;
+
+      // Save the workspace with the new subdomain
+      try {
+        await workspace.save();
+      } catch (error) {
+        // If there's an error (like duplicate subdomain), add a random string
+        if (error.code === 11000) {
+          // MongoDB duplicate key error
+          workspace.subdomain = `${generatedSubdomain}-${crypto.randomBytes(3).toString('hex')}`;
+          await workspace.save();
+        } else {
+          throw error;
+        }
+      }
     }
 
     // Check if user has permission to invite
