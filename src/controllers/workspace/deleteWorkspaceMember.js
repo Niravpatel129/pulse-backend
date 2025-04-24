@@ -55,8 +55,17 @@ export const deleteWorkspaceMember = async (req, res, next) => {
     }
 
     // Only owners and admins can remove members
-    if (requesterMember.role !== 'owner' && requesterMember.role !== 'admin') {
+    if (
+      requesterMember.role !== 'owner' &&
+      requesterMember.role !== 'admin' &&
+      requesterMember.role !== 'moderator'
+    ) {
       throw new ApiError(403, 'You do not have permission to remove members');
+    }
+
+    // cannot remove yourself
+    if (requesterId === memberId) {
+      throw new ApiError(400, 'You cannot remove yourself');
     }
 
     // Remove the member using $pull operator (which doesn't trigger validation on other fields)
