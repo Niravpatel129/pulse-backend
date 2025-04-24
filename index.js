@@ -34,6 +34,7 @@ import tablesRoutes from './src/routes/tablesRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
 import AppError from './src/utils/AppError.js';
+
 // Load env vars
 dotenv.config();
 
