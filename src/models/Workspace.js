@@ -8,6 +8,10 @@ const workspaceSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
+    logo: {
+      type: String,
+      default: '',
+    },
     subdomain: {
       type: String,
       required: true,

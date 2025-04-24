@@ -10,6 +10,7 @@ import {
   createWorkspace,
   getWorkspace,
   getWorkspaces,
+  handleWorkspaceFileUpload,
   updateWorkspace,
 } from '../controllers/workspace/index.js';
 import { inviteMemberToWorkspace } from '../controllers/workspace/inviteMemberToWorkspace.js';
@@ -59,10 +60,12 @@ router.post('/invite', extractWorkspace, inviteMemberToWorkspace);
 router.delete('/invite/:inviteId', extractWorkspace, revokeWorkspaceInvitation);
 
 // Get a specific workspace
-router.get('/:workspaceId', getWorkspace);
+router.get('/current-workspace', extractWorkspace, getWorkspace);
 
-// Update a workspace
-router.patch('/:workspaceId', updateWorkspace);
+// Update a workspace (supports both PUT and PATCH)
+router.patch('/:workspaceId', extractWorkspace, updateWorkspace);
+// Added for multipart/form-data support with logo uploads
+router.put('/:workspaceId', extractWorkspace, handleWorkspaceFileUpload, updateWorkspace);
 
 // Add a participant to the workspace
 router.post('/participants', extractWorkspace, addParticipant);
