@@ -62,7 +62,7 @@ export const deleteWorkspaceMember = async (req, res, next) => {
     // Remove the member using $pull operator (which doesn't trigger validation on other fields)
     await Workspace.findByIdAndUpdate(
       workspaceId,
-      { $pull: { members: { user: memberId } } },
+      { $pull: { members: { user: new mongoose.Types.ObjectId(memberId) } } },
       { runValidators: false },
     );
 
