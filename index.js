@@ -5,6 +5,7 @@ import multer from 'multer';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
+import requestLogger from './src/middleware/loggingMiddleware.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import aiRoutes from './src/routes/aiRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
@@ -83,6 +84,9 @@ app.use(
 
 // Passport middleware
 app.use(passport.initialize());
+
+// Request logging middleware
+app.use(requestLogger);
 
 const routesPrefix = '/api';
 
