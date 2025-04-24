@@ -48,6 +48,33 @@ const workspaceSchema = new mongoose.Schema(
         },
       },
     ],
+    invitations: [
+      {
+        email: {
+          type: String,
+          required: true,
+        },
+        role: {
+          type: String,
+          required: true,
+          enum: ['owner', 'admin', 'moderator', 'client'],
+          default: 'client',
+        },
+        token: {
+          type: String,
+          required: true,
+        },
+        invitedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        expiresAt: {
+          type: Date,
+          required: true,
+        },
+      },
+    ],
     invoiceSettings: {
       type: Object,
       default: {},

@@ -1,4 +1,5 @@
 import express from 'express';
+import { acceptWorkspaceInvitation } from '../controllers/workspace/acceptInvitation.js';
 import { addParticipant } from '../controllers/workspace/addParticipant.js';
 import { deleteWorkspaceMember } from '../controllers/workspace/deleteWorkspaceMember.js';
 import { getClients } from '../controllers/workspace/getClients.js';
@@ -13,12 +14,17 @@ import {
 } from '../controllers/workspace/index.js';
 import { inviteMemberToWorkspace } from '../controllers/workspace/inviteMemberToWorkspace.js';
 import { updateWorkspaceMember } from '../controllers/workspace/updateWorkspaceMember.js';
+import { verifyWorkspaceInvitation } from '../controllers/workspace/verifyInvitation.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
 
-// All routes require authentication
+// Public routes (no authentication required)
+router.get('/invite/verify/:token', verifyWorkspaceInvitation);
+router.post('/invite/accept/:token', acceptWorkspaceInvitation);
+
+// All routes below require authentication
 router.use(authenticate);
 
 router.get('/user/:id', getUser);

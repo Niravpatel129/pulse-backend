@@ -111,6 +111,7 @@ export const inviteMemberToWorkspace = async (req, res, next) => {
         username,
         isEmailVerified: false,
         needsPasswordChange: true,
+        password: Math.random().toString(36).substring(2, 15),
       });
 
       // Generate invitation token
