@@ -7,25 +7,17 @@ export const getTeamMembers = async (req, res, next) => {
 
     // Fetch workspace with populated members
     const workspace = await Workspace.findById(workspaceId)
-      .populate('members.user', 'name email avatar role')
+      .populate('members.user', 'name email avatar role needsPasswordChange')
       .populate('invitations.invitedBy', 'name email');
 
     if (!workspace) {
       return res.status(404).json(new ApiResponse(404, null, 'Workspace not found'));
     }
 
-    // Get all emails to check if any are invited but not yet added to members
-    const memberEmails = workspace.members.map((member) => member.user.email);
-
-    // Find all users who have been invited but not yet added to workspace members
-    const pendingInvitations = workspace.invitations.filter(
-      (invitation) => !memberEmails.includes(invitation.email),
-    );
-
     // Format response data
     const responseData = {
       members: workspace.members,
-      invitations: pendingInvitations.map((invitation) => ({
+      invitations: workspace.invitations.map((invitation) => ({
         email: invitation.email,
         role: invitation.role,
         invitedBy: invitation.invitedBy,
