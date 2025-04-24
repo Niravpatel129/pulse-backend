@@ -5,6 +5,7 @@
 
 export { approvalRequest } from './approvalRequest.js';
 export { existingUserWorkspaceInvitation } from './existingUserWorkspaceInvitation.js';
+export { inactivityAlert } from './inactivityAlert.js';
 export {
   default as generateHourBlockEmailHtml,
   newUserWorkspaceInvitation,

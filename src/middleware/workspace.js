@@ -5,7 +5,6 @@ export const extractWorkspace = async (req, res, next) => {
   try {
     // Get workspace from header or URL path
     let workspaceIdentifier = req.headers.workspace;
-    console.log('🚀 workspaceIdentifier:', workspaceIdentifier);
 
     // If no workspace in header, try to get from URL path
     if (!workspaceIdentifier && req.path) {
@@ -28,7 +27,6 @@ export const extractWorkspace = async (req, res, next) => {
       ],
       isActive: true,
     });
-    console.log('🚀 workspace:', workspace);
 
     if (!workspace) {
       throw new ApiError(404, 'Workspace not found');

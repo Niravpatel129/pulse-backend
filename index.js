@@ -5,9 +5,12 @@ import multer from 'multer';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
+import { initializeProjectInactivityChecker } from './src/init/projectInactivityChecker.js';
+import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
 import requestLogger from './src/middleware/loggingMiddleware.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import aiRoutes from './src/routes/aiRoutes.js';
+import alertRoutes from './src/routes/alertRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
@@ -44,6 +47,9 @@ connectDB();
 
 // Initialize email listener
 initializeEmailListener();
+
+// Initialize project inactivity checker
+initializeProjectInactivityChecker();
 
 const app = express();
 
@@ -99,16 +105,18 @@ app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
 app.use(`${routesPrefix}/ai`, aiRoutes);
 
 // Project management
-app.use(`${routesPrefix}/projects`, projectRoutes);
-app.use(`${routesPrefix}/notes`, noteRoutes);
+// Apply inactivity resolver middleware to project routes
+app.use(`${routesPrefix}/projects`, resolveInactivityAlerts, projectRoutes);
+app.use(`${routesPrefix}/notes`, resolveInactivityAlerts, noteRoutes);
 app.use(`${routesPrefix}/participants`, participantRoutes);
 app.use(`${routesPrefix}/activities`, activityRoutes);
 app.use(`${routesPrefix}/pipeline`, pipelineRoutes);
+app.use(`${routesPrefix}/alerts`, alertRoutes);
 
 // Modules and templates
 app.use(`${routesPrefix}/modules`, moduleRoutes);
 app.use(`${routesPrefix}/module-templates`, moduleTemplatesRoutes);
-app.use(`${routesPrefix}/project-modules`, projectModuleRoutes);
+app.use(`${routesPrefix}/project-modules`, resolveInactivityAlerts, projectModuleRoutes);
 app.use(`${routesPrefix}/module-emails`, moduleEmailRoutes);
 app.use(`${routesPrefix}/elements`, elementRoutes);
 
@@ -126,7 +134,7 @@ app.use(`${routesPrefix}/emails`, emailRoutes);
 
 // Data and storage
 app.use(`${routesPrefix}/tables`, tablesRoutes);
-app.use(`${routesPrefix}/files`, fileRoutes);
+app.use(`${routesPrefix}/files`, resolveInactivityAlerts, fileRoutes);
 app.use(`${routesPrefix}/figma`, figmaRoutes);
 app.use(`${routesPrefix}/product-catalog`, productCatalogRoutes);
 
