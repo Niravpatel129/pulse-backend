@@ -52,69 +52,88 @@ const checkInactiveProjects = async () => {
           }`,
         );
 
-        const existingAlert = await ProjectAlert.findOne({
+        // Find ALL existing inactivity alerts for this project instead of just one
+        const existingAlerts = await ProjectAlert.find({
           project: project._id,
           type: 'inactivity',
-          isDismissed: false,
         });
 
-        if (existingAlert) {
-          console.log(
-            `Project ${project.name} already has an active inactivity alert (ID: ${existingAlert._id})`,
-          );
+        let alertToUpdate = null;
+
+        if (existingAlerts.length > 0) {
+          console.log(`Project ${project.name} has ${existingAlerts.length} inactivity alert(s)`);
+
+          // Sort alerts by creation date (newest first)
+          existingAlerts.sort((a, b) => b.createdAt - a.createdAt);
+
+          // Keep the most recent alert and update it
+          alertToUpdate = existingAlerts[0];
+          alertToUpdate.message = `Project ${project.name} has been inactive for ${Math.floor(
+            daysSinceTouched,
+          )} days.`;
+          alertToUpdate.isDismissed = false; // Ensure it's active
+          await alertToUpdate.save();
+          console.log(`Updated most recent alert message (ID: ${alertToUpdate._id})`);
+
+          // Dismiss any other duplicate alerts
+          if (existingAlerts.length > 1) {
+            for (let i = 1; i < existingAlerts.length; i++) {
+              existingAlerts[i].isDismissed = true;
+              await existingAlerts[i].save();
+              console.log(`Dismissed duplicate alert (ID: ${existingAlerts[i]._id})`);
+            }
+          }
         } else {
           console.log(`Creating alert for project ${project.name}`);
 
           // Create project alert
-          const alert = await ProjectAlert.create({
+          alertToUpdate = await ProjectAlert.create({
             project: project._id,
             type: 'inactivity',
-            message: `No updates in ${Math.floor(daysSinceTouched)} days.`,
+            message: `Project has been inactive for ${Math.floor(daysSinceTouched)} days.`,
           });
-          console.log(`Created project alert (ID: ${alert._id})`);
+          console.log(`Created project alert (ID: ${alertToUpdate._id})`);
           alertsCreated++;
+        }
 
-          // Send email notification if the project has a creator
-          if (project.createdBy) {
-            try {
-              console.log(`Preparing email for project owner (User ID: ${project.createdBy._id})`);
+        // Send email notification if the project has a creator
+        if (project.createdBy) {
+          try {
+            console.log(`Preparing email for project owner (User ID: ${project.createdBy._id})`);
 
-              // Generate URLs for the email
-              const projectUrl = `${FRONTEND_URL}/projects/${project._id}`;
-              const resolveUrl = `${FRONTEND_URL}/api/alerts/${
-                alert._id
-              }/resolve?action=mark-done&token=${encodeURIComponent(project.createdBy._id)}`;
-              const dismissUrl = `${FRONTEND_URL}/api/alerts/${
-                alert._id
-              }/dismiss?token=${encodeURIComponent(project.createdBy._id)}`;
+            // Generate URLs for the email
+            const projectUrl = `${FRONTEND_URL}/projects/${project._id}`;
+            const resolveUrl = `${FRONTEND_URL}/api/alerts/${
+              alertToUpdate._id
+            }/resolve?action=mark-done&token=${encodeURIComponent(project.createdBy._id)}`;
+            const dismissUrl = `${FRONTEND_URL}/api/alerts/${
+              alertToUpdate._id
+            }/dismiss?token=${encodeURIComponent(project.createdBy._id)}`;
 
-              // Generate the email content from template
-              const emailContent = inactivityAlert({
-                projectName: project.name,
-                daysSinceActivity: Math.floor(daysSinceTouched),
-                projectUrl,
-                resolveUrl,
-                dismissUrl,
-              });
+            // Generate the email content from template
+            const emailContent = inactivityAlert({
+              projectName: project.name,
+              daysSinceActivity: Math.floor(daysSinceTouched),
+              projectUrl,
+              resolveUrl,
+              dismissUrl,
+            });
 
-              // Send email to the user's email address
-              if (project.createdBy.email) {
-                console.log(`Sending inactivity email to ${project.createdBy.email}`);
-                await sendEmail(project.createdBy.email, emailContent);
-                emailsSent++;
-                console.log(`Email sent successfully to ${project.createdBy.email}`);
-              } else {
-                console.log(
-                  `Skipping email for project ${project.name}: User has no email address`,
-                );
-              }
-            } catch (error) {
-              console.error(`Failed to send inactivity email for project ${project.name}:`, error);
-              console.error(error.stack);
+            // Send email to the user's email address
+            if (project.createdBy.email) {
+              console.log(`Sending inactivity email to ${project.createdBy.email}`);
+              await sendEmail(project.createdBy.email, emailContent);
+              emailsSent++;
+              console.log(`Email sent successfully to ${project.createdBy.email}`);
+            } else {
+              console.log(`Skipping email for project ${project.name}: User has no email address`);
             }
-          } else {
-            console.log(`Project ${project.name} has no creator, skipping email notification`);
+          } catch (error) {
+            console.error(`Failed to send inactivity email for project ${project.name}:`, error);
+            console.error(error.stack);
           }
+        } else {
+          console.log(`Project ${project.name} has no creator, skipping email notification`);
         }
       }
     }
