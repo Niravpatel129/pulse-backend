@@ -10,4 +10,5 @@ export {
   default as generateHourBlockEmailHtml,
   newUserWorkspaceInvitation,
 } from './newUserWorkspaceInvitation.js';
+export { reminderAlert } from './reminderAlert.js';
 export { scheduleInvitation } from './scheduleInvitation.js';

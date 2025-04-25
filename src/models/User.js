@@ -96,6 +96,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    timezone: {
+      type: String,
+      default: 'America/New_York',
+    },
   },
   {
     timestamps: true,
