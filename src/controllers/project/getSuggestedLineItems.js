@@ -308,7 +308,12 @@ function extractPriceFromProcessedModule(module) {
                   if (
                     (key.toLowerCase().includes('price') ||
                       key.toLowerCase().includes('cost') ||
-                      key.toLowerCase().includes('rate')) &&
+                      key.toLowerCase().includes('rate') ||
+                      key.toLowerCase().includes('fee') ||
+                      key.toLowerCase().includes('amount') ||
+                      key.toLowerCase().includes('value') ||
+                      key.toLowerCase().includes('charge') ||
+                      key.toLowerCase().includes('total')) &&
                     relationValue.displayValues[key] !== undefined &&
                     relationValue.displayValues[key] !== null &&
                     !isNaN(relationValue.displayValues[key])
