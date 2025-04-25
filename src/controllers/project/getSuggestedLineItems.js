@@ -65,7 +65,7 @@ export const getSuggestedLineItems = async (req, res) => {
       // Initialize suggested line items array
       const suggestedLineItems = [];
 
-      if (Array.isArray(projectModules)) {
+      if (Array.isArray(projectModules) && projectModules.length > 0) {
         for (let i = 0; i < projectModules.length; i++) {
           const module = projectModules[i];
           console.log(
@@ -80,15 +80,25 @@ export const getSuggestedLineItems = async (req, res) => {
           const moduleType = module.moduleType;
           console.log(`[getSuggestedLineItems] Module type: ${moduleType}`);
 
-          let price = '100'; // Default price
+          // Default pricing and message info
+          let price = ''; // Empty by default
           let currency = 'CAD';
+          let priceSource = 'default';
+          let message = '';
 
-          if (moduleType === 'file') {
+          // Determine price based on module type
+          if (!moduleType) {
+            message = 'Unknown module type, please set price manually';
+            price = '';
+            priceSource = 'none';
+          } else if (moduleType === 'file') {
             price = '50';
-            console.log(`[getSuggestedLineItems] File module - using default price: ${price}`);
+            priceSource = 'default';
+            message = 'Default price for file module';
           } else if (moduleType === 'figma') {
             price = '150';
-            console.log(`[getSuggestedLineItems] Figma module - using default price: ${price}`);
+            priceSource = 'default';
+            message = 'Default price for design module';
           } else if (moduleType === 'template') {
             try {
               // Process template module like getModuleDetails.js does
@@ -104,30 +114,46 @@ export const getSuggestedLineItems = async (req, res) => {
               console.log(`[getSuggestedLineItems] Template module processed successfully`);
 
               // Now extract price from the processed module
-              price = extractPriceFromProcessedModule(processedModule);
-              console.log(`[getSuggestedLineItems] Extracted price: ${price}`);
+              const priceResult = extractPriceFromProcessedModule(processedModule);
+              price = priceResult.price;
+              priceSource = priceResult.source;
+              message = priceResult.message;
+
+              console.log(
+                `[getSuggestedLineItems] Extracted price: ${price}, source: ${priceSource}`,
+              );
             } catch (error) {
               console.error(
                 `[getSuggestedLineItems] Error processing template module: ${error.message}`,
               );
-              // Keep default price on error
+              message = `Could not process template: ${error.message}`;
+              price = '';
+              priceSource = 'error';
             }
+          } else {
+            message = `Unrecognized module type: ${moduleType}`;
+            price = '';
+            priceSource = 'none';
           }
 
-          // Create line item
+          // Create line item with additional metadata
           const lineItem = {
             name: moduleName,
             price,
             currency,
             moduleId,
             moduleType,
+            metadata: {
+              priceSource,
+              message,
+            },
           };
 
           console.log(`[getSuggestedLineItems] Adding line item: ${JSON.stringify(lineItem)}`);
           suggestedLineItems.push(lineItem);
         }
       } else {
-        console.log('[getSuggestedLineItems] projectModules is not an array');
+        console.log('[getSuggestedLineItems] No modules found for project');
       }
 
       console.log(`[getSuggestedLineItems] Returning ${suggestedLineItems.length} line items`);
@@ -136,7 +162,10 @@ export const getSuggestedLineItems = async (req, res) => {
       return res.end(
         JSON.stringify({
           status: 'success',
-          message: 'Suggested line items fetched successfully',
+          message:
+            suggestedLineItems.length > 0
+              ? 'Suggested line items fetched successfully'
+              : 'No line items found for this project',
           data: suggestedLineItems,
         }),
       );
@@ -165,19 +194,23 @@ export const getSuggestedLineItems = async (req, res) => {
 /**
  * Extracts price from a processed template module
  * @param {Object} module - The processed module with expanded relation fields
- * @returns {String} - The extracted price or default price if not found
+ * @returns {Object} - Object with price, source, and message
  */
 function extractPriceFromProcessedModule(module) {
+  const result = {
+    price: '100', // Default price
+    source: 'default',
+    message: 'Using default pricing',
+  };
+
   try {
     console.log('[extractPriceFromProcessedModule] Starting price extraction');
 
-    // Default price if nothing found
-    const defaultPrice = '100';
-
-    // No versions? Return default
+    // No versions? Return default with explanation
     if (!module.versions || !module.versions.length) {
       console.log('[extractPriceFromProcessedModule] No versions found');
-      return defaultPrice;
+      result.message = 'No module versions found';
+      return result;
     }
 
     // Get the current/latest version
@@ -187,16 +220,24 @@ function extractPriceFromProcessedModule(module) {
 
     if (!version || !version.contentSnapshot || !version.contentSnapshot.sections) {
       console.log('[extractPriceFromProcessedModule] No sections found in version');
-      return defaultPrice;
+      result.message = 'No content sections found';
+      return result;
     }
 
     const sections = version.contentSnapshot.sections;
+    if (!sections.length) {
+      result.message = 'Module has no content sections';
+      return result;
+    }
 
     // Iterate through sections and fields to find price
     for (const section of sections) {
-      if (!section.fields || !Array.isArray(section.fields)) continue;
+      if (!section.fields || !Array.isArray(section.fields) || section.fields.length === 0)
+        continue;
 
       for (const field of section.fields) {
+        if (!field.fieldName || !field.fieldType) continue;
+
         console.log(
           `[extractPriceFromProcessedModule] Checking field: ${field.fieldName}, type: ${field.fieldType}`,
         );
@@ -212,7 +253,10 @@ function extractPriceFromProcessedModule(module) {
             console.log(
               `[extractPriceFromProcessedModule] Found direct price field: ${field.fieldValue}`,
             );
-            return field.fieldValue.toString();
+            result.price = field.fieldValue.toString();
+            result.source = 'direct';
+            result.message = `Price from field: ${field.fieldName}`;
+            return result;
           }
         }
 
@@ -237,21 +281,26 @@ function extractPriceFromProcessedModule(module) {
                 (key.toLowerCase().includes('price') ||
                   key.toLowerCase().includes('cost') ||
                   key.toLowerCase().includes('rate')) &&
-                displayValues[key] &&
+                displayValues[key] !== undefined &&
+                displayValues[key] !== null &&
                 !isNaN(displayValues[key])
               ) {
                 console.log(
                   `[extractPriceFromProcessedModule] Found price in relation: ${key} = ${displayValues[key]}`,
                 );
-                return displayValues[key].toString();
+                result.price = displayValues[key].toString();
+                result.source = 'relation';
+                result.message = `Price from relation field: ${field.fieldName} (${key})`;
+                return result;
               }
             }
           }
 
           // For multiple relations
-          if (field.multiple && Array.isArray(field.fieldValue)) {
+          if (field.multiple && Array.isArray(field.fieldValue) && field.fieldValue.length > 0) {
             let totalPrice = 0;
             let priceFound = false;
+            let priceFieldName = '';
 
             for (const relationValue of field.fieldValue) {
               if (relationValue && relationValue.displayValues) {
@@ -260,12 +309,14 @@ function extractPriceFromProcessedModule(module) {
                     (key.toLowerCase().includes('price') ||
                       key.toLowerCase().includes('cost') ||
                       key.toLowerCase().includes('rate')) &&
-                    relationValue.displayValues[key] &&
+                    relationValue.displayValues[key] !== undefined &&
+                    relationValue.displayValues[key] !== null &&
                     !isNaN(relationValue.displayValues[key])
                   ) {
                     const valuePrice = parseFloat(relationValue.displayValues[key]);
                     totalPrice += valuePrice;
                     priceFound = true;
+                    priceFieldName = key;
                     console.log(
                       `[extractPriceFromProcessedModule] Found price in relation array: ${valuePrice}`,
                     );
@@ -278,18 +329,26 @@ function extractPriceFromProcessedModule(module) {
               console.log(
                 `[extractPriceFromProcessedModule] Total price from relations: ${totalPrice}`,
               );
-              return totalPrice.toString();
+              result.price = totalPrice.toString();
+              result.source = 'multiple_relations';
+              result.message = `Combined prices from multiple ${field.fieldName} items (${priceFieldName})`;
+              return result;
             }
           }
         }
       }
     }
 
-    console.log(`[extractPriceFromProcessedModule] No price found, using default: ${defaultPrice}`);
-    return defaultPrice;
+    console.log(`[extractPriceFromProcessedModule] No price found, using default: ${result.price}`);
+    result.message = 'No price information found in module data';
+    return result;
   } catch (error) {
     console.error(`[extractPriceFromProcessedModule] Error: ${error.message}`);
-    return '100'; // Default price on error
+    return {
+      price: '100',
+      source: 'error',
+      message: `Error calculating price: ${error.message}`,
+    };
   }
 }
 
