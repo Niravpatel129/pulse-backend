@@ -43,7 +43,9 @@ const checkInactiveProjects = async () => {
     for (const project of projects) {
       console.log(`Checking project: ${project.name} (ID: ${project._id})`);
       const lastNote = await Note.findOne({ project: project._id }).sort({ createdAt: -1 });
-      const lastTouched = lastNote?.createdAt || project.updatedAt;
+      // check when project was last updated
+      const lastUpdated = project.updatedAt;
+      const lastTouched = lastNote?.createdAt || lastUpdated;
 
       const daysSinceTouched = (Date.now() - new Date(lastTouched)) / (1000 * 60 * 60 * 24);
       console.log(
