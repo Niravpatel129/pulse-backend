@@ -1,96 +1,180 @@
 /**
- * Generate an inactivity alert email with action buttons
+ * Generate an inactivity alert email with postal/envelope styling
  *
  * @param {Object} options
  * @param {string} options.projectName - Name of the project
  * @param {number} options.daysSinceActivity - Days since last activity
  * @param {string} options.projectUrl - URL to the project in the app
- * @param {string} options.resolveUrl - URL to resolve the alert directly
- * @param {string} options.dismissUrl - URL to dismiss the alert
+ * @param {string} options.workspaceName - Name of the workspace (optional)
+ * @param {string} options.userName - Name of the recipient (optional)
+ * @param {string} options.ctaText - Text for the call to action button (optional)
  * @returns {Object} Email template object with subject and html
  */
 export const inactivityAlert = ({
   projectName,
   daysSinceActivity,
   projectUrl,
-  resolveUrl,
-  dismissUrl,
+  workspaceName = '',
+  userName = 'Colleague',
+  ctaText = 'View Project',
 }) => {
-  const subject = `Stagnant Project Alert: ${projectName}`;
+  const subject = `Project Activity Alert: ${projectName}`;
 
-  const html = `
-<!DOCTYPE html>
+  const today = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  const refNumber = `HB-${Math.floor(Math.random() * 10000)
+    .toString()
+    .padStart(4, '0')}`;
+
+  const html = `<!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      line-height: 1.6;
-      color: #333;
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    .alert-box {
-      background-color: #f8f9fa;
-      border-left: 4px solid #ff9900;
-      padding: 15px;
-      margin-bottom: 20px;
-    }
-    .btn {
-      display: inline-block;
-      padding: 10px 20px;
-      margin: 0 10px 10px 0;
-      border-radius: 4px;
-      text-decoration: none;
-      font-weight: bold;
-      text-align: center;
-    }
-    .btn-primary {
-      background-color: #007bff;
-      color: white;
-    }
-    .btn-secondary {
-      background-color: #6c757d;
-      color: white;
-    }
-    .btn-success {
-      background-color: #28a745;
-      color: white;
-    }
-    .footer {
-      font-size: 12px;
-      color: #6c757d;
-      margin-top: 30px;
-      padding-top: 10px;
-      border-top: 1px solid #eee;
-    }
-  </style>
+  <title>Project Activity Alert: ${projectName} | HourBlock</title>
 </head>
-<body>
-  <h2>Project Inactivity Notification</h2>
-  
-  <div class="alert-box">
-    <p><strong>Heads up!</strong> Your project "${projectName}" hasn't had any updates in ${daysSinceActivity} days.</p>
-  </div>
-  
-  <p>Projects without regular updates can fall through the cracks or get forgotten. Would you like to follow up or mark this project as complete?</p>
-  
-  <p>
-    <a href="${projectUrl}" class="btn btn-primary">View Project</a>
-    <a href="${resolveUrl}" class="btn btn-success">Mark as Reviewed</a>
-    <a href="${dismissUrl}" class="btn btn-secondary">Dismiss Alert</a>
-  </p>
-  
-  <p>If you've been in contact with the client outside the system or have updates to add, visiting the project now will automatically clear this alert.</p>
-  
-  <div class="footer">
-    <p>This is an automated message. If you believe you received this in error, please dismiss the alert.</p>
-  </div>
+<body style="margin: 0; padding: 0; font-family: monospace, 'Courier New', Courier; color: #1e3a8a; background-color: #f3f4f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto; border: 1px solid #1e40af; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden;">
+          <!-- Header with postmark and stamp -->
+          <tr>
+            <td style="background-color: #1e40af; color: white; padding: 12px 16px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="margin-right: 8px; font-size: 20px; font-weight: bold; letter-spacing: -0.5px;">HB</td>
+                        <td style="width: 1px; background-color: #60a5fa; margin: 0 8px; height: 24px;"></td>
+                        <td style="font-size: 14px; letter-spacing: 0.5px; padding-left: 8px;">HOURBLOCK ALERT</td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="font-size: 12px; margin-right: 8px; color: #bfdbfe; padding-right: 8px;">${today}</td>
+                        <td style="background-color: #fef08a; border-radius: 2px; padding: 4px;">
+                          <span style="color: #854d0e; font-size: 12px; font-weight: bold;">ACTION NEEDED</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          
+          <!-- Blue decorative line -->
+          <tr>
+            <td style="height: 4px; background: linear-gradient(to right, #60a5fa, #1e40af, #60a5fa);"></td>
+          </tr>
+          
+          <!-- Envelope styling -->
+          <tr>
+            <td style="background-color: #eff6ff; padding: 24px;">
+              <!-- Address block -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td width="4" style="background-color: #f59e0b;"></td>
+                  <td style="padding-left: 12px;">
+                    <div style="font-size: 14px; opacity: 0.8;">PROJECT ACTIVITY ALERT</div>
+                    <div style="font-weight: bold;">${projectName}</div>
+                    ${
+                      workspaceName
+                        ? `<div style="font-size: 14px;">Workspace: <span style="color: #1d4ed8;">${workspaceName}</span></div>`
+                        : ''
+                    }
+                    <div style="font-size: 14px;">Inactive for: <span style="color: #b91c1c;">${daysSinceActivity} days</span></div>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Message content -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: white; border: 1px solid #bfdbfe; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+                <tr>
+                  <td style="padding: 20px;">
+                    <p style="font-size: 14px; margin-top: 0;">Dear ${userName},</p>
+                    <div style="margin: 16px 0; font-size: 14px; line-height: 1.5;">
+                      <p>
+                        We noticed that your project <span style="font-weight: bold;">"${projectName}"</span> has had
+                        <span style="font-weight: bold; color: #b91c1c;">no activity for ${daysSinceActivity} days</span>.
+                      </p>
+                      <p style="margin-top: 12px;">
+                        Projects without regular updates can fall behind or get forgotten. Please check the current status
+                        and update the project if needed.
+                      </p>
+                    </div>
+                    
+                    <!-- Action button -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px; margin-bottom: 16px;">
+                      <tr>
+                        <td align="center">
+                          <table cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td style="padding-top: 4px;">
+                                <a href="${projectUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; border-radius: 4px; border: 2px solid #1e3a8a; font-weight: bold; letter-spacing: 0.5px; text-decoration: none;">
+                                  ${ctaText} &rarr;
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <!-- Fallback link -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px; font-size: 12px; color: #1e40af; border-top: 1px solid #eff6ff; padding-top: 16px;">
+                      <tr>
+                        <td>
+                          <p style="margin-top: 0;">If the button doesn't work, copy and paste this link:</p>
+                          <p style="margin-top: 4px; word-break: break-all; font-weight: 300;">${projectUrl}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Footer with postal markings -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 24px;">
+                <tr>
+                  <td style="font-size: 12px; color: #1d4ed8;">
+                    <table cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="vertical-align: middle;">
+                          &#9993;
+                        </td>
+                        <td style="padding-left: 4px; vertical-align: middle;">
+                          HOURBLOCK DELIVERY SERVICE
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right">
+                    <table cellpadding="0" cellspacing="0" border="0" style="border: 1px solid #60a5fa; padding: 4px 8px; border-radius: 2px; background-color: white;">
+                      <tr>
+                        <td style="font-weight: bold;">REF:</td>
+                        <td style="padding-left: 4px;">${refNumber}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
-</html>
-  `;
+</html>`;
 
   return { subject, html };
 };

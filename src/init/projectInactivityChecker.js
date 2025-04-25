@@ -119,6 +119,42 @@ const checkInactiveProjects = async () => {
 };
 
 /**
+ * Send a test inactivity alert email
+ */
+const sendTestInactivityEmail = async () => {
+  try {
+    console.log('Sending test inactivity alert email...');
+
+    // Use bolo workspace and specific project
+    const workspaceSubdomain = 'bolo';
+    const projectId = '6806a7beda13e636a40c6618';
+
+    // Just a single URL to the project
+    const projectUrl = `https://${workspaceSubdomain}.hourblock.com/projects/${projectId}`;
+
+    // Generate the email content with simple single CTA
+    const emailContent = inactivityAlert({
+      projectName: 'Marketing Campaign Q4',
+      daysSinceActivity: 7,
+      projectUrl,
+      workspaceName: 'Bolo Team',
+      userName: 'Mr. Maple',
+      ctaText: 'View Project',
+    });
+
+    // Send test email
+    const testEmail = 'mrmapletv@gmail.com';
+    console.log(`Sending test inactivity email to ${testEmail}`);
+    await sendEmail(testEmail, emailContent);
+    console.log(`Test email sent successfully to ${testEmail}`);
+    console.log(`Email contains single CTA to: ${projectUrl}`);
+  } catch (error) {
+    console.error('Failed to send test inactivity email:', error);
+    console.error(error.stack);
+  }
+};
+
+/**
  * Initialize project inactivity checker
  * Runs daily at midnight and immediately on server startup
  */
@@ -134,6 +170,9 @@ export function initializeProjectInactivityChecker() {
   // Also run immediately on startup
   console.log('Running initial project inactivity check');
   checkInactiveProjects();
+
+  // Send test email
+  sendTestInactivityEmail();
 
   console.log('Project inactivity checker initialized successfully');
 }
