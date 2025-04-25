@@ -15,6 +15,7 @@ import { getParticipants } from '../../controllers/project/getParticipants.js';
 import { getProject } from '../../controllers/project/getProject.js';
 import { getProjectInvoices } from '../../controllers/project/getProjectInvoices.js';
 import { getProjects } from '../../controllers/project/getProjects.js';
+import { getSuggestedLineItems } from '../../controllers/project/getSuggestedLineItems.js';
 import { getTeam } from '../../controllers/project/getTeam.js';
 import { addParticipant } from '../../controllers/project/participants.js';
 import { patchProject } from '../../controllers/project/patchProject.js';
@@ -48,6 +49,9 @@ router.delete('/:id', deleteProject);
 
 // Project status routes
 router.patch('/:projectId/status', updateProjectStatus);
+
+// Suggested line items route
+router.get('/:projectId/suggested-line-items', getSuggestedLineItems);
 
 // Project invoice routes
 router.post('/:projectId/invoices', createProjectInvoice);
