@@ -7,6 +7,14 @@ const projectSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    isClosed: {
+      type: Boolean,
+      default: false,
+    },
+    isArchived: {
+      type: Boolean,
+      default: false,
+    },
     workspace: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Workspace',

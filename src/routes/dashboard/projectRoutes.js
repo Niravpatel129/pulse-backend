@@ -20,6 +20,7 @@ import { addParticipant } from '../../controllers/project/participants.js';
 import { patchProject } from '../../controllers/project/patchProject.js';
 import { getProjectSharing, updateProjectSharing } from '../../controllers/project/sharing.js';
 import { updateProject } from '../../controllers/project/updateProject.js';
+import { updateProjectStatus } from '../../controllers/project/updateProjectStatus.js';
 import { authenticate } from '../../middleware/auth.js';
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
@@ -44,6 +45,9 @@ router.get('/:id', getProject);
 router.put('/:id', updateProject);
 router.patch('/:id', patchProject);
 router.delete('/:id', deleteProject);
+
+// Project status routes
+router.patch('/:projectId/status', updateProjectStatus);
 
 // Project invoice routes
 router.post('/:projectId/invoices', createProjectInvoice);

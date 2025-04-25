@@ -45,8 +45,16 @@ const checkInactiveProjects = async () => {
       }
     }
 
-    const projects = await Project.find({ isActive: true }).populate('createdBy', 'email');
-    console.log(`Found ${projects.length} active projects to check for inactivity`);
+    // Only check active projects that are neither closed nor archived
+    const projects = await Project.find({
+      isActive: true,
+      isClosed: { $ne: true },
+      isArchived: { $ne: true },
+    }).populate('createdBy', 'email');
+
+    console.log(
+      `Found ${projects.length} active, non-closed, non-archived projects to check for inactivity`,
+    );
 
     let inactiveCount = 0;
     let alertsCreated = 0;
@@ -220,21 +228,31 @@ const checkReminders = async () => {
       resolvedAt: null,
     }).populate({
       path: 'project',
-      select: 'name createdBy',
+      select: 'name createdBy isClosed isArchived',
       populate: {
         path: 'createdBy',
         select: 'email',
       },
     });
 
-    console.log(`Found ${pendingReminders.length} pending reminders to process`);
+    console.log(`Found ${pendingReminders.length} pending reminders to check`);
 
     let emailsSent = 0;
     let badgeDelivered = 0;
     let alertDelivered = 0;
+    let skippedClosedOrArchived = 0;
 
     for (const reminder of pendingReminders) {
       try {
+        // Skip closed or archived projects
+        if (reminder.project.isClosed || reminder.project.isArchived) {
+          console.log(
+            `Skipping reminder for closed/archived project: ${reminder.project.name} (ID: ${reminder.project._id})`,
+          );
+          skippedClosedOrArchived++;
+          continue;
+        }
+
         const isBadgeOnly = reminder.isVisibleAlert === false;
 
         console.log(
@@ -312,7 +330,8 @@ const checkReminders = async () => {
     }
 
     console.log('Reminder check summary:');
-    console.log(`- Total reminders processed: ${pendingReminders.length}`);
+    console.log(`- Total reminders found: ${pendingReminders.length}`);
+    console.log(`- Skipped (closed/archived projects): ${skippedClosedOrArchived}`);
     console.log(`- Alert reminders delivered: ${alertDelivered}`);
     console.log(`- Badge reminders delivered: ${badgeDelivered}`);
     console.log(`- Notification emails sent: ${emailsSent}`);
@@ -372,9 +391,38 @@ const cleanupDuplicateAlerts = async () => {
 
     let projectsWithDuplicates = 0;
     let totalDuplicatesDismissed = 0;
+    let closedOrArchivedAlertsDismissed = 0;
 
     // For each project, check for and clean up duplicate alerts of the same type
     for (const projectId of projectsWithAlerts) {
+      // First check if the project is closed or archived
+      const project = await Project.findById(projectId).select('name isClosed isArchived');
+
+      if (!project) {
+        console.log(`Project ${projectId} not found, skipping`);
+        continue;
+      }
+
+      // Dismiss all alerts for closed or archived projects
+      if (project.isClosed || project.isArchived) {
+        console.log(
+          `Project ${project.name} (${projectId}) is closed or archived, dismissing all alerts`,
+        );
+        const alerts = await ProjectAlert.find({
+          project: projectId,
+          isDismissed: false,
+        });
+
+        if (alerts.length > 0) {
+          for (const alert of alerts) {
+            alert.isDismissed = true;
+            await alert.save();
+            closedOrArchivedAlertsDismissed++;
+          }
+        }
+        continue;
+      }
+
       // Get all alert types for this project
       const alertTypes = await ProjectAlert.distinct('type', { project: projectId });
 
@@ -392,7 +440,7 @@ const cleanupDuplicateAlerts = async () => {
         if (alerts.length > 1) {
           projectHasDuplicates = true;
           console.log(
-            `Project ${projectId} has ${alerts.length} ${alertType} alerts - cleaning up`,
+            `Project ${project.name} (${projectId}) has ${alerts.length} ${alertType} alerts - cleaning up`,
           );
 
           // Keep the most recent alert (at index 0) and dismiss the rest
@@ -412,6 +460,9 @@ const cleanupDuplicateAlerts = async () => {
     console.log('Duplicate alert cleanup summary:');
     console.log(`- Projects with duplicates: ${projectsWithDuplicates}`);
     console.log(`- Total duplicates dismissed: ${totalDuplicatesDismissed}`);
+    console.log(
+      `- Alerts for closed/archived projects dismissed: ${closedOrArchivedAlertsDismissed}`,
+    );
     console.log('Duplicate alert cleanup completed.');
   } catch (error) {
     console.error('Error cleaning up duplicate alerts:', error);
