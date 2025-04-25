@@ -1,4 +1,3 @@
-import Note from '../models/Note.js';
 import ProjectAlert from '../models/ProjectAlert.js';
 
 /**
@@ -52,15 +51,8 @@ export const resolveInactivityAlerts = async (req, res, next) => {
                   return alert.save();
                 });
 
-                // Add a system note
-                const notePromise = Note.create({
-                  project: projectId,
-                  content: '🔄 Project activity resumed - inactivity alert resolved automatically.',
-                  isSystem: true,
-                });
-
                 // Wait for all operations to complete
-                await Promise.all([...updatePromises, notePromise]);
+                await Promise.all(updatePromises);
               }
             } catch (error) {
               console.error('Error resolving inactivity alerts:', error);

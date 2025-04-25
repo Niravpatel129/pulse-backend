@@ -12,6 +12,9 @@ dotenv.config();
 // Get the frontend URL from env or use a default
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://app.hourblock.com';
 
+// Test project ID that should always be treated as inactive
+const TEST_INACTIVE_PROJECT_ID = '680a0a86a3558269e39b6835';
+
 /**
  * Check for inactive projects and create alerts
  */
@@ -35,9 +38,19 @@ const checkInactiveProjects = async () => {
         `Project ${project.name} was last active ${daysSinceTouched.toFixed(1)} days ago`,
       );
 
-      if (daysSinceTouched >= 2) {
+      // For testing, assume the test project ID is always inactive, regardless of actual activity
+      const isInactive =
+        project._id.toString() === TEST_INACTIVE_PROJECT_ID || daysSinceTouched >= 2;
+
+      if (isInactive) {
         inactiveCount++;
-        console.log(`Project ${project.name} is inactive (${daysSinceTouched.toFixed(1)} days)`);
+        console.log(
+          `Project ${project.name} is inactive ${
+            project._id.toString() === TEST_INACTIVE_PROJECT_ID
+              ? '(test project)'
+              : `(${daysSinceTouched.toFixed(1)} days)`
+          }`,
+        );
 
         const existingAlert = await ProjectAlert.findOne({
           project: project._id,
