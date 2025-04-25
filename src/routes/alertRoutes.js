@@ -1,4 +1,5 @@
 import express from 'express';
+import { protect } from '../config/middleware/auth.js';
 import { processEmailAction } from '../controllers/alerts/emailActionController.js';
 import {
   dismissAlert,
@@ -6,7 +7,6 @@ import {
   getUserAlerts,
   resolveAlert,
 } from '../controllers/alerts/projectAlertController.js';
-import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
