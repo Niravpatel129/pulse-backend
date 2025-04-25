@@ -56,43 +56,6 @@ const checkInactiveProjects = async () => {
 
       if (isInactive) {
         inactiveCount++;
-        console.log(
-          `Project ${project.name} is inactive ${
-            project._id.toString() === CONFIG.testInactiveProjectId
-              ? '(test project)'
-              : `(${daysSinceTouched.toFixed(1)} days)`
-          }`,
-        );
-
-        // Use findOneAndUpdate with upsert to prevent race conditions
-        if (project._id.toString() === CONFIG.testInactiveProjectId) {
-          // Special handling for test project to avoid duplicates
-          const existingAlert = await ProjectAlert.findOne({
-            project: project._id,
-            type: 'inactivity',
-            isDismissed: false,
-          });
-
-          if (!existingAlert) {
-            console.log(`Creating alert for test project ${project.name}`);
-            const alert = await ProjectAlert.create({
-              project: project._id,
-              type: 'inactivity',
-              message: `Test project has been inactive for ${Math.floor(daysSinceTouched)} days.`,
-              isVisibleAlert: true,
-            });
-            console.log(`Created test project alert (ID: ${alert._id})`);
-            alertsCreated++;
-
-            // Skip email for test project
-            continue;
-          } else {
-            console.log(
-              `Test project already has an active alert (ID: ${existingAlert._id}), skipping`,
-            );
-            continue;
-          }
-        }
 
         // For regular projects, find ALL existing inactivity alerts
         const existingAlerts = await ProjectAlert.find({

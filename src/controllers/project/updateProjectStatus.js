@@ -33,6 +33,7 @@ export const updateProjectStatus = async (req, res, next) => {
     // Update the project status
     project.isClosed = status === 'closed';
     project.isArchived = status === 'archived';
+    project.isOpen = status === 'open';
     await project.save();
 
     // update alerts
