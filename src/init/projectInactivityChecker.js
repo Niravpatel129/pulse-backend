@@ -25,26 +25,6 @@ const CONFIG = {
  */
 const checkInactiveProjects = async () => {
   try {
-    console.log('Running project inactivity check...');
-
-    // First, clean up any duplicate alerts for the test project
-    const testProjectAlerts = await ProjectAlert.find({
-      project: CONFIG.testInactiveProjectId,
-      type: 'inactivity',
-    }).sort({ createdAt: -1 });
-
-    if (testProjectAlerts.length > 1) {
-      console.log(
-        `Found ${testProjectAlerts.length} alerts for test project - cleaning up duplicates`,
-      );
-      // Keep the most recent one, dismiss the rest
-      for (let i = 1; i < testProjectAlerts.length; i++) {
-        console.log(`Dismissing duplicate test project alert (ID: ${testProjectAlerts[i]._id})`);
-        testProjectAlerts[i].isDismissed = true;
-        await testProjectAlerts[i].save();
-      }
-    }
-
     // Only check active projects that are neither closed nor archived
     const projects = await Project.find({
       isActive: true,
@@ -133,7 +113,9 @@ const checkInactiveProjects = async () => {
           alertToUpdate.message = `Project ${project.name} has been inactive for ${Math.floor(
             daysSinceTouched,
           )} days.`;
-          alertToUpdate.isDismissed = false; // Ensure it's active
+
+          alertToUpdate.isDismissed = false;
+
           await alertToUpdate.save();
           console.log(`Updated most recent alert message (ID: ${alertToUpdate._id})`);
 
@@ -343,42 +325,6 @@ const checkReminders = async () => {
 };
 
 /**
- * Send a test inactivity alert email
- */
-const sendTestInactivityEmail = async () => {
-  try {
-    console.log('Sending test inactivity alert email...');
-
-    // Use bolo workspace and specific project
-    const workspaceSubdomain = 'bolo';
-    const projectId = '6806a7beda13e636a40c6618';
-
-    // Just a single URL to the project
-    const projectUrl = `https://${workspaceSubdomain}.hourblock.com/projects/${projectId}`;
-
-    // Generate the email content with simple single CTA
-    const emailContent = inactivityAlert({
-      projectName: 'Marketing Campaign Q4',
-      daysSinceActivity: 7,
-      projectUrl,
-      workspaceName: 'Bolo Team',
-      userName: 'Mr. Maple',
-      ctaText: 'View Project',
-    });
-
-    // Send test email
-    const testEmail = 'mrmapletv@gmail.com';
-    console.log(`Sending test inactivity email to ${testEmail}`);
-    await sendEmail(testEmail, emailContent);
-    console.log(`Test email sent successfully to ${testEmail}`);
-    console.log(`Email contains single CTA to: ${projectUrl}`);
-  } catch (error) {
-    console.error('Failed to send test inactivity email:', error);
-    console.error(error.stack);
-  }
-};
-
-/**
  * Clean up any duplicate alerts in the system
  */
 const cleanupDuplicateAlerts = async () => {
@@ -489,18 +435,6 @@ export function initializeProjectInactivityChecker() {
     console.log('Running scheduled duplicate alert cleanup');
     cleanupDuplicateAlerts();
   });
-
-  // Also run immediately on startup
-  console.log('Running initial project inactivity check');
-  checkInactiveProjects();
-  checkReminders();
-
-  // Run cleanup on startup to fix any existing duplicates
-  console.log('Running initial duplicate alert cleanup');
-  cleanupDuplicateAlerts();
-
-  // Send test email
-  sendTestInactivityEmail();
 
   console.log('Project inactivity checker initialized successfully');
 }
