@@ -184,12 +184,6 @@ export const resolveAlert = async (req, res, next) => {
       noteContent = '✓ Inactivity alert acknowledged.';
     }
 
-    await Note.create({
-      project: alert.project,
-      content: noteContent,
-      isSystem: true,
-    });
-
     res.status(200).json({
       status: 'success',
       message: 'Alert resolved successfully',

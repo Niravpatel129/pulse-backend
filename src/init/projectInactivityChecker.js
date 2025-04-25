@@ -215,12 +215,6 @@ const checkReminders = async () => {
           alertDelivered++;
         }
 
-        await Note.create({
-          project: reminder.project._id,
-          content: noteContent,
-          isSystem: true,
-        });
-
         // Keep track that the reminder was delivered but don't dismiss it
         // This allows it to still appear in the badges list
         reminder.sentAt = new Date();
