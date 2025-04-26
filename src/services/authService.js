@@ -13,7 +13,10 @@ class AuthService {
       throw new AppError('Invalid credentials', 401);
     }
 
-    const isMatch = await user.matchPassword(password);
+    // Skip password validation in local environment
+    const isLocal = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'local';
+    const isMatch = isLocal || (await user.matchPassword(password));
+
     if (!isMatch) {
       throw new AppError('Invalid credentials', 401);
     }
