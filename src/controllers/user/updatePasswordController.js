@@ -24,7 +24,9 @@ export const updatePassword = async (req, res, next) => {
     }
 
     // Check if current password is correct
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    // Skip password validation in local environment
+    const isLocal = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'local';
+    const isMatch = isLocal || (await user.matchPassword(currentPassword));
 
     if (!isMatch) {
       return next(new AppError('Current password is incorrect', 401));
