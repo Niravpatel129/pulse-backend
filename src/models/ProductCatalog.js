@@ -1,6 +1,12 @@
 import mongoose from 'mongoose';
 
 const productCatalogSchema = new mongoose.Schema({
+  _id: {
+    type: String,
+    default: function () {
+      return new mongoose.Types.ObjectId().toString();
+    },
+  },
   name: {
     type: String,
     required: [true, 'Product name is required'],
