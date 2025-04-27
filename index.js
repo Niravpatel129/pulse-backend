@@ -22,6 +22,7 @@ import figmaRoutes from './src/routes/figmaRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
 import integrationRoutes from './src/routes/integrationRoutes.js';
 import invoiceRoutes from './src/routes/invoiceRoutes.js';
+import kanbanRoutes from './src/routes/kanbanRoutes.js';
 import leadFormRoutes from './src/routes/leadFormRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
 import moduleEmailRoutes from './src/routes/moduleEmail.js';
@@ -112,6 +113,8 @@ app.use(`${routesPrefix}/participants`, participantRoutes);
 app.use(`${routesPrefix}/activities`, activityRoutes);
 app.use(`${routesPrefix}/pipeline`, pipelineRoutes);
 app.use(`${routesPrefix}/alerts`, alertRoutes);
+
+app.use(`${routesPrefix}/kanban`, kanbanRoutes);
 
 // Modules and templates
 app.use(`${routesPrefix}/modules`, moduleRoutes);
