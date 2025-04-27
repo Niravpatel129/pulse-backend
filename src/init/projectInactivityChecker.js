@@ -4,7 +4,6 @@ import Note from '../models/Note.js';
 import Project from '../models/Project.js';
 import ProjectAlert from '../models/ProjectAlert.js';
 import { inactivityAlert, reminderAlert } from '../services/emailTemplates/index.js';
-import { sendEmail } from '../utils/emailSender.js';
 
 // Load env vars
 dotenv.config();
@@ -134,7 +133,7 @@ const checkInactiveProjects = async () => {
             // Send email to the user's email address
             if (project.createdBy.email) {
               console.log(`Sending inactivity email to ${project.createdBy.email}`);
-              await sendEmail(project.createdBy.email, emailContent);
+              // await sendEmail(project.createdBy.email, emailContent);
               emailsSent++;
               console.log(`Email sent successfully to ${project.createdBy.email}`);
             } else {
@@ -249,7 +248,7 @@ const checkReminders = async () => {
           });
 
           // Send email to the user's email address
-          await sendEmail(reminder.project.createdBy.email, emailContent);
+          // await sendEmail(reminder.project.createdBy.email, emailContent);
           emailsSent++;
           console.log(`Reminder email sent successfully to ${reminder.project.createdBy.email}`);
         } else if (!reminder.project.createdBy?.email) {
