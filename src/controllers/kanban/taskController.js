@@ -1,5 +1,22 @@
 import KanbanTask from '../../models/KanbanTask.js';
+import User from '../../models/User.js';
 import AppError from '../../utils/AppError.js';
+
+// Get user details by ID
+const getUserDetails = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user) return null;
+
+    return {
+      id: user._id,
+      name: user.name || user.email,
+      avatar: user.avatar || '',
+    };
+  } catch (error) {
+    return null;
+  }
+};
 
 // Get all tasks for a project
 export const getTasks = async (req, res, next) => {
@@ -42,6 +59,14 @@ export const createTask = async (req, res, next) => {
     const { projectId } = req.params;
     const taskData = req.body;
 
+    // Get current user as reporter
+    const userId = req.user.userId;
+    const userDetails = await getUserDetails(userId);
+
+    if (!userDetails) {
+      return next(new AppError('Invalid user', 400));
+    }
+
     // Find highest position to place new task at the end
     const lastTask = await KanbanTask.findOne({
       projectId,
@@ -51,6 +76,11 @@ export const createTask = async (req, res, next) => {
     }).sort({ position: -1 });
 
     const position = lastTask ? lastTask.position + 1 : 0;
+
+    // Set the reporter to the current user if not explicitly provided
+    if (!taskData.reporter) {
+      taskData.reporter = userDetails;
+    }
 
     const task = await KanbanTask.create({
       ...taskData,
@@ -69,6 +99,16 @@ export const updateTask = async (req, res, next) => {
   try {
     const { projectId, taskId } = req.params;
     const updates = req.body;
+
+    // If assignee is being updated with just an ID, fetch the full user details
+    if (updates.assignee && typeof updates.assignee === 'string') {
+      const assigneeDetails = await getUserDetails(updates.assignee);
+      if (assigneeDetails) {
+        updates.assignee = assigneeDetails;
+      } else {
+        delete updates.assignee; // If user not found, don't update assignee
+      }
+    }
 
     const task = await KanbanTask.findOneAndUpdate({ _id: taskId, projectId }, updates, {
       new: true,

@@ -1,5 +1,11 @@
 import express from 'express';
 import {
+  addAttachment,
+  getAttachments,
+  removeAttachment,
+  updateAttachment,
+} from '../controllers/kanban/attachmentController.js';
+import {
   getKanbanBoard,
   initializeKanbanBoard,
   saveKanbanBoard,
@@ -11,6 +17,12 @@ import {
   updateColumn,
   updateColumnOrder,
 } from '../controllers/kanban/columnController.js';
+import {
+  addComment,
+  getComments,
+  removeComment,
+  updateComment,
+} from '../controllers/kanban/commentController.js';
 import {
   archiveTask,
   createTask,
@@ -52,6 +64,18 @@ router.delete('/:projectId/tasks/:taskId', deleteTask);
 router.put('/:projectId/tasks/:taskId/archive', archiveTask);
 router.put('/:projectId/tasks/:taskId/restore', restoreTask);
 router.get('/:projectId/tasks/archived', getArchivedTasks);
+
+// Comment routes
+router.get('/:projectId/tasks/:taskId/comments', getComments);
+router.post('/:projectId/tasks/:taskId/comments', addComment);
+router.put('/:projectId/tasks/:taskId/comments/:commentId', updateComment);
+router.delete('/:projectId/tasks/:taskId/comments/:commentId', removeComment);
+
+// Attachment routes
+router.get('/:projectId/tasks/:taskId/attachments', getAttachments);
+router.post('/:projectId/tasks/:taskId/attachments', addAttachment);
+router.put('/:projectId/tasks/:taskId/attachments/:attachmentId', updateAttachment);
+router.delete('/:projectId/tasks/:taskId/attachments/:attachmentId', removeAttachment);
 
 // Column-specific task routes
 router.get('/:projectId/columns/:columnId/tasks', getTasksByColumn);
