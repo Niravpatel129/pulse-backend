@@ -47,6 +47,16 @@ export function createQAChain(vectorStoreData) {
           ? query.query
           : 'What tables are available?';
 
+      // For general workspace queries, expand with specific related questions
+      const enhancedQuery = enhanceGeneralQueries(q);
+      console.log('Enhanced query:', enhancedQuery);
+
+      // Special case for greetings
+      if (enhancedQuery === 'SIMPLE_GREETING') {
+        console.log('Detected simple greeting, skipping retrieval');
+        return 'This is a simple greeting. Respond with a friendly hello without providing workspace information.';
+      }
+
       // Check if we have cached results - use workspace-specific cache key
       const cacheKey = `retrieval_${workspaceId}_${q}`;
       const cachedResult = retrievalCache.get(cacheKey);
@@ -54,10 +64,6 @@ export function createQAChain(vectorStoreData) {
         console.log('Using cached retrieval result for workspace:', workspaceId);
         return cachedResult;
       }
-
-      // For general workspace queries, expand with specific related questions
-      const enhancedQuery = enhanceGeneralQueries(q);
-      console.log('Enhanced query:', enhancedQuery);
 
       // Detect entity types from the query to improve retrieval
       const entityTypes = detectEntityTypes(enhancedQuery);

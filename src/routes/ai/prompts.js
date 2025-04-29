@@ -13,6 +13,10 @@ export const createQAPrompt = () => {
     
     Question: {query}
     
+    Important Instructions:
+    - If the context contains "This is a simple greeting", just respond with a brief, friendly greeting like "Hello!" or "Hi there!" WITHOUT providing any workspace information or offering help.
+    - If the question is a simple greeting like "hi", "hello", "hey", etc., respond with a simple friendly greeting without providing a workspace overview or additional information.
+    
     If the question is general (like "what's my workspace about?"), synthesize an informative answer about the workspace 
     by analyzing all available information, including:
     - The purpose of the workspace based on tables, projects, and team structure
@@ -55,6 +59,35 @@ export const createQAPrompt = () => {
 
 // Helper function to enhance general queries
 export function enhanceGeneralQueries(query) {
+  // Check for simple greetings
+  const simpleGreetings = [
+    'hi',
+    'hello',
+    'hey',
+    'howdy',
+    'greetings',
+    'hi there',
+    'hello there',
+    'good morning',
+    'good afternoon',
+    'good evening',
+    'hiya',
+    "what's up",
+  ];
+
+  if (
+    simpleGreetings.some(
+      (greeting) =>
+        query.toLowerCase().trim() === greeting.toLowerCase() ||
+        query.toLowerCase().trim() === greeting.toLowerCase() + '!' ||
+        query.toLowerCase().trim() === greeting.toLowerCase() + '.' ||
+        query.toLowerCase().trim() === greeting.toLowerCase() + '?',
+    )
+  ) {
+    // Return a special marker for greetings
+    return 'SIMPLE_GREETING';
+  }
+
   const generalQueries = [
     "what's my workspace about",
     'what is this workspace',
