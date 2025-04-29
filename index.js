@@ -9,7 +9,7 @@ import { initializeProjectInactivityChecker } from './src/init/projectInactivity
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
 import requestLogger from './src/middleware/loggingMiddleware.js';
 import activityRoutes from './src/routes/activityRoutes.js';
-import aiRoutes from './src/routes/aiRoutes.js';
+import aiRoutes2 from './src/routes/ai/aiRoutes.js';
 import alertRoutes from './src/routes/alertRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
@@ -103,7 +103,7 @@ app.use(`${routesPrefix}/users`, userRoutes);
 app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
 
 // AI routes
-app.use(`${routesPrefix}/ai`, aiRoutes);
+app.use(`${routesPrefix}/ai`, aiRoutes2);
 
 // Project management
 // Apply inactivity resolver middleware to project routes
