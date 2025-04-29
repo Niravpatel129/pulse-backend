@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq';
+import chalk from 'chalk';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import NodeCache from 'node-cache';
@@ -18,6 +19,27 @@ let aiQueue;
 let worker;
 let redisClient;
 let isRedisAvailable = false;
+
+// Cost estimation function
+function estimateQueryCost(query, response) {
+  // Base cost calculations (adjust based on your actual model and pricing)
+  const inputTokenEstimate = query.length / 4; // Rough estimate: 4 chars per token
+  const outputTokenEstimate = response.length / 4;
+
+  // Example pricing (adjust to your model's actual rates)
+  const inputCostPerToken = 0.00001; // $0.01 per 1000 tokens
+  const outputCostPerToken = 0.00002; // $0.02 per 1000 tokens
+
+  const inputCost = inputTokenEstimate * inputCostPerToken;
+  const outputCost = outputTokenEstimate * outputCostPerToken;
+  const totalCost = inputCost + outputCost;
+
+  return {
+    inputTokens: Math.round(inputTokenEstimate),
+    outputTokens: Math.round(outputTokenEstimate),
+    totalCost,
+  };
+}
 
 // Setup Redis client for BullMQ (optional)
 (async () => {
@@ -82,11 +104,27 @@ let isRedisAvailable = false;
 
           // Process query
           console.log(`Worker processing query: "${message}"`);
+          const startTime = Date.now();
           const result = await qaChain.invoke({ query: message });
+          const endTime = Date.now();
           console.log('Successfully generated answer');
 
-          // Extract and return the answer
-          return extractAnswer(result);
+          // Extract and prepare answer
+          const answer = extractAnswer(result);
+
+          // Estimate cost
+          const costEstimate = estimateQueryCost(message, answer);
+          console.log(
+            chalk.green(`💰 AI Query Cost Estimate: $${costEstimate.totalCost.toFixed(6)}`) +
+              chalk.yellow(
+                ` (Input: ~${costEstimate.inputTokens} tokens, Output: ~${
+                  costEstimate.outputTokens
+                } tokens, Time: ${(endTime - startTime) / 1000}s)`,
+              ),
+          );
+
+          // Return the answer
+          return answer;
         } catch (err) {
           console.error('Error in worker:', err);
           throw err;
@@ -179,7 +217,7 @@ router.post('/chat', async (req, res) => {
     const cacheKey = `query_${message}`;
     const cachedResult = queryCache.get(cacheKey);
     if (cachedResult) {
-      console.log('Returning cached response');
+      console.log(chalk.blue('✓ Returning cached response (no AI cost incurred)'));
       return res.json({ answer: cachedResult });
     }
 
@@ -208,11 +246,24 @@ router.post('/chat', async (req, res) => {
 
       // Process query directly
       console.log(`Processing query directly: "${message}"`);
+      const startTime = Date.now();
       const result = await qaChain.invoke({ query: message });
+      const endTime = Date.now();
       console.log('Successfully generated answer');
 
       // Extract answer
       const answer = extractAnswer(result);
+
+      // Estimate cost
+      const costEstimate = estimateQueryCost(message, answer);
+      console.log(
+        chalk.green(`💰 AI Query Cost Estimate: $${costEstimate.totalCost.toFixed(6)}`) +
+          chalk.yellow(
+            ` (Input: ~${costEstimate.inputTokens} tokens, Output: ~${
+              costEstimate.outputTokens
+            } tokens, Time: ${(endTime - startTime) / 1000}s)`,
+          ),
+      );
 
       // Cache the result
       queryCache.set(cacheKey, answer);
