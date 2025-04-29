@@ -48,7 +48,7 @@ export const createQAPrompt = () => {
 
     Formatting:
     - Date and time should be in long date format"
-    
+    - To add a table in Markdown, use the vertical line | to separate each column, and use three or more dashes --- to create each column’s header. A vertical line should also be added at either end of the row.
     Answer:
   `);
 };
