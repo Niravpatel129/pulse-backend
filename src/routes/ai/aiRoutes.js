@@ -22,8 +22,23 @@ let isRedisAvailable = false;
 // Setup Redis client for BullMQ (optional)
 (async () => {
   try {
+    // Check if Heroku Redis URL is available
+    const redisUrl =
+      process.env.REDIS_URL || process.env.REDISCLOUD_URL || process.env.REDIS_TLS_URL;
+
+    if (!redisUrl) {
+      console.log('No Redis URL found in environment variables. Running without Redis.');
+      isRedisAvailable = false;
+      return;
+    }
+
+    // Connect to Heroku Redis
     redisClient = Redis.createClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      url: redisUrl,
+      socket: {
+        tls: process.env.REDIS_TLS_URL ? true : false,
+        rejectUnauthorized: false,
+      },
     });
 
     // Try to connect to Redis
