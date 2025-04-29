@@ -5,6 +5,8 @@ import rateLimit from 'express-rate-limit';
 import NodeCache from 'node-cache';
 import Redis from 'redis';
 import { v4 as uuidv4 } from 'uuid';
+import { authenticate } from '../../middleware/auth.js';
+import { extractWorkspace } from '../../middleware/workspace.js';
 import { clearRetrieverCache, createQAChain } from './chain.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
@@ -80,9 +82,9 @@ function estimateQueryCost(query, response) {
       'ai-processing',
       async (job) => {
         try {
-          const { message, jobId, sessionId, history } = job.data;
+          const { message, jobId, sessionId, workspaceId, workspaceSessionId, history } = job.data;
           console.log(
-            `Processing job ${jobId} with message: "${message}" for session: ${sessionId}`,
+            `Processing job ${jobId} with message: "${message}" for workspace: ${workspaceId}, session: ${sessionId}`,
           );
 
           // Initialize QA chain if not already done
@@ -91,14 +93,14 @@ function estimateQueryCost(query, response) {
 
             // Check if vector store is cached
             let vs;
-            if (vectorStoreCache.get('vectorStore')) {
-              console.log('Using cached vector store');
-              vs = vectorStoreCache.get('vectorStore');
+            if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
+              console.log('Using cached vector store for workspace');
+              vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
             } else {
-              console.log('Initializing new vector store...');
-              vs = await initVectorStore();
+              console.log('Initializing new vector store for workspace...');
+              vs = await initVectorStore(workspaceId);
               // Cache the vector store
-              vectorStoreCache.set('vectorStore', vs);
+              vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
             }
 
             console.log('Creating QA chain...');
@@ -107,7 +109,7 @@ function estimateQueryCost(query, response) {
           }
 
           // Get current conversation history
-          let sessionHistory = history || conversationHistory.get(sessionId) || [];
+          let sessionHistory = history || conversationHistory.get(workspaceSessionId) || [];
 
           // Process query with conversation context
           console.log(`Worker processing query: "${message}"`);
@@ -117,6 +119,7 @@ function estimateQueryCost(query, response) {
             history: sessionHistory
               .map((h) => `Human: ${h.question}\nAI: ${h.answer}`)
               .join('\n\n'),
+            workspaceId, // Pass workspaceId for context
           });
           const endTime = Date.now();
           console.log('Successfully generated answer');
@@ -133,7 +136,7 @@ function estimateQueryCost(query, response) {
           }
 
           // Save updated history
-          conversationHistory.set(sessionId, sessionHistory);
+          conversationHistory.set(workspaceSessionId, sessionHistory);
 
           // Estimate cost
           const costEstimate = estimateQueryCost(message, answer);
@@ -171,27 +174,42 @@ function estimateQueryCost(query, response) {
       if (job.name === 'refresh-vector-store') {
         console.log(`Starting vector store refresh job ${job.id}`);
         try {
-          // Close existing vector store connections
-          await closeVectorStore();
+          const { workspaceId } = job.data;
 
-          // Clear caches
-          vectorStoreCache.del('vectorStore');
-          queryCache.flushAll();
-          conversationHistory.flushAll();
-          clearRetrieverCache();
+          if (!workspaceId) {
+            throw new Error('No workspace ID provided for refresh job');
+          }
 
-          // Reset the QA chain
+          console.log(`Refreshing vector store for workspace: ${workspaceId}`);
+
+          // Close existing vector store connections for this workspace
+          await closeVectorStore(workspaceId);
+
+          // Clear caches for this workspace
+          vectorStoreCache.del(`vectorStore:${workspaceId}`);
+
+          // Clear conversation histories for this workspace
+          const keys = conversationHistory.keys();
+          for (const key of keys) {
+            if (key.startsWith(`${workspaceId}:`)) {
+              conversationHistory.del(key);
+            }
+          }
+
+          clearRetrieverCache(workspaceId);
+
+          // Reset the QA chain if it was using this workspace's vector store
           qaChain = null;
 
-          // Reinitialize vector store
-          const vs = await initVectorStore();
-          vectorStoreCache.set('vectorStore', vs);
+          // Reinitialize vector store for this workspace
+          const vs = await initVectorStore(workspaceId);
+          vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
 
           // Recreate QA chain
           qaChain = createQAChain(vs);
 
-          console.log(`Vector store refresh completed for job ${job.id}`);
-          return { success: true };
+          console.log(`Vector store refresh completed for workspace ${workspaceId}, job ${job.id}`);
+          return { success: true, workspaceId };
         } catch (error) {
           console.error(`Error refreshing vector store for job ${job.id}:`, error);
           throw error;
@@ -214,8 +232,10 @@ const limiter = rateLimit({
   message: 'Too many requests, please try again later',
 });
 
-// Apply rate limiting to all routes
+// Apply middleware and rate limiting to all routes
 router.use(limiter);
+router.use(authenticate);
+router.use(extractWorkspace);
 
 // Helper function to extract answer from different result structures
 function extractAnswer(result) {
@@ -242,16 +262,19 @@ router.post('/chat', async (req, res) => {
   try {
     console.log('Received chat request');
     const { message, sessionId: providedSessionId } = req.body;
+    const workspaceId = req.workspace._id.toString();
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
+    // Make sessionId workspace-specific
+    const workspaceSessionId = `${workspaceId}:${sessionId}`;
 
     if (!message) {
       return res.status(400).json({ error: 'Missing `message` in request body.' });
     }
 
     // Retrieve conversation history for this session
-    let history = conversationHistory.get(sessionId) || [];
+    let history = conversationHistory.get(workspaceSessionId) || [];
 
     // For new conversations or if cache was cleared, initialize history array
     if (!Array.isArray(history)) {
@@ -266,14 +289,14 @@ router.post('/chat', async (req, res) => {
 
         // Check if vector store is cached
         let vs;
-        if (vectorStoreCache.get('vectorStore')) {
-          console.log('Using cached vector store');
-          vs = vectorStoreCache.get('vectorStore');
+        if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
+          console.log('Using cached vector store for workspace');
+          vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
         } else {
-          console.log('Initializing new vector store...');
-          vs = await initVectorStore();
+          console.log('Initializing new vector store for workspace...');
+          vs = await initVectorStore(workspaceId);
           // Cache the vector store
-          vectorStoreCache.set('vectorStore', vs);
+          vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
         }
 
         console.log('Creating QA chain...');
@@ -282,13 +305,14 @@ router.post('/chat', async (req, res) => {
       }
 
       // Process query directly with conversation history
-      console.log(`Processing query directly: "${message}" with sessionId: ${sessionId}`);
+      console.log(`Processing query directly: "${message}" with sessionId: ${workspaceSessionId}`);
       const startTime = Date.now();
 
       // Add history to the query context
       const result = await qaChain.invoke({
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
+        workspaceId, // Pass workspaceId for context
       });
 
       const endTime = Date.now();
@@ -306,7 +330,7 @@ router.post('/chat', async (req, res) => {
       }
 
       // Save updated history
-      conversationHistory.set(sessionId, history);
+      conversationHistory.set(workspaceSessionId, history);
 
       // Estimate cost
       const costEstimate = estimateQueryCost(message, answer);
@@ -328,11 +352,18 @@ router.post('/chat', async (req, res) => {
     // For complex requests or high traffic, use queue if available
     const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     console.log(
-      `Adding job ${jobId} to queue for message: "${message}" with sessionId: ${sessionId}`,
+      `Adding job ${jobId} to queue for message: "${message}" with workspaceSessionId: ${workspaceSessionId}`,
     );
 
     // Add job to queue with session info
-    await aiQueue.add('process-query', { message, jobId, sessionId, history });
+    await aiQueue.add('process-query', {
+      message,
+      jobId,
+      sessionId,
+      workspaceId,
+      workspaceSessionId,
+      history,
+    });
 
     // Return job ID for status checking
     return res.json({
@@ -355,9 +386,12 @@ router.post('/chat/stream', async (req, res) => {
   try {
     console.log('Received streaming chat request');
     const { message, sessionId: providedSessionId } = req.body;
+    const workspaceId = req.workspace._id.toString();
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
+    // Make sessionId workspace-specific
+    const workspaceSessionId = `${workspaceId}:${sessionId}`;
 
     if (!message) {
       return res.status(400).json({ error: 'Missing `message` in request body.' });
@@ -370,7 +404,7 @@ router.post('/chat/stream', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no'); // Prevents Nginx from buffering the response
 
     // Retrieve conversation history for this session
-    let history = conversationHistory.get(sessionId) || [];
+    let history = conversationHistory.get(workspaceSessionId) || [];
 
     // For new conversations or if cache was cleared, initialize history array
     if (!Array.isArray(history)) {
@@ -383,14 +417,14 @@ router.post('/chat/stream', async (req, res) => {
 
       // Check if vector store is cached
       let vs;
-      if (vectorStoreCache.get('vectorStore')) {
-        console.log('Using cached vector store');
-        vs = vectorStoreCache.get('vectorStore');
+      if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
+        console.log('Using cached vector store for workspace');
+        vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
       } else {
-        console.log('Initializing new vector store...');
-        vs = await initVectorStore();
+        console.log('Initializing new vector store for workspace...');
+        vs = await initVectorStore(workspaceId);
         // Cache the vector store
-        vectorStoreCache.set('vectorStore', vs);
+        vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
       }
 
       console.log('Creating QA chain...');
@@ -402,7 +436,9 @@ router.post('/chat/stream', async (req, res) => {
     res.write(`data: ${JSON.stringify({ type: 'start', sessionId })}\n\n`);
 
     // Process query with streaming
-    console.log(`Processing streaming query: "${message}" with sessionId: ${sessionId}`);
+    console.log(
+      `Processing streaming query: "${message}" with workspaceSessionId: ${workspaceSessionId}`,
+    );
     const startTime = Date.now();
 
     let fullAnswer = '';
@@ -413,6 +449,7 @@ router.post('/chat/stream', async (req, res) => {
       const stream = await qaChain.stream({
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
+        workspaceId, // Pass workspaceId for context
       });
 
       // Stream each chunk to the client
@@ -441,7 +478,7 @@ router.post('/chat/stream', async (req, res) => {
       }
 
       // Save updated history
-      conversationHistory.set(sessionId, history);
+      conversationHistory.set(workspaceSessionId, history);
 
       const endTime = Date.now();
 
@@ -492,9 +529,12 @@ router.post('/chat/stream-events', async (req, res) => {
   try {
     console.log('Received streaming events chat request');
     const { message, sessionId: providedSessionId } = req.body;
+    const workspaceId = req.workspace._id.toString();
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
+    // Make sessionId workspace-specific
+    const workspaceSessionId = `${workspaceId}:${sessionId}`;
 
     if (!message) {
       return res.status(400).json({ error: 'Missing `message` in request body.' });
@@ -507,7 +547,7 @@ router.post('/chat/stream-events', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no'); // Prevents Nginx from buffering the response
 
     // Retrieve conversation history for this session
-    let history = conversationHistory.get(sessionId) || [];
+    let history = conversationHistory.get(workspaceSessionId) || [];
 
     // For new conversations or if cache was cleared, initialize history array
     if (!Array.isArray(history)) {
@@ -520,14 +560,14 @@ router.post('/chat/stream-events', async (req, res) => {
 
       // Check if vector store is cached
       let vs;
-      if (vectorStoreCache.get('vectorStore')) {
-        console.log('Using cached vector store');
-        vs = vectorStoreCache.get('vectorStore');
+      if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
+        console.log('Using cached vector store for workspace');
+        vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
       } else {
-        console.log('Initializing new vector store...');
-        vs = await initVectorStore();
+        console.log('Initializing new vector store for workspace...');
+        vs = await initVectorStore(workspaceId);
         // Cache the vector store
-        vectorStoreCache.set('vectorStore', vs);
+        vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
       }
 
       console.log('Creating QA chain...');
@@ -539,7 +579,9 @@ router.post('/chat/stream-events', async (req, res) => {
     res.write(`data: ${JSON.stringify({ type: 'start', sessionId })}\n\n`);
 
     // Process query with streaming
-    console.log(`Processing streaming events query: "${message}" with sessionId: ${sessionId}`);
+    console.log(
+      `Processing streaming events query: "${message}" with workspaceSessionId: ${workspaceSessionId}`,
+    );
     const startTime = Date.now();
 
     let fullAnswer = '';
@@ -551,6 +593,7 @@ router.post('/chat/stream-events', async (req, res) => {
       const eventStream = await qaChain.astream_events({
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
+        workspaceId, // Pass workspaceId for context
       });
 
       // Stream each event to the client
@@ -608,7 +651,7 @@ router.post('/chat/stream-events', async (req, res) => {
       }
 
       // Save updated history
-      conversationHistory.set(sessionId, history);
+      conversationHistory.set(workspaceSessionId, history);
 
       const endTime = Date.now();
 
@@ -668,12 +711,18 @@ router.get('/chat/status/:jobId', async (req, res) => {
     }
 
     const jobId = req.params.jobId;
-    console.log(`Checking status for job ${jobId}`);
+    const workspaceId = req.workspace._id.toString();
+    console.log(`Checking status for job ${jobId} in workspace ${workspaceId}`);
 
     const job = await aiQueue.getJob(jobId);
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Verify job belongs to this workspace
+    if (job.data.workspaceId !== workspaceId) {
+      return res.status(403).json({ error: 'Job not found in this workspace' });
     }
 
     const state = await job.getState();
@@ -706,13 +755,15 @@ router.get('/chat/status/:jobId', async (req, res) => {
 router.delete('/chat/history/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
+    const workspaceId = req.workspace._id.toString();
+    const workspaceSessionId = `${workspaceId}:${sessionId}`;
 
     if (!sessionId) {
       return res.status(400).json({ error: 'Missing sessionId parameter' });
     }
 
     // Delete the conversation history for this session
-    conversationHistory.del(sessionId);
+    conversationHistory.del(workspaceSessionId);
 
     return res.json({
       status: 'success',
@@ -731,6 +782,7 @@ router.delete('/chat/history/:sessionId', async (req, res) => {
 router.post('/refresh', async (req, res) => {
   try {
     console.log('Received refresh request');
+    const workspaceId = req.workspace._id.toString();
 
     // Only allow authorized requests
     const authHeader = req.headers.authorization;
@@ -745,34 +797,46 @@ router.post('/refresh', async (req, res) => {
 
     // If Redis is not available, perform direct refresh
     if (!isRedisAvailable) {
-      console.log('Performing direct vector store refresh (Redis unavailable)');
+      console.log(
+        `Performing direct vector store refresh for workspace ${workspaceId} (Redis unavailable)`,
+      );
       try {
-        // Close existing vector store connections
-        await closeVectorStore();
+        // Close existing vector store connections for this workspace
+        await closeVectorStore(workspaceId);
 
-        // Clear caches
-        vectorStoreCache.del('vectorStore');
-        queryCache.flushAll();
-        conversationHistory.flushAll();
-        clearRetrieverCache();
+        // Clear caches for this workspace
+        vectorStoreCache.del(`vectorStore:${workspaceId}`);
+        // Clear conversation histories for this workspace
+        // This is a simple approach - for production, consider a more efficient method
+        const keys = conversationHistory.keys();
+        for (const key of keys) {
+          if (key.startsWith(`${workspaceId}:`)) {
+            conversationHistory.del(key);
+          }
+        }
+
+        clearRetrieverCache(workspaceId);
 
         // Reset the QA chain
         qaChain = null;
 
-        // Reinitialize vector store
-        const vs = await initVectorStore();
-        vectorStoreCache.set('vectorStore', vs);
+        // Reinitialize vector store for this workspace
+        const vs = await initVectorStore(workspaceId);
+        vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
 
         // Recreate QA chain
         qaChain = createQAChain(vs);
 
-        console.log('Vector store refresh completed successfully');
+        console.log(`Vector store refresh completed successfully for workspace ${workspaceId}`);
         return res.json({
           status: 'completed',
           message: 'Vector store refresh completed',
         });
       } catch (error) {
-        console.error('Error during direct vector store refresh:', error);
+        console.error(
+          `Error during direct vector store refresh for workspace ${workspaceId}:`,
+          error,
+        );
         return res.status(500).json({
           error: error.message,
           stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
@@ -781,8 +845,8 @@ router.post('/refresh', async (req, res) => {
     }
 
     // Start a background job to refresh the vector store
-    const jobId = `refresh-${Date.now()}`;
-    await aiQueue.add('refresh-vector-store', { jobId });
+    const jobId = `refresh-${workspaceId}-${Date.now()}`;
+    await aiQueue.add('refresh-vector-store', { jobId, workspaceId });
 
     return res.json({
       status: 'refreshing',
@@ -809,10 +873,16 @@ router.get('/refresh/status/:jobId', async (req, res) => {
     }
 
     const jobId = req.params.jobId;
+    const workspaceId = req.workspace._id.toString();
     const job = await aiQueue.getJob(jobId);
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Verify job belongs to this workspace
+    if (job.data.workspaceId !== workspaceId) {
+      return res.status(403).json({ error: 'Job not found in this workspace' });
     }
 
     const state = await job.getState();
