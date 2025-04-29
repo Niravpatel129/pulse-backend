@@ -157,6 +157,30 @@ async function loadWorkspaceData(workspaceId, vectorStore, domainStore) {
 // Helper function to load project data
 async function loadProjectData(workspaceId, vectorStore, domainStore) {
   try {
+    // Get pipeline settings for this workspace
+    const pipelineSettings = await mongoose
+      .model('PipelineSettings')
+      .findOne({ workspace: workspaceId })
+      .lean();
+
+    // Create maps for fast lookup of stage and status details (by ID and by name)
+    const stageByIdMap = new Map();
+    const statusByIdMap = new Map();
+    const stageByNameMap = new Map();
+    const statusByNameMap = new Map();
+
+    if (pipelineSettings) {
+      pipelineSettings.stages?.forEach((stage) => {
+        stageByIdMap.set(stage._id.toString(), stage);
+        stageByNameMap.set(stage.name, stage);
+      });
+
+      pipelineSettings.statuses?.forEach((status) => {
+        statusByIdMap.set(status._id.toString(), status);
+        statusByNameMap.set(status.name, status);
+      });
+    }
+
     // Only load projects associated with this workspace
     const projects = await Project.find({ workspace: workspaceId })
       .populate('team.user manager createdBy')
@@ -174,36 +198,72 @@ async function loadProjectData(workspaceId, vectorStore, domainStore) {
     for (let i = 0; i < projects.length; i += CHUNK_SIZE) {
       const chunk = projects.slice(i, i + CHUNK_SIZE);
 
-      const projectDocs = chunk.map((project) => ({
-        pageContent: `
-          Project: ${project.name}
-          ID: ${project._id}
-          Status: ${project.status}
-          Stage: ${project.stage}
-          Description: ${project.description || 'No description'}
-          Project Type: ${project.projectType || 'Not specified'}
-          Manager: ${project.manager?.name || 'Unassigned'} (${project.manager?.email || ''})
-          Lead Source: ${project.leadSource || 'Not specified'}
-          Start Date: ${
-            project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not set'
-          }
-          Target Date: ${
-            project.targetDate ? new Date(project.targetDate).toLocaleDateString() : 'Not set'
-          }
-          Team Size: ${project.team?.length || 0}
-          Created By: ${project.createdBy?.name || 'Unknown'}
-          Created At: ${
-            project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Unknown'
-          }
-        `,
-        metadata: {
-          type: 'project',
-          id: project._id.toString(),
-          name: project.name,
-          status: project.status,
-          workspaceId: workspaceId,
-        },
-      }));
+      const projectDocs = chunk.map((project) => {
+        // Check if status/stage are IDs or names and get the appropriate details
+        let stageDetails, statusDetails;
+        let stageName = project.stage;
+        let statusName = project.status;
+
+        // Handle status ID or name
+        if (project.status && statusByIdMap.has(project.status)) {
+          // It's an ID
+          statusDetails = statusByIdMap.get(project.status);
+          statusName = statusDetails.name;
+        } else if (project.status && statusByNameMap.has(project.status)) {
+          // It's a name
+          statusDetails = statusByNameMap.get(project.status);
+        } else {
+          statusDetails = { name: project.status || 'Unknown', color: '#A0AEC0' };
+        }
+
+        // Handle stage ID or name
+        if (project.stage && stageByIdMap.has(project.stage)) {
+          // It's an ID
+          stageDetails = stageByIdMap.get(project.stage);
+          stageName = stageDetails.name;
+        } else if (project.stage && stageByNameMap.has(project.stage)) {
+          // It's a name
+          stageDetails = stageByNameMap.get(project.stage);
+        } else {
+          stageDetails = { name: project.stage || 'Unknown', color: '#A0AEC0' };
+        }
+
+        return {
+          pageContent: `
+            Project: ${project.name}
+            ID: ${project._id}
+            Status: ${statusName} ${statusDetails.color ? `(${statusDetails.color})` : ''}
+            Stage: ${stageName} ${stageDetails.color ? `(${stageDetails.color})` : ''}
+            Description: ${project.description || 'No description'}
+            Project Type: ${project.projectType || 'Not specified'}
+            Manager: ${project.manager?.name || 'Unassigned'} (${project.manager?.email || ''})
+            Lead Source: ${project.leadSource || 'Not specified'}
+            Start Date: ${
+              project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not set'
+            }
+            Target Date: ${
+              project.targetDate ? new Date(project.targetDate).toLocaleDateString() : 'Not set'
+            }
+            Team Size: ${project.team?.length || 0}
+            Created By: ${project.createdBy?.name || 'Unknown'}
+            Created At: ${
+              project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Unknown'
+            }
+          `,
+          metadata: {
+            type: 'project',
+            id: project._id.toString(),
+            name: project.name,
+            status: statusName,
+            statusId: statusDetails._id?.toString(),
+            statusColor: statusDetails.color,
+            stage: stageName,
+            stageId: stageDetails._id?.toString(),
+            stageColor: stageDetails.color,
+            workspaceId: workspaceId,
+          },
+        };
+      });
 
       // Add to main vector store and domain-specific store
       await vectorStore.addDocuments(projectDocs);
