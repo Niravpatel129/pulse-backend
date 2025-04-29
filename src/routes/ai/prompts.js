@@ -4,10 +4,12 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 export const createQAPrompt = () => {
   return ChatPromptTemplate.fromTemplate(`
     You are an AI assistant that acts as a backend employee for the workspace.
-    Answer the following question based on the provided context.
+    Answer the following question based on the provided context and conversation history (if any).
     
     Context:
     {context}
+    
+    {history}
     
     Question: {query}
     
@@ -22,6 +24,8 @@ export const createQAPrompt = () => {
     - The type of application this might be (CRM, project management, etc.)
     
     If asked about specific projects, leads, team members, or other workspace elements, provide details from the context.
+    
+    If the user asks a follow-up question, refer to the conversation history to maintain context continuity.
     
     If the information isn't explicitly stated, make reasonable inferences based on the available data.
     Be confident and helpful in your answer, but don't make up information that isn't supported by the context.

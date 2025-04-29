@@ -4,6 +4,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import NodeCache from 'node-cache';
 import Redis from 'redis';
+import { v4 as uuidv4 } from 'uuid';
 import { clearRetrieverCache, createQAChain } from './chain.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
@@ -13,6 +14,7 @@ let qaChain;
 // Create caches with TTL
 const vectorStoreCache = new NodeCache({ stdTTL: 3600 }); // 1 hour
 const queryCache = new NodeCache({ stdTTL: 300 }); // 5 minutes
+const conversationHistory = new NodeCache({ stdTTL: 1800 }); // 30 minutes
 
 // Variables for message queue
 let aiQueue;
@@ -78,8 +80,10 @@ function estimateQueryCost(query, response) {
       'ai-processing',
       async (job) => {
         try {
-          const { message, jobId } = job.data;
-          console.log(`Processing job ${jobId} with message: "${message}"`);
+          const { message, jobId, sessionId, history } = job.data;
+          console.log(
+            `Processing job ${jobId} with message: "${message}" for session: ${sessionId}`,
+          );
 
           // Initialize QA chain if not already done
           if (!qaChain) {
@@ -102,15 +106,34 @@ function estimateQueryCost(query, response) {
             console.log('QA chain initialized:', !!qaChain);
           }
 
-          // Process query
+          // Get current conversation history
+          let sessionHistory = history || conversationHistory.get(sessionId) || [];
+
+          // Process query with conversation context
           console.log(`Worker processing query: "${message}"`);
           const startTime = Date.now();
-          const result = await qaChain.invoke({ query: message });
+          const result = await qaChain.invoke({
+            query: message,
+            history: sessionHistory
+              .map((h) => `Human: ${h.question}\nAI: ${h.answer}`)
+              .join('\n\n'),
+          });
           const endTime = Date.now();
           console.log('Successfully generated answer');
 
           // Extract and prepare answer
           const answer = extractAnswer(result);
+
+          // Update conversation history
+          sessionHistory.push({ question: message, answer });
+
+          // Limit history size to prevent token overflow
+          if (sessionHistory.length > 10) {
+            sessionHistory = sessionHistory.slice(sessionHistory.length - 10);
+          }
+
+          // Save updated history
+          conversationHistory.set(sessionId, sessionHistory);
 
           // Estimate cost
           const costEstimate = estimateQueryCost(message, answer);
@@ -124,7 +147,7 @@ function estimateQueryCost(query, response) {
           );
 
           // Return the answer
-          return answer;
+          return { answer, sessionId };
         } catch (err) {
           console.error('Error in worker:', err);
           throw err;
@@ -154,6 +177,7 @@ function estimateQueryCost(query, response) {
           // Clear caches
           vectorStoreCache.del('vectorStore');
           queryCache.flushAll();
+          conversationHistory.flushAll();
           clearRetrieverCache();
 
           // Reset the QA chain
@@ -207,18 +231,21 @@ function extractAnswer(result) {
 router.post('/chat', async (req, res) => {
   try {
     console.log('Received chat request');
-    const { message } = req.body;
+    const { message, sessionId: providedSessionId } = req.body;
+
+    // Generate a new session ID if none provided
+    const sessionId = providedSessionId || uuidv4();
 
     if (!message) {
       return res.status(400).json({ error: 'Missing `message` in request body.' });
     }
 
-    // Check if response is already cached
-    const cacheKey = `query_${message}`;
-    const cachedResult = queryCache.get(cacheKey);
-    if (cachedResult) {
-      console.log(chalk.blue('✓ Returning cached response (no AI cost incurred)'));
-      return res.json({ answer: cachedResult });
+    // Retrieve conversation history for this session
+    let history = conversationHistory.get(sessionId) || [];
+
+    // For new conversations or if cache was cleared, initialize history array
+    if (!Array.isArray(history)) {
+      history = [];
     }
 
     // If Redis is unavailable, or traffic is low, process directly
@@ -244,15 +271,32 @@ router.post('/chat', async (req, res) => {
         console.log('QA chain initialized:', !!qaChain);
       }
 
-      // Process query directly
-      console.log(`Processing query directly: "${message}"`);
+      // Process query directly with conversation history
+      console.log(`Processing query directly: "${message}" with sessionId: ${sessionId}`);
       const startTime = Date.now();
-      const result = await qaChain.invoke({ query: message });
+
+      // Add history to the query context
+      const result = await qaChain.invoke({
+        query: message,
+        history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
+      });
+
       const endTime = Date.now();
       console.log('Successfully generated answer');
 
       // Extract answer
       const answer = extractAnswer(result);
+
+      // Update conversation history
+      history.push({ question: message, answer });
+
+      // Limit history size to prevent token overflow (keep last 10 exchanges)
+      if (history.length > 10) {
+        history = history.slice(history.length - 10);
+      }
+
+      // Save updated history
+      conversationHistory.set(sessionId, history);
 
       // Estimate cost
       const costEstimate = estimateQueryCost(message, answer);
@@ -265,22 +309,25 @@ router.post('/chat', async (req, res) => {
           ),
       );
 
-      // Cache the result
-      queryCache.set(cacheKey, answer);
-
-      return res.json({ answer });
+      return res.json({
+        answer,
+        sessionId, // Return sessionId for client to use in follow-up questions
+      });
     }
 
     // For complex requests or high traffic, use queue if available
     const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    console.log(`Adding job ${jobId} to queue for message: "${message}"`);
+    console.log(
+      `Adding job ${jobId} to queue for message: "${message}" with sessionId: ${sessionId}`,
+    );
 
-    // Add job to queue
-    await aiQueue.add('process-query', { message, jobId });
+    // Add job to queue with session info
+    await aiQueue.add('process-query', { message, jobId, sessionId, history });
 
     // Return job ID for status checking
     return res.json({
       jobId,
+      sessionId,
       status: 'processing',
       message: 'Request is being processed. Use the /chat/status/:jobId endpoint to check status.',
     });
@@ -293,7 +340,7 @@ router.post('/chat', async (req, res) => {
   }
 });
 
-// Endpoint to check job status
+// Endpoint to check job status - update to include session information
 router.get('/chat/status/:jobId', async (req, res) => {
   try {
     if (!isRedisAvailable) {
@@ -317,23 +364,45 @@ router.get('/chat/status/:jobId', async (req, res) => {
     if (state === 'completed') {
       const result = job.returnvalue;
 
-      // Cache the completed result
-      const originalMessage = job.data.message;
-      const cacheKey = `query_${originalMessage}`;
-      queryCache.set(cacheKey, result);
-
       return res.json({
         status: state,
-        answer: result,
+        answer: result.answer,
+        sessionId: result.sessionId || job.data.sessionId,
       });
     }
 
     return res.json({
       status: state,
       message: state === 'failed' ? 'Processing failed' : 'Still processing',
+      sessionId: job.data.sessionId,
     });
   } catch (err) {
     console.error('Error in status endpoint:', err);
+    return res.status(500).json({
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    });
+  }
+});
+
+// Add a new endpoint to clear conversation history
+router.delete('/chat/history/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Missing sessionId parameter' });
+    }
+
+    // Delete the conversation history for this session
+    conversationHistory.del(sessionId);
+
+    return res.json({
+      status: 'success',
+      message: 'Conversation history cleared',
+    });
+  } catch (err) {
+    console.error('Error clearing conversation history:', err);
     return res.status(500).json({
       error: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
@@ -367,6 +436,7 @@ router.post('/refresh', async (req, res) => {
         // Clear caches
         vectorStoreCache.del('vectorStore');
         queryCache.flushAll();
+        conversationHistory.flushAll();
         clearRetrieverCache();
 
         // Reset the QA chain

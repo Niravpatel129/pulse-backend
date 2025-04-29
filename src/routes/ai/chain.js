@@ -135,6 +135,7 @@ export function createQAChain(vectorStore) {
         return safeRetriever(query);
       },
       query: (input) => input.query || '',
+      history: (input) => input.history || '',
     },
     prompt,
     llm,
