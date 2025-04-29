@@ -48,14 +48,38 @@ export const createQAPrompt = () => {
 
     Formatting:
     - Date and time should be in long date format"
-    - Bold text should be in the format of **text**
-    - Italics should be in the format of *text*
-    - Code should be in the format of \`text\`
-    - Links should be in the format of [text](link)
-    - Lists should be in the format of - text
-    - Numbered lists should be in the format of 1. text
     
     Answer:
+  `);
+};
+
+// New reasoning prompt template to determine what information to get from models
+export const createReasoningPrompt = () => {
+  return ChatPromptTemplate.fromTemplate(`
+    You are an AI assistant responsible for analyzing user questions to determine what specific information needs to be retrieved from the workspace data.
+    
+    User Question: {query}
+    
+    Conversation History: {history}
+    
+    Your task is to:
+    1. Analyze the question to determine its intent and what specific workspace information would best answer it
+    2. Identify the specific entity types that should be searched for (projects, leads, tables, users, meetings, etc.)
+    3. Determine if historical context from the conversation history is needed
+    4. Break down complex questions into simpler information needs
+    
+    Provide your reasoning in a structured JSON format with the following fields:
+    - intent: The core intent of the user's question
+    - entity_types: Array of entity types to search for (workspace, projects, users, leads, meetings, tables)
+    - expanded_query: A more detailed version of the query that would help in retrieving relevant information
+    - requires_history: Boolean indicating if conversation history is important for this query
+    - specific_lookups: Array of specific terms or identifiers to search for (e.g., specific project names, user names)
+    
+    IMPORTANT: Return the raw JSON object only, with no markdown formatting, code blocks, or additional explanation.
+    Do NOT use \`\`\`json or any other code block markers.
+    
+    Example response format:
+    {"intent":"workspace_overview","entity_types":["workspace","projects"],"expanded_query":"Tell me about the workspace structure and main projects","requires_history":false,"specific_lookups":[]}
   `);
 };
 

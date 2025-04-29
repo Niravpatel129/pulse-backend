@@ -4,7 +4,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { formatDocumentsAsString } from 'langchain/util/document';
 import mongoose from 'mongoose';
 import NodeCache from 'node-cache';
-import { createQAPrompt, enhanceGeneralQueries } from './prompts.js';
+import { createQAPrompt, createReasoningPrompt, enhanceGeneralQueries } from './prompts.js';
 import { getDomainVectorStore } from './vectorStore.js';
 
 // Import User model
@@ -15,6 +15,9 @@ const retrievalCache = new NodeCache({ stdTTL: 1800 });
 
 // Cache for user data with 15 minute TTL
 const userCache = new NodeCache({ stdTTL: 900 });
+
+// New cache for reasoning results
+const reasoningCache = new NodeCache({ stdTTL: 900 }); // 15 minutes
 
 export function createQAChain(vectorStoreData) {
   console.log('Creating QA chain with vector store:', !!vectorStoreData);
@@ -29,6 +32,16 @@ export function createQAChain(vectorStoreData) {
     maxConcurrency: 5, // Limit concurrent API calls
     cache: true, // Enable OpenAI's internal caching
     streaming: true, // Enable streaming for the model
+  });
+
+  // Create a lighter LLM for reasoning
+  const reasoningLlm = new ChatOpenAI({
+    openAIApiKey: process.env.OPENAI_API_KEY,
+    modelName: 'gpt-4o', // Can use the same model or a cheaper one like gpt-3.5-turbo
+    temperature: 0.0, // Lower temperature for more deterministic reasoning
+    maxConcurrency: 5,
+    cache: true,
+    streaming: false, // No streaming needed for reasoning
   });
 
   // Create a retriever wrapped in a function to handle errors
@@ -82,8 +95,98 @@ export function createQAChain(vectorStoreData) {
     }
   };
 
+  // New function to apply reasoning before retrieval
+  const applyReasoning = async (query, workspaceId, history) => {
+    if (!query) return null;
+
+    // Check cache first
+    const cacheKey = `reasoning_${workspaceId}_${query}`;
+    const cachedReasoning = reasoningCache.get(cacheKey);
+    if (cachedReasoning) {
+      console.log(`Using cached reasoning for query: "${query}"`);
+      return cachedReasoning;
+    }
+
+    // Handle simple greetings - skip reasoning step
+    if (
+      query
+        .toLowerCase()
+        .trim()
+        .match(/^(hi|hello|hey|howdy|greetings)(\?|!|\.)?$/)
+    ) {
+      const simpleReasoning = {
+        intent: 'greeting',
+        entity_types: [],
+        expanded_query: 'SIMPLE_GREETING',
+        requires_history: false,
+        specific_lookups: [],
+      };
+      reasoningCache.set(cacheKey, simpleReasoning);
+      return simpleReasoning;
+    }
+
+    // Create and run the reasoning chain
+    const reasoningPrompt = createReasoningPrompt();
+    const reasoningChain = RunnableSequence.from([
+      {
+        query: (input) => input.query || '',
+        history: (input) => input.history || '',
+      },
+      reasoningPrompt,
+      reasoningLlm,
+      new StringOutputParser(),
+    ]);
+
+    try {
+      console.log(`Applying reasoning to query: "${query}"`);
+      const reasoningResult = await reasoningChain.invoke({
+        query,
+        history,
+      });
+
+      // Parse the JSON result
+      let parsedResult;
+      try {
+        // Clean the result to handle potential markdown formatting
+        const cleanedResult = reasoningResult
+          .replace(/^```json\s*/, '') // Remove leading ```json
+          .replace(/^```\s*/, '') // Remove leading ``` (without json)
+          .replace(/\s*```$/, '') // Remove trailing ```
+          .trim();
+
+        console.log('Cleaned reasoning result:', cleanedResult);
+        parsedResult = JSON.parse(cleanedResult);
+        console.log(`Reasoning result:`, parsedResult);
+      } catch (parseError) {
+        console.error('Error parsing reasoning result:', parseError);
+        // Fallback to standard query if we can't parse the result
+        parsedResult = {
+          intent: 'unknown',
+          entity_types: detectEntityTypes(query),
+          expanded_query: enhanceGeneralQueries(query),
+          requires_history: history ? true : false,
+          specific_lookups: [],
+        };
+      }
+
+      // Cache the reasoning result
+      reasoningCache.set(cacheKey, parsedResult);
+      return parsedResult;
+    } catch (error) {
+      console.error('Error in reasoning chain:', error);
+      // Fallback to standard query enhancement
+      return {
+        intent: 'unknown',
+        entity_types: detectEntityTypes(query),
+        expanded_query: enhanceGeneralQueries(query),
+        requires_history: history ? true : false,
+        specific_lookups: [],
+      };
+    }
+  };
+
   // Wrap the retriever to handle potential errors and enhance queries by entity type
-  const safeRetriever = async (query, workspaceId) => {
+  const safeRetriever = async (query, workspaceId, history) => {
     if (!workspaceId) {
       console.error('No workspaceId provided for retrieval');
       return 'Error: No workspace context available.';
@@ -100,17 +203,17 @@ export function createQAChain(vectorStoreData) {
           ? query.query
           : 'What tables are available?';
 
-      // For general workspace queries, expand with specific related questions
-      const enhancedQuery = enhanceGeneralQueries(q);
-      console.log('Enhanced query:', enhancedQuery);
+      // Apply reasoning to determine what to retrieve
+      const reasoning = await applyReasoning(q, workspaceId, history);
+      console.log('Applied reasoning:', reasoning);
 
-      // Special case for greetings
-      if (enhancedQuery === 'SIMPLE_GREETING') {
+      // If it's a simple greeting, return immediately
+      if (reasoning.expanded_query === 'SIMPLE_GREETING') {
         console.log('Detected simple greeting, skipping retrieval');
         return 'This is a simple greeting. Respond with a friendly hello without providing workspace information.';
       }
 
-      // Check if we have cached results - use workspace-specific cache key
+      // Check if we have cached results - use workspace-specific key
       const cacheKey = `retrieval_${workspaceId}_${q}`;
       const cachedResult = retrievalCache.get(cacheKey);
       if (cachedResult) {
@@ -118,9 +221,10 @@ export function createQAChain(vectorStoreData) {
         return cachedResult;
       }
 
-      // Detect entity types from the query to improve retrieval
-      const entityTypes = detectEntityTypes(enhancedQuery);
-      console.log('Detected entity types:', entityTypes);
+      // Use the entity types from reasoning instead of detecting them again
+      const entityTypes =
+        reasoning.entity_types || detectEntityTypes(reasoning.expanded_query || q);
+      console.log('Entity types from reasoning:', entityTypes);
 
       // Use a parallel approach to fetch documents more efficiently
       const fetchPromises = [];
@@ -133,13 +237,26 @@ export function createQAChain(vectorStoreData) {
         }),
       );
 
-      // Then get documents related to the specific query
+      // Then get documents related to the specific query - use expanded query from reasoning if available
+      const expandedQuery = reasoning.expanded_query || enhanceGeneralQueries(q);
       fetchPromises.push(
-        retriever.getRelevantDocuments(enhancedQuery).catch((err) => {
+        retriever.getRelevantDocuments(expandedQuery).catch((err) => {
           console.error('Error fetching documents for query:', err);
           return [];
         }),
       );
+
+      // Add specific lookup terms from reasoning if available
+      if (reasoning.specific_lookups && reasoning.specific_lookups.length > 0) {
+        for (const term of reasoning.specific_lookups) {
+          fetchPromises.push(
+            retriever.getRelevantDocuments(term).catch((err) => {
+              console.error(`Error fetching documents for specific term ${term}:`, err);
+              return [];
+            }),
+          );
+        }
+      }
 
       // If entity types were detected, get additional context for those entity types
       for (const entityType of entityTypes) {
@@ -148,7 +265,7 @@ export function createQAChain(vectorStoreData) {
         const domainRetriever = domainVS ? domainVS.asRetriever({ k: 6 }) : retriever;
 
         fetchPromises.push(
-          domainRetriever.getRelevantDocuments(`${entityType} ${enhancedQuery}`).catch((err) => {
+          domainRetriever.getRelevantDocuments(`${entityType} ${expandedQuery}`).catch((err) => {
             console.error(`Error fetching ${entityType} documents:`, err);
             return [];
           }),
@@ -202,13 +319,14 @@ export function createQAChain(vectorStoreData) {
         const query = input.query || '';
         const workspaceId = input.workspaceId;
         const userId = input.userId;
+        const history = input.history || '';
 
         if (!workspaceId) {
           console.error('Missing workspaceId in chain input');
           return 'Error: No workspace context provided.';
         }
 
-        let contextString = await safeRetriever(query, workspaceId);
+        let contextString = await safeRetriever(query, workspaceId, history);
 
         // Add user context if available
         if (userId) {
@@ -280,6 +398,11 @@ export function clearRetrieverCache(workspaceId) {
     retrievalCache.flushAll();
     console.log('All retriever cache cleared');
   }
+
+  // Also clear reasoning cache
+  reasoningCache.flushAll();
+  console.log('Reasoning cache cleared');
+
   return true;
 }
 
