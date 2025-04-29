@@ -38,6 +38,68 @@ export async function initVectorStore() {
   const tables = await Table.find().lean();
   console.log(`Found ${tables.length} tables`);
 
+  // Create a workspace summary document
+  let workspaceSummary = `This workspace contains ${tables.length} tables:\n\n`;
+
+  // Add detailed information about each table
+  tables.forEach((table) => {
+    const columnCount = table.columns?.length || 0;
+    workspaceSummary += `Table "${table.name}":\n`;
+    workspaceSummary += `- Contains ${columnCount} columns\n`;
+
+    // Add column information
+    if (table.columns && table.columns.length > 0) {
+      workspaceSummary += `- Key columns: ${table.columns
+        .slice(0, 5)
+        .map((c) => c.name)
+        .join(', ')}\n`;
+    }
+
+    // Add table description if it exists
+    if (table.description) {
+      workspaceSummary += `- Description: ${table.description}\n`;
+    }
+
+    // Infer relationships between tables (based on column names)
+    const possibleRelationColumns =
+      table.columns?.filter(
+        (col) =>
+          col.name.toLowerCase().includes('id') ||
+          col.name.toLowerCase().includes('ref') ||
+          col.name.toLowerCase().endsWith('_id'),
+      ) || [];
+
+    if (possibleRelationColumns.length > 0) {
+      workspaceSummary += `- Possible relationships: ${possibleRelationColumns
+        .map((c) => c.name)
+        .join(', ')}\n`;
+    }
+
+    workspaceSummary += '\n';
+  });
+
+  // Add workspace overview
+  workspaceSummary += `\nWorkspace Overview:\n`;
+  workspaceSummary += `This appears to be a ${
+    tables.length > 5 ? 'complex' : 'simple'
+  } database with `;
+  workspaceSummary += `multiple tables that might represent a ${inferWorkspaceType(
+    tables,
+  )} system.\n`;
+
+  // Add workspace summary to vector store
+  try {
+    await vectorStore.addDocuments([
+      {
+        pageContent: workspaceSummary,
+        metadata: { type: 'workspace_summary' },
+      },
+    ]);
+    console.log('Successfully added workspace summary to vector store');
+  } catch (error) {
+    console.error('Error adding workspace summary:', error);
+  }
+
   // 5️⃣ For each table, build a "document" string and index it
   for (const table of tables) {
     console.log(`Processing table: ${table.name}`);
@@ -90,4 +152,48 @@ export async function initVectorStore() {
   }
 
   return vectorStore;
+}
+
+// Helper function to infer workspace type based on table names
+function inferWorkspaceType(tables) {
+  const tableNames = tables.map((t) => t.name.toLowerCase());
+  const nameString = tableNames.join(' ');
+
+  if (
+    nameString.includes('user') ||
+    nameString.includes('account') ||
+    nameString.includes('profile')
+  ) {
+    return 'user management';
+  }
+  if (
+    nameString.includes('product') ||
+    nameString.includes('inventory') ||
+    nameString.includes('order')
+  ) {
+    return 'e-commerce or inventory management';
+  }
+  if (
+    nameString.includes('patient') ||
+    nameString.includes('appointment') ||
+    nameString.includes('medical')
+  ) {
+    return 'healthcare';
+  }
+  if (
+    nameString.includes('student') ||
+    nameString.includes('course') ||
+    nameString.includes('class')
+  ) {
+    return 'educational';
+  }
+  if (
+    nameString.includes('task') ||
+    nameString.includes('project') ||
+    nameString.includes('ticket')
+  ) {
+    return 'project management';
+  }
+
+  return 'data management';
 }
