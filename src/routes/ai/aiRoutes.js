@@ -7,7 +7,7 @@ import Redis from 'redis';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
-import { clearRetrieverCache, createQAChain } from './chain.js';
+import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
 const router = express.Router();
@@ -83,7 +83,8 @@ function estimateQueryCost(query, response) {
       'ai-processing',
       async (job) => {
         try {
-          const { message, jobId, sessionId, workspaceId, workspaceSessionId, history } = job.data;
+          const { message, jobId, sessionId, workspaceId, workspaceSessionId, history, userId } =
+            job.data;
           console.log(
             `Processing job ${jobId} with message: "${message}" for workspace: ${workspaceId}, session: ${sessionId}`,
           );
@@ -128,6 +129,7 @@ function estimateQueryCost(query, response) {
               .map((h) => `Human: ${h.question}\nAI: ${h.answer}`)
               .join('\n\n'),
             workspaceId, // Pass workspaceId for context
+            userId, // Pass userId for personalization
           });
           const endTime = Date.now();
           console.log('Successfully generated answer');
@@ -208,6 +210,7 @@ function estimateQueryCost(query, response) {
           }
 
           clearRetrieverCache(workspaceId);
+          clearUserCache(); // Clear all user cache
 
           // Reinitialize vector store for this workspace
           const vs = await initVectorStore(workspaceId);
@@ -272,6 +275,7 @@ router.post('/chat', async (req, res) => {
     console.log('Received chat request');
     const { message, sessionId: providedSessionId } = req.body;
     const workspaceId = req.workspace._id.toString();
+    const userId = req.user.userId; // Get the authenticated user ID
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
@@ -327,6 +331,7 @@ router.post('/chat', async (req, res) => {
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
         workspaceId, // Pass workspaceId for context
+        userId, // Pass userId for personalization
       });
 
       const endTime = Date.now();
@@ -377,6 +382,7 @@ router.post('/chat', async (req, res) => {
       workspaceId,
       workspaceSessionId,
       history,
+      userId, // Add userId to job data
     });
 
     // Return job ID for status checking
@@ -401,6 +407,7 @@ router.post('/chat/stream', async (req, res) => {
     console.log('Received streaming chat request');
     const { message, sessionId: providedSessionId } = req.body;
     const workspaceId = req.workspace._id.toString();
+    const userId = req.user.userId; // Get the authenticated user ID
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
@@ -469,6 +476,7 @@ router.post('/chat/stream', async (req, res) => {
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
         workspaceId, // Pass workspaceId for context
+        userId, // Pass userId for personalization
       });
 
       // Stream each chunk to the client
@@ -549,6 +557,7 @@ router.post('/chat/stream-events', async (req, res) => {
     console.log('Received streaming events chat request');
     const { message, sessionId: providedSessionId } = req.body;
     const workspaceId = req.workspace._id.toString();
+    const userId = req.user.userId; // Get the authenticated user ID
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
@@ -618,6 +627,7 @@ router.post('/chat/stream-events', async (req, res) => {
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
         workspaceId, // Pass workspaceId for context
+        userId, // Pass userId for personalization
       });
 
       // Stream each event to the client
@@ -843,6 +853,7 @@ router.post('/refresh', async (req, res) => {
         }
 
         clearRetrieverCache(workspaceId);
+        clearUserCache(); // Clear all user cache during refresh
 
         // Reinitialize vector store for this workspace
         const vs = await initVectorStore(workspaceId);

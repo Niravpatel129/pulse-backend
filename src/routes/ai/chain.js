@@ -2,12 +2,19 @@ import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { ChatOpenAI } from '@langchain/openai';
 import { formatDocumentsAsString } from 'langchain/util/document';
+import mongoose from 'mongoose';
 import NodeCache from 'node-cache';
 import { createQAPrompt, enhanceGeneralQueries } from './prompts.js';
 import { getDomainVectorStore } from './vectorStore.js';
 
+// Import User model
+import User from '../../models/User.js';
+
 // Create query result cache with 30 minute TTL - workspace-specific
 const retrievalCache = new NodeCache({ stdTTL: 1800 });
+
+// Cache for user data with 15 minute TTL
+const userCache = new NodeCache({ stdTTL: 900 });
 
 export function createQAChain(vectorStoreData) {
   console.log('Creating QA chain with vector store:', !!vectorStoreData);
@@ -28,6 +35,52 @@ export function createQAChain(vectorStoreData) {
   const retriever = vectorStore.asRetriever({
     k: 8, // Increased from 5 to get more comprehensive context
   });
+
+  // Helper function to get user data
+  const getUserData = async (userId) => {
+    if (!userId) {
+      return null;
+    }
+
+    // Check cache first
+    const cacheKey = `user_${userId}`;
+    const cachedUser = userCache.get(cacheKey);
+    if (cachedUser) {
+      console.log(`Using cached user data for ${userId}`);
+      return cachedUser;
+    }
+
+    try {
+      // Ensure mongoose is connected
+      if (mongoose.connection.readyState !== 1) {
+        console.log('Mongoose not connected, skipping user lookup');
+        return null;
+      }
+
+      // Fetch user data
+      const user = await User.findById(userId).select('-password').lean();
+      if (!user) {
+        console.log(`User not found with ID: ${userId}`);
+        return null;
+      }
+
+      const userData = {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        jobTitle: user.jobTitle || 'Not specified',
+        createdAt: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown',
+      };
+
+      // Cache the user data
+      userCache.set(cacheKey, userData);
+      return userData;
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      return null;
+    }
+  };
 
   // Wrap the retriever to handle potential errors and enhance queries by entity type
   const safeRetriever = async (query, workspaceId) => {
@@ -148,17 +201,34 @@ export function createQAChain(vectorStoreData) {
       context: async (input) => {
         const query = input.query || '';
         const workspaceId = input.workspaceId;
+        const userId = input.userId;
 
         if (!workspaceId) {
           console.error('Missing workspaceId in chain input');
           return 'Error: No workspace context provided.';
         }
 
-        return safeRetriever(query, workspaceId);
+        let contextString = await safeRetriever(query, workspaceId);
+
+        // Add user context if available
+        if (userId) {
+          const userData = await getUserData(userId);
+          if (userData) {
+            contextString += `\n\nCurrent User Information:\nName: ${userData.name}\nEmail: ${userData.email}\nRole: ${userData.role}\nJob Title: ${userData.jobTitle}`;
+          }
+        }
+
+        return contextString;
       },
       query: (input) => input.query || '',
       history: (input) => input.history || '',
       workspace: (input) => `Workspace ID: ${input.workspaceId || 'Unknown'}`,
+      currentUser: async (input) => {
+        if (!input.userId) return '';
+
+        const userData = await getUserData(input.userId);
+        return userData ? `Current User: ${userData.name} (${userData.role})` : '';
+      },
     },
     prompt,
     llm,
@@ -209,6 +279,20 @@ export function clearRetrieverCache(workspaceId) {
     // Clear all cache
     retrievalCache.flushAll();
     console.log('All retriever cache cleared');
+  }
+  return true;
+}
+
+// New function to clear user cache
+export function clearUserCache(userId) {
+  if (userId) {
+    // Clear specific user
+    userCache.del(`user_${userId}`);
+    console.log(`User cache cleared for ${userId}`);
+  } else {
+    // Clear all user cache
+    userCache.flushAll();
+    console.log('All user cache cleared');
   }
   return true;
 }

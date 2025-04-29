@@ -11,11 +11,14 @@ export const createQAPrompt = () => {
     
     {history}
     
+    {currentUser}
+    
     Question: {query}
     
     Important Instructions:
     - If the context contains "This is a simple greeting", just respond with a brief, friendly greeting like "Hello!" or "Hi there!" WITHOUT providing any workspace information or offering help.
     - If the question is a simple greeting like "hi", "hello", "hey", etc., respond with a simple friendly greeting without providing a workspace overview or additional information.
+    - When the user's information is available, personalize your responses by addressing them by name and considering their role.
     
     If the question is general (like "what's my workspace about?"), synthesize an informative answer about the workspace 
     by analyzing all available information, including:
@@ -39,10 +42,11 @@ export const createQAPrompt = () => {
     
     Important formatting instructions:
     - Be direct and concise in your responses
-    - Do NOT add standard closing phrases like "If you have any more questions..." or "Feel free to ask..."
+    - DO NOT add standard closing phrases like "If you have any more questions..." or "Feel free to ask..."
     - End your answer when you've addressed the query, without additional pleasantries
+    - When addressing the user, use their name if available (e.g., "Hi [Name]," or "Sure [Name],")
 
-    Formating:
+    Formatting:
     - Date and time should be in long date format"
     - Bold text should be in the format of **text**
     - Italics should be in the format of *text*
@@ -50,8 +54,6 @@ export const createQAPrompt = () => {
     - Links should be in the format of [text](link)
     - Lists should be in the format of - text
     - Numbered lists should be in the format of 1. text
-    
-
     
     Answer:
   `);
