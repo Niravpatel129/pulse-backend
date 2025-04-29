@@ -5,39 +5,6 @@ import { initVectorStore } from './vectorStore.js';
 const router = express.Router();
 let qaChain;
 
-// Add a simple test endpoint to check if the API is accessible
-router.get('/test', async (req, res) => {
-  return res.json({ message: 'AI API is working!' });
-});
-
-// Add a more detailed test endpoint that also initializes the vector store
-router.get('/test-chain', async (req, res) => {
-  try {
-    if (!qaChain) {
-      console.log('Initializing vector store for test...');
-      const vs = await initVectorStore();
-
-      console.log('Creating QA chain for test...');
-      qaChain = createQAChain(vs);
-
-      console.log('QA chain available:', !!qaChain);
-      console.log('QA chain invoke method type:', typeof qaChain.invoke);
-    }
-
-    return res.json({
-      success: true,
-      chainInitialized: !!qaChain,
-      invokeMethodAvailable: typeof qaChain.invoke === 'function',
-    });
-  } catch (err) {
-    console.error('Error in /test-chain endpoint:', err);
-    return res.status(500).json({
-      error: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    });
-  }
-});
-
 router.post('/chat', async (req, res) => {
   try {
     console.log('Received chat request');
