@@ -219,12 +219,22 @@ router.use(limiter);
 
 // Helper function to extract answer from different result structures
 function extractAnswer(result) {
+  // Handle object responses
   if (result && result.answer) return result.answer;
   if (result && result.text) return result.text;
   if (result && result.response) return result.response;
   if (result && result.output) return result.output;
-  if (result && typeof result === 'object') return JSON.stringify(result);
-  return String(result);
+
+  // Convert to string if it's an object
+  let textResult =
+    typeof result === 'object' && result !== null ? JSON.stringify(result) : String(result);
+
+  // If the answer contains the explicit "Answer:" prefix, extract only what follows
+  if (textResult.includes('Answer:')) {
+    return textResult.split('Answer:').pop().trim();
+  }
+
+  return textResult.trim();
 }
 
 // Async chat endpoint with queue processing
@@ -337,6 +347,313 @@ router.post('/chat', async (req, res) => {
       error: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
     });
+  }
+});
+
+// Streaming chat endpoint for real-time responses
+router.post('/chat/stream', async (req, res) => {
+  try {
+    console.log('Received streaming chat request');
+    const { message, sessionId: providedSessionId } = req.body;
+
+    // Generate a new session ID if none provided
+    const sessionId = providedSessionId || uuidv4();
+
+    if (!message) {
+      return res.status(400).json({ error: 'Missing `message` in request body.' });
+    }
+
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Prevents Nginx from buffering the response
+
+    // Retrieve conversation history for this session
+    let history = conversationHistory.get(sessionId) || [];
+
+    // For new conversations or if cache was cleared, initialize history array
+    if (!Array.isArray(history)) {
+      history = [];
+    }
+
+    // Initialize QA chain if needed (we can't use queue for streaming)
+    if (!qaChain) {
+      console.log('Initializing vector store and QA chain for streaming...');
+
+      // Check if vector store is cached
+      let vs;
+      if (vectorStoreCache.get('vectorStore')) {
+        console.log('Using cached vector store');
+        vs = vectorStoreCache.get('vectorStore');
+      } else {
+        console.log('Initializing new vector store...');
+        vs = await initVectorStore();
+        // Cache the vector store
+        vectorStoreCache.set('vectorStore', vs);
+      }
+
+      console.log('Creating QA chain...');
+      qaChain = createQAChain(vs);
+      console.log('QA chain initialized:', !!qaChain);
+    }
+
+    // Send initial event
+    res.write(`data: ${JSON.stringify({ type: 'start', sessionId })}\n\n`);
+
+    // Process query with streaming
+    console.log(`Processing streaming query: "${message}" with sessionId: ${sessionId}`);
+    const startTime = Date.now();
+
+    let fullAnswer = '';
+    let streamStarted = false;
+
+    try {
+      // Use stream instead of invoke
+      const stream = await qaChain.stream({
+        query: message,
+        history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
+      });
+
+      // Stream each chunk to the client
+      for await (const chunk of stream) {
+        if (!streamStarted && chunk) {
+          streamStarted = true;
+        }
+
+        fullAnswer += chunk;
+
+        // Send chunk as SSE
+        res.write(`data: ${JSON.stringify({ type: 'chunk', content: chunk })}\n\n`);
+
+        // Flush to ensure delivery
+        if (res.flush) {
+          res.flush();
+        }
+      }
+
+      // Update conversation history with the complete answer
+      history.push({ question: message, answer: fullAnswer });
+
+      // Limit history size to prevent token overflow (keep last 10 exchanges)
+      if (history.length > 10) {
+        history = history.slice(history.length - 10);
+      }
+
+      // Save updated history
+      conversationHistory.set(sessionId, history);
+
+      const endTime = Date.now();
+
+      // Estimate cost
+      const costEstimate = estimateQueryCost(message, fullAnswer);
+      console.log(
+        chalk.green(`💰 AI Streaming Query Cost Estimate: $${costEstimate.totalCost.toFixed(6)}`) +
+          chalk.yellow(
+            ` (Input: ~${costEstimate.inputTokens} tokens, Output: ~${
+              costEstimate.outputTokens
+            } tokens, Time: ${(endTime - startTime) / 1000}s)`,
+          ),
+      );
+
+      // Send completion event
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'end',
+          sessionId,
+          processingTime: (endTime - startTime) / 1000,
+        })}\n\n`,
+      );
+
+      // End response
+      res.end();
+    } catch (error) {
+      console.error('Error in streaming:', error);
+      // Send error event
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
+  } catch (err) {
+    console.error('Error in /chat/stream endpoint:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: err.message,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+      });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+      res.end();
+    }
+  }
+});
+
+// Streaming chat events endpoint for detailed chain execution
+router.post('/chat/stream-events', async (req, res) => {
+  try {
+    console.log('Received streaming events chat request');
+    const { message, sessionId: providedSessionId } = req.body;
+
+    // Generate a new session ID if none provided
+    const sessionId = providedSessionId || uuidv4();
+
+    if (!message) {
+      return res.status(400).json({ error: 'Missing `message` in request body.' });
+    }
+
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Prevents Nginx from buffering the response
+
+    // Retrieve conversation history for this session
+    let history = conversationHistory.get(sessionId) || [];
+
+    // For new conversations or if cache was cleared, initialize history array
+    if (!Array.isArray(history)) {
+      history = [];
+    }
+
+    // Initialize QA chain if needed (we can't use queue for streaming)
+    if (!qaChain) {
+      console.log('Initializing vector store and QA chain for streaming events...');
+
+      // Check if vector store is cached
+      let vs;
+      if (vectorStoreCache.get('vectorStore')) {
+        console.log('Using cached vector store');
+        vs = vectorStoreCache.get('vectorStore');
+      } else {
+        console.log('Initializing new vector store...');
+        vs = await initVectorStore();
+        // Cache the vector store
+        vectorStoreCache.set('vectorStore', vs);
+      }
+
+      console.log('Creating QA chain...');
+      qaChain = createQAChain(vs);
+      console.log('QA chain initialized:', !!qaChain);
+    }
+
+    // Send initial event
+    res.write(`data: ${JSON.stringify({ type: 'start', sessionId })}\n\n`);
+
+    // Process query with streaming
+    console.log(`Processing streaming events query: "${message}" with sessionId: ${sessionId}`);
+    const startTime = Date.now();
+
+    let fullAnswer = '';
+    let finalAnswer = '';
+    let streamStarted = false;
+
+    try {
+      // Use astream_events instead of stream for detailed events
+      const eventStream = await qaChain.astream_events({
+        query: message,
+        history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
+      });
+
+      // Stream each event to the client
+      for await (const event of eventStream) {
+        // Send the event data as SSE
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'event',
+            event: event.event,
+            name: event.name,
+            data: event.data,
+          })}\n\n`,
+        );
+
+        // Extract answer chunks from model stream events
+        if (event.event === 'on_chat_model_stream' && event.data && event.data.chunk) {
+          if (!streamStarted) {
+            streamStarted = true;
+          }
+
+          const content = event.data.chunk.content || '';
+          if (content) {
+            fullAnswer += content;
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'chunk',
+                content: content,
+              })}\n\n`,
+            );
+          }
+        }
+
+        // Save final answer when completed
+        if (event.event === 'on_chain_end') {
+          if (event.data && event.data.output) {
+            finalAnswer = extractAnswer(event.data.output);
+          }
+        }
+
+        // Flush to ensure delivery
+        if (res.flush) {
+          res.flush();
+        }
+      }
+
+      // Use the most appropriate answer (finalAnswer or fullAnswer)
+      const answer = finalAnswer || fullAnswer;
+
+      // Update conversation history with the complete answer
+      history.push({ question: message, answer });
+
+      // Limit history size to prevent token overflow (keep last 10 exchanges)
+      if (history.length > 10) {
+        history = history.slice(history.length - 10);
+      }
+
+      // Save updated history
+      conversationHistory.set(sessionId, history);
+
+      const endTime = Date.now();
+
+      // Estimate cost
+      const costEstimate = estimateQueryCost(message, answer);
+      console.log(
+        chalk.green(
+          `💰 AI Streaming Events Query Cost Estimate: $${costEstimate.totalCost.toFixed(6)}`,
+        ) +
+          chalk.yellow(
+            ` (Input: ~${costEstimate.inputTokens} tokens, Output: ~${
+              costEstimate.outputTokens
+            } tokens, Time: ${(endTime - startTime) / 1000}s)`,
+          ),
+      );
+
+      // Send completion event
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'end',
+          sessionId,
+          processingTime: (endTime - startTime) / 1000,
+          answer,
+        })}\n\n`,
+      );
+
+      // End response
+      res.end();
+    } catch (error) {
+      console.error('Error in streaming events:', error);
+      // Send error event
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
+  } catch (err) {
+    console.error('Error in /chat/stream-events endpoint:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: err.message,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+      });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+      res.end();
+    }
   }
 });
 

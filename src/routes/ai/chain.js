@@ -18,6 +18,7 @@ export function createQAChain(vectorStore) {
     temperature: 0.1, // Slight increase in creativity for more natural responses
     maxConcurrency: 5, // Limit concurrent API calls
     cache: true, // Enable OpenAI's internal caching
+    streaming: true, // Enable streaming for the model
   });
 
   // Create a retriever wrapped in a function to handle errors
