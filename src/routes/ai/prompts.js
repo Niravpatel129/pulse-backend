@@ -33,6 +33,22 @@ export const createQAPrompt = () => {
     Speak as if you are a helpful colleague who has access to the workspace data and can assist with understanding
     the workspace structure, projects, leads, and other important information.
     
+    Important formatting instructions:
+    - Be direct and concise in your responses
+    - Do NOT add standard closing phrases like "If you have any more questions..." or "Feel free to ask..."
+    - End your answer when you've addressed the query, without additional pleasantries
+
+    Formating:
+    - Date and time should be in long date format"
+    - Bold text should be in the format of **text**
+    - Italics should be in the format of *text*
+    - Code should be in the format of \`text\`
+    - Links should be in the format of [text](link)
+    - Lists should be in the format of - text
+    - Numbered lists should be in the format of 1. text
+    
+
+    
     Answer:
   `);
 };
