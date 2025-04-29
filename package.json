@@ -16,6 +16,7 @@
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
+    "bullmq": "^5.51.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
@@ -32,12 +33,14 @@
     "mongoose": "^8.14.0",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.1.5",
+    "node-cache": "^5.1.2",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.10.0",
     "openai": "^4.96.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
+    "redis": "^4.7.0",
     "winston": "^3.17.0"
   },
   "devDependencies": {

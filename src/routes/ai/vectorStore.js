@@ -14,413 +14,455 @@ import Workspace from '../../models/Workspace.js';
 dotenv.config();
 
 let vectorStore;
+let mongoClient;
+
+// Domain-specific vector stores for better search performance
+const vectorStores = {
+  workspace: null,
+  projects: null,
+  users: null,
+  leads: null,
+  meetings: null,
+  tables: null,
+};
 
 export async function initVectorStore() {
-  if (vectorStore) return vectorStore;
+  // Return cached vector store if already initialized
+  if (vectorStore) {
+    console.log('Using cached vector store');
+    return vectorStore;
+  }
 
-  // 1️⃣ Connect MongoDB Driver (for vector search)
-  const client = new MongoClient(process.env.MONGO_URI);
-  await client.connect();
+  console.log('Initializing vector store...');
 
-  const collection = client.db(process.env.DB_NAME).collection(process.env.VECTOR_COLLECTION_NAME);
+  // 1️⃣ Connect MongoDB Driver with connection pooling for better scalability
+  mongoClient = new MongoClient(process.env.MONGO_URI, {
+    maxPoolSize: 50,
+    minPoolSize: 5,
+    maxIdleTimeMS: 30000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+  });
 
-  // 2️⃣ Build the LangChain-backed Atlas vector store
+  await mongoClient.connect();
+  console.log('Connected to MongoDB');
+
+  const collection = mongoClient
+    .db(process.env.DB_NAME)
+    .collection(process.env.VECTOR_COLLECTION_NAME);
+
+  // 2️⃣ Build the LangChain-backed Atlas vector store with optimized settings
   const embeddings = new OpenAIEmbeddings({
     openAIApiKey: process.env.OPENAI_API_KEY,
     modelName: 'text-embedding-ada-002',
     stripNewLines: true,
+    batchSize: 1000, // Increase batch size for better performance
+    maxConcurrency: 5, // Limit concurrent API calls
   });
 
-  // Create an in-memory vector store for testing instead
+  // Use memory store for development or when MongoDB Atlas Vector Search is not available
   const { MemoryVectorStore } = await import('langchain/vectorstores/memory');
+
+  // Create domain-specific vector stores for better search performance
+  for (const domain of Object.keys(vectorStores)) {
+    vectorStores[domain] = new MemoryVectorStore(embeddings);
+  }
+
+  // Main vector store that can search across all domains
   vectorStore = new MemoryVectorStore(embeddings);
 
-  // 3️⃣ Connect Mongoose (for reading your schemas & records)
+  // 3️⃣ Connect Mongoose with optimized connection settings
   await mongoose.connect(process.env.MONGO_URI, {
     dbName: process.env.DB_NAME,
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    socketTimeoutMS: 30000,
   });
+  console.log('Connected to Mongoose');
 
-  // 4️⃣ Fetch all tables in this workspace
-  const tables = await Table.find().lean();
-  console.log(`Found ${tables.length} tables`);
+  // 4️⃣ Load data in parallel for better performance
+  await Promise.all([
+    loadWorkspaceData(),
+    loadProjectData(),
+    loadUserData(),
+    loadLeadData(),
+    loadMeetingData(),
+    loadTableData(),
+  ]);
 
-  // Fetch projects, users, leads and meetings
-  const projects = await Project.find().populate('team.user manager createdBy').lean();
-  const users = await User.find().select('-password').lean();
-  const leadForms = await LeadForm.find().lean();
-  const leadSubmissions = await Submission.find().limit(100).lean();
-  const meetings = await Meeting.find().populate('participants.participant organizer').lean();
-  const workspaces = await Workspace.find().populate('members.user createdBy').lean();
+  console.log('Vector store initialization complete');
+  return vectorStore;
+}
 
-  console.log(
-    `Found ${projects.length} projects, ${users.length} users, ${leadForms.length} lead forms, ${meetings.length} meetings`,
-  );
-
-  // Create a workspace summary document
-  let workspaceSummary = `This workspace contains ${tables.length} tables, ${projects.length} projects, ${users.length} users, and ${leadForms.length} lead forms.\n\n`;
-
-  // Add detailed information about each table
-  workspaceSummary += `DATABASE TABLES:\n`;
-  tables.forEach((table) => {
-    const columnCount = table.columns?.length || 0;
-    workspaceSummary += `Table "${table.name}":\n`;
-    workspaceSummary += `- Contains ${columnCount} columns\n`;
-
-    // Add column information
-    if (table.columns && table.columns.length > 0) {
-      workspaceSummary += `- Key columns: ${table.columns
-        .slice(0, 5)
-        .map((c) => c.name)
-        .join(', ')}\n`;
-    }
-
-    // Add table description if it exists
-    if (table.description) {
-      workspaceSummary += `- Description: ${table.description}\n`;
-    }
-
-    // Infer relationships between tables (based on column names)
-    const possibleRelationColumns =
-      table.columns?.filter(
-        (col) =>
-          col.name.toLowerCase().includes('id') ||
-          col.name.toLowerCase().includes('ref') ||
-          col.name.toLowerCase().endsWith('_id'),
-      ) || [];
-
-    if (possibleRelationColumns.length > 0) {
-      workspaceSummary += `- Possible relationships: ${possibleRelationColumns
-        .map((c) => c.name)
-        .join(', ')}\n`;
-    }
-
-    workspaceSummary += '\n';
-  });
-
-  // Add workspace overview
-  workspaceSummary += `WORKSPACE OVERVIEW:\n`;
-  if (workspaces && workspaces.length > 0) {
-    const primaryWorkspace = workspaces[0];
-    workspaceSummary += `Workspace Name: ${primaryWorkspace.name || 'Unnamed'}\n`;
-    workspaceSummary += `Description: ${
-      primaryWorkspace.description || 'No description available'
-    }\n`;
-    workspaceSummary += `Created by: ${primaryWorkspace.createdBy?.name || 'Unknown'}\n`;
-    workspaceSummary += `Member count: ${primaryWorkspace.members?.length || 0}\n\n`;
-  }
-
-  // Add project information
-  workspaceSummary += `PROJECTS:\n`;
-  projects.forEach((project) => {
-    workspaceSummary += `Project "${project.name}":\n`;
-    workspaceSummary += `- Status: ${project.status}\n`;
-    workspaceSummary += `- Stage: ${project.stage}\n`;
-    workspaceSummary += `- Description: ${project.description || 'No description'}\n`;
-    workspaceSummary += `- Manager: ${project.manager?.name || 'Unassigned'}\n`;
-    workspaceSummary += `- Team Members: ${project.team?.length || 0}\n`;
-    workspaceSummary += `- Start Date: ${
-      project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not set'
-    }\n`;
-    workspaceSummary += `- Target Date: ${
-      project.targetDate ? new Date(project.targetDate).toLocaleDateString() : 'Not set'
-    }\n`;
-    workspaceSummary += `- Created By: ${project.createdBy?.name || 'Unknown'}\n\n`;
-  });
-
-  // Add team members information
-  workspaceSummary += `TEAM MEMBERS:\n`;
-  users.forEach((user) => {
-    workspaceSummary += `${user.name} (${user.email}):\n`;
-    workspaceSummary += `- Role: ${user.role}\n`;
-    workspaceSummary += `- Job Title: ${user.jobTitle || 'Not specified'}\n`;
-    workspaceSummary += `- Bio: ${user.bio || 'No bio available'}\n\n`;
-  });
-
-  // Add lead forms information
-  workspaceSummary += `LEAD FORMS:\n`;
-  leadForms.forEach((form) => {
-    workspaceSummary += `Lead Form "${form.title}":\n`;
-    workspaceSummary += `- Description: ${form.description || 'No description'}\n`;
-    workspaceSummary += `- Status: ${form.status}\n`;
-    workspaceSummary += `- Submissions: ${form.submissions?.length || 0}\n\n`;
-  });
-
-  // Add meetings information
-  workspaceSummary += `UPCOMING MEETINGS:\n`;
-  const today = new Date();
-  const upcomingMeetings = meetings.filter((m) => new Date(m.date) >= today);
-
-  if (upcomingMeetings.length === 0) {
-    workspaceSummary += `No upcoming meetings scheduled.\n\n`;
-  } else {
-    upcomingMeetings.forEach((meeting) => {
-      workspaceSummary += `Meeting "${meeting.title}":\n`;
-      workspaceSummary += `- Date: ${new Date(meeting.date).toLocaleDateString()}\n`;
-      workspaceSummary += `- Time: ${meeting.startTime} - ${meeting.endTime}\n`;
-      workspaceSummary += `- Type: ${meeting.type}\n`;
-      workspaceSummary += `- Status: ${meeting.status}\n`;
-      workspaceSummary += `- Organizer: ${meeting.organizer?.name || 'Unknown'}\n`;
-      workspaceSummary += `- Participants: ${meeting.participants?.length || 0}\n\n`;
-    });
-  }
-
-  workspaceSummary += `This appears to be a ${inferWorkspaceType(
-    tables,
-    projects,
-    leadForms,
-  )} system.\n`;
-
-  // Add workspace summary to vector store
+// Helper function to load workspace data
+async function loadWorkspaceData() {
   try {
-    await vectorStore.addDocuments([
-      {
-        pageContent: workspaceSummary,
-        metadata: { type: 'workspace_summary' },
-      },
-    ]);
-    console.log('Successfully added workspace summary to vector store');
+    const workspaces = await Workspace.find().populate('members.user createdBy').lean();
+
+    if (!workspaces || workspaces.length === 0) {
+      console.log('No workspace data found');
+      return;
+    }
+
+    console.log(`Loading ${workspaces.length} workspaces`);
+
+    const workspaceSummaries = [];
+
+    for (const workspace of workspaces) {
+      const summary = `
+        Workspace: ${workspace.name || 'Unnamed'}
+        ID: ${workspace._id}
+        Description: ${workspace.description || 'No description available'}
+        Created by: ${workspace.createdBy?.name || 'Unknown'}
+        Member count: ${workspace.members?.length || 0}
+        Created at: ${
+          workspace.createdAt ? new Date(workspace.createdAt).toLocaleDateString() : 'Unknown'
+        }
+      `;
+
+      workspaceSummaries.push({
+        pageContent: summary,
+        metadata: {
+          type: 'workspace',
+          id: workspace._id.toString(),
+          name: workspace.name,
+        },
+      });
+    }
+
+    // Add to main vector store and domain-specific store
+    await vectorStore.addDocuments(workspaceSummaries);
+    await vectorStores.workspace.addDocuments(workspaceSummaries);
+
+    console.log(`Added ${workspaceSummaries.length} workspace summaries to vector stores`);
   } catch (error) {
-    console.error('Error adding workspace summary:', error);
+    console.error('Error loading workspace data:', error);
   }
+}
 
-  // 5️⃣ For each table, build a "document" string and index it
-  for (const table of tables) {
-    console.log(`Processing table: ${table.name}`);
-    // 5a. Fetch up to N sample records
-    const recs = await Record.find({ tableId: table._id }).limit(50).lean();
-    console.log(`Found ${recs.length} records for table ${table.name}`);
+// Helper function to load project data
+async function loadProjectData() {
+  try {
+    const projects = await Project.find().populate('team.user manager createdBy').lean();
 
-    // 5b. Build a schema+records text blob
-    const schemaText =
-      `Table "${table.name}" has columns:\n` +
-      (table.columns || []).map((c) => `  - ${c.name} (id:${c.id}, type:${c.type})`).join('\n') +
-      '\nRecords:\n' +
-      recs
-        .map((r) => {
-          // Handle different formats of values (Map or Object)
+    if (!projects || projects.length === 0) {
+      console.log('No project data found');
+      return;
+    }
+
+    console.log(`Loading ${projects.length} projects`);
+
+    // Process in chunks of 50 for better memory management
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < projects.length; i += CHUNK_SIZE) {
+      const chunk = projects.slice(i, i + CHUNK_SIZE);
+
+      const projectDocs = chunk.map((project) => ({
+        pageContent: `
+          Project: ${project.name}
+          ID: ${project._id}
+          Status: ${project.status}
+          Stage: ${project.stage}
+          Description: ${project.description || 'No description'}
+          Project Type: ${project.projectType || 'Not specified'}
+          Manager: ${project.manager?.name || 'Unassigned'} (${project.manager?.email || ''})
+          Lead Source: ${project.leadSource || 'Not specified'}
+          Start Date: ${
+            project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not set'
+          }
+          Target Date: ${
+            project.targetDate ? new Date(project.targetDate).toLocaleDateString() : 'Not set'
+          }
+          Team Size: ${project.team?.length || 0}
+          Created By: ${project.createdBy?.name || 'Unknown'}
+          Created At: ${
+            project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'Unknown'
+          }
+        `,
+        metadata: {
+          type: 'project',
+          id: project._id.toString(),
+          name: project.name,
+          status: project.status,
+        },
+      }));
+
+      // Add to main vector store and domain-specific store
+      await vectorStore.addDocuments(projectDocs);
+      await vectorStores.projects.addDocuments(projectDocs);
+
+      console.log(`Added ${projectDocs.length} project documents (chunk ${i / CHUNK_SIZE + 1})`);
+    }
+  } catch (error) {
+    console.error('Error loading project data:', error);
+  }
+}
+
+// Helper function to load user data
+async function loadUserData() {
+  try {
+    const users = await User.find().select('-password').lean();
+
+    if (!users || users.length === 0) {
+      console.log('No user data found');
+      return;
+    }
+
+    console.log(`Loading ${users.length} users`);
+
+    const userDocs = users.map((user) => ({
+      pageContent: `
+        User: ${user.name}
+        ID: ${user._id}
+        Email: ${user.email}
+        Role: ${user.role}
+        Job Title: ${user.jobTitle || 'Not specified'}
+        Bio: ${user.bio || 'No bio available'}
+        Created At: ${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Unknown'}
+      `,
+      metadata: {
+        type: 'user',
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    }));
+
+    // Add to main vector store and domain-specific store
+    await vectorStore.addDocuments(userDocs);
+    await vectorStores.users.addDocuments(userDocs);
+
+    console.log(`Added ${userDocs.length} user documents`);
+  } catch (error) {
+    console.error('Error loading user data:', error);
+  }
+}
+
+// Helper function to load lead data
+async function loadLeadData() {
+  try {
+    const leadForms = await LeadForm.find().lean();
+    const leadSubmissions = await Submission.find().limit(200).lean();
+
+    if (
+      (!leadForms || leadForms.length === 0) &&
+      (!leadSubmissions || leadSubmissions.length === 0)
+    ) {
+      console.log('No lead data found');
+      return;
+    }
+
+    console.log(`Loading ${leadForms.length} lead forms and ${leadSubmissions.length} submissions`);
+
+    const leadFormDocs = leadForms.map((form) => ({
+      pageContent: `
+        Lead Form: ${form.title}
+        ID: ${form._id}
+        Description: ${form.description || 'No description'}
+        Status: ${form.status}
+        Fields: ${form.fields?.map((f) => f.label).join(', ') || 'None'}
+        Submission Count: ${form.submissions?.length || 0}
+        Created At: ${form.createdAt ? new Date(form.createdAt).toLocaleDateString() : 'Unknown'}
+      `,
+      metadata: {
+        type: 'lead_form',
+        id: form._id.toString(),
+        title: form.title,
+      },
+    }));
+
+    // Process submissions
+    const leadSubmissionDocs = leadSubmissions.map((submission) => {
+      // Extract field values
+      const fieldValues =
+        submission.fieldValues?.map((fv) => `${fv.fieldId}: ${fv.value}`).join(', ') || 'No values';
+
+      return {
+        pageContent: `
+          Lead Submission ID: ${submission._id}
+          Form ID: ${submission.formId}
+          Values: ${fieldValues}
+          Created At: ${
+            submission.createdAt ? new Date(submission.createdAt).toLocaleDateString() : 'Unknown'
+          }
+        `,
+        metadata: {
+          type: 'lead_submission',
+          id: submission._id.toString(),
+          formId: submission.formId?.toString(),
+        },
+      };
+    });
+
+    // Combine documents
+    const leadDocs = [...leadFormDocs, ...leadSubmissionDocs];
+
+    // Add to main vector store and domain-specific store
+    await vectorStore.addDocuments(leadDocs);
+    await vectorStores.leads.addDocuments(leadDocs);
+
+    console.log(`Added ${leadDocs.length} lead documents`);
+  } catch (error) {
+    console.error('Error loading lead data:', error);
+  }
+}
+
+// Helper function to load meeting data
+async function loadMeetingData() {
+  try {
+    const meetings = await Meeting.find().populate('participants.participant organizer').lean();
+
+    if (!meetings || meetings.length === 0) {
+      console.log('No meeting data found');
+      return;
+    }
+
+    console.log(`Loading ${meetings.length} meetings`);
+
+    const meetingDocs = meetings.map((meeting) => ({
+      pageContent: `
+        Meeting: ${meeting.title}
+        ID: ${meeting._id}
+        Type: ${meeting.type}
+        Date: ${meeting.date ? new Date(meeting.date).toLocaleDateString() : 'Not set'}
+        Time: ${meeting.startTime || 'Not set'} - ${meeting.endTime || 'Not set'}
+        Status: ${meeting.status}
+        Description: ${meeting.description || 'No description'}
+        Location: ${meeting.location || 'Not specified'}
+        Organizer: ${meeting.organizer?.name || 'Unknown'}
+        Participants: ${
+          meeting.participants?.map((p) => p.participant?.name || 'Unknown').join(', ') || 'None'
+        }
+        Created At: ${
+          meeting.createdAt ? new Date(meeting.createdAt).toLocaleDateString() : 'Unknown'
+        }
+      `,
+      metadata: {
+        type: 'meeting',
+        id: meeting._id.toString(),
+        title: meeting.title,
+        date: meeting.date ? new Date(meeting.date).toISOString() : null,
+      },
+    }));
+
+    // Add to main vector store and domain-specific store
+    await vectorStore.addDocuments(meetingDocs);
+    await vectorStores.meetings.addDocuments(meetingDocs);
+
+    console.log(`Added ${meetingDocs.length} meeting documents`);
+  } catch (error) {
+    console.error('Error loading meeting data:', error);
+  }
+}
+
+// Helper function to load table data
+async function loadTableData() {
+  try {
+    const tables = await Table.find().lean();
+
+    if (!tables || tables.length === 0) {
+      console.log('No table data found');
+      return;
+    }
+
+    console.log(`Loading ${tables.length} tables`);
+
+    // Process each table
+    for (const table of tables) {
+      console.log(`Processing table: ${table.name}`);
+
+      // Fetch sample records
+      const records = await Record.find({ tableId: table._id }).limit(50).lean();
+      console.log(`Found ${records.length} records for table ${table.name}`);
+
+      // Build schema description
+      const schemaDescription = `
+        Table Name: ${table.name}
+        ID: ${table._id}
+        Description: ${table.description || 'No description'}
+        Columns: ${table.columns?.map((c) => `${c.name} (${c.type})`).join(', ') || 'None'}
+      `;
+
+      // Create records description
+      let recordsDescription = '';
+      if (records.length > 0) {
+        recordsDescription = 'Sample Records:\n';
+        records.forEach((record, index) => {
           let valEntries = [];
-          if (r.values) {
-            if (typeof r.values.entries === 'function') {
+          if (record.values) {
+            if (typeof record.values.entries === 'function') {
               // It's a Map
-              valEntries = Array.from(r.values.entries());
-            } else if (typeof r.values === 'object') {
+              valEntries = Array.from(record.values.entries());
+            } else if (typeof record.values === 'object') {
               // It's a regular object
-              valEntries = Object.entries(r.values);
+              valEntries = Object.entries(record.values);
             }
           }
 
-          const vals = valEntries
+          const values = valEntries
             .map(([colId, val]) => {
               const col = table.columns?.find((c) => c.id === colId);
               return `${col?.name || colId}: ${JSON.stringify(val)}`;
             })
             .join(', ');
-          return `  • ${r.rowId || 'Unknown'}: ${vals}`;
-        })
-        .join('\n');
 
-    console.log(`Adding document for table ${table.name} to vector store`);
-    // 5c. Upsert into vector store
-    try {
-      await vectorStore.addDocuments([
-        {
-          pageContent: schemaText,
-          metadata: { tableName: table.name },
+          recordsDescription += `  Record ${index + 1}: ${values}\n`;
+        });
+      }
+
+      // Create document
+      const tableDoc = {
+        pageContent: `${schemaDescription}\n${recordsDescription}`,
+        metadata: {
+          type: 'table',
+          id: table._id.toString(),
+          name: table.name,
         },
-      ]);
-      console.log(`Successfully added document for table ${table.name}`);
-    } catch (error) {
-      console.error(`Error adding document for table ${table.name}:`, error);
+      };
+
+      // Add to main vector store and domain-specific store
+      await vectorStore.addDocuments([tableDoc]);
+      await vectorStores.tables.addDocuments([tableDoc]);
+
+      console.log(`Added table ${table.name} to vector stores`);
     }
+  } catch (error) {
+    console.error('Error loading table data:', error);
   }
-
-  // Add detailed project information
-  for (const project of projects) {
-    const projectText = `
-      Project: ${project.name}
-      ID: ${project._id}
-      Status: ${project.status}
-      Stage: ${project.stage}
-      Description: ${project.description || 'No description'}
-      Project Type: ${project.projectType || 'Not specified'}
-      Manager: ${project.manager?.name || 'Unassigned'} (${project.manager?.email || ''})
-      Lead Source: ${project.leadSource || 'Not specified'}
-      Start Date: ${
-        project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not set'
-      }
-      Target Date: ${
-        project.targetDate ? new Date(project.targetDate).toLocaleDateString() : 'Not set'
-      }
-      Active: ${project.isActive ? 'Yes' : 'No'}
-      Closed: ${project.isClosed ? 'Yes' : 'No'}
-      Archived: ${project.isArchived ? 'Yes' : 'No'}
-      
-      Team Members:
-      ${
-        project.team && project.team.length > 0
-          ? project.team
-              .map(
-                (member) =>
-                  `- ${member.user?.name || 'Unknown'} (${member.user?.email || 'No email'})`,
-              )
-              .join('\n')
-          : 'No team members assigned'
-      }
-      
-      Tasks:
-      ${
-        project.tasks && project.tasks.length > 0
-          ? project.tasks
-              .map(
-                (task) =>
-                  `- ${task.title} (${task.status}) - Due: ${
-                    task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No due date'
-                  }`,
-              )
-              .join('\n')
-          : 'No tasks added'
-      }
-    `;
-
-    try {
-      await vectorStore.addDocuments([
-        {
-          pageContent: projectText,
-          metadata: {
-            type: 'project',
-            projectId: project._id.toString(),
-            projectName: project.name,
-          },
-        },
-      ]);
-      console.log(`Successfully added project ${project.name} to vector store`);
-    } catch (error) {
-      console.error(`Error adding project ${project.name}:`, error);
-    }
-  }
-
-  // Add detailed user information
-  for (const user of users) {
-    const userText = `
-      User: ${user.name}
-      ID: ${user._id}
-      Email: ${user.email}
-      Role: ${user.role}
-      Job Title: ${user.jobTitle || 'Not specified'}
-      Bio: ${user.bio || 'No bio available'}
-      Phone: ${user.phone || 'Not provided'}
-      Active: ${user.isActive ? 'Yes' : 'No'}
-      Email Verified: ${user.isEmailVerified ? 'Yes' : 'No'}
-      Two-Factor Enabled: ${user.twoFactorEnabled ? 'Yes' : 'No'}
-      Timezone: ${user.timezone || 'Not set'}
-    `;
-
-    try {
-      await vectorStore.addDocuments([
-        {
-          pageContent: userText,
-          metadata: {
-            type: 'user',
-            userId: user._id.toString(),
-            userName: user.name,
-            userEmail: user.email,
-          },
-        },
-      ]);
-      console.log(`Successfully added user ${user.name} to vector store`);
-    } catch (error) {
-      console.error(`Error adding user ${user.name}:`, error);
-    }
-  }
-
-  // Add lead form information
-  for (const form of leadForms) {
-    const formText = `
-      Lead Form: ${form.title}
-      ID: ${form._id}
-      Description: ${form.description || 'No description'}
-      Status: ${form.status}
-      Number of Elements: ${form.elements?.length || 0}
-      Number of Submissions: ${form.submissions?.length || 0}
-      Created By: ${form.createdBy?.toString() || 'Unknown'}
-      
-      Form Elements:
-      ${
-        form.elements && form.elements.length > 0
-          ? form.elements
-              .map(
-                (element) =>
-                  `- ${element.label || element.id} (${element.type || 'No type'}) ${
-                    element.required ? '(Required)' : '(Optional)'
-                  }`,
-              )
-              .join('\n')
-          : 'No form elements defined'
-      }
-    `;
-
-    try {
-      await vectorStore.addDocuments([
-        {
-          pageContent: formText,
-          metadata: {
-            type: 'leadForm',
-            formId: form._id.toString(),
-            formTitle: form.title,
-          },
-        },
-      ]);
-      console.log(`Successfully added lead form ${form.title} to vector store`);
-    } catch (error) {
-      console.error(`Error adding lead form ${form.title}:`, error);
-    }
-  }
-
-  // Add meeting information
-  for (const meeting of meetings) {
-    const meetingText = `
-      Meeting: ${meeting.title}
-      ID: ${meeting._id}
-      Description: ${meeting.description || 'No description'}
-      Date: ${new Date(meeting.date).toLocaleDateString()}
-      Time: ${meeting.startTime} - ${meeting.endTime}
-      Location: ${meeting.location || 'Not specified'}
-      Type: ${meeting.type}
-      Status: ${meeting.status}
-      Organizer: ${meeting.organizer?.name || 'Unknown'} (${meeting.organizer?.email || ''})
-      
-      Participants:
-      ${
-        meeting.participants && meeting.participants.length > 0
-          ? meeting.participants
-              .map((p) => `- ${p.participant?.name || 'Unknown'} (${p.type})`)
-              .join('\n')
-          : 'No participants added'
-      }
-    `;
-
-    try {
-      await vectorStore.addDocuments([
-        {
-          pageContent: meetingText,
-          metadata: {
-            type: 'meeting',
-            meetingId: meeting._id.toString(),
-            meetingTitle: meeting.title,
-            meetingDate: meeting.date,
-          },
-        },
-      ]);
-      console.log(`Successfully added meeting ${meeting.title} to vector store`);
-    } catch (error) {
-      console.error(`Error adding meeting ${meeting.title}:`, error);
-    }
-  }
-
-  return vectorStore;
 }
 
-// Helper function to infer workspace type based on table names and other elements
+// Get domain-specific vector store for more focused searches
+export function getDomainVectorStore(domain) {
+  if (!vectorStores[domain]) {
+    console.warn(`Domain vector store for '${domain}' not found, using main vector store`);
+    return vectorStore;
+  }
+  return vectorStores[domain];
+}
+
+// Clean up function to close connections when shutting down
+export async function closeVectorStore() {
+  if (mongoClient) {
+    await mongoClient.close();
+    console.log('MongoDB connection closed');
+  }
+
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+    console.log('Mongoose connection closed');
+  }
+
+  // Clear vector stores
+  vectorStore = null;
+  for (const domain of Object.keys(vectorStores)) {
+    vectorStores[domain] = null;
+  }
+
+  console.log('Vector stores cleared');
+}
+
+// Function to infer workspace type
 function inferWorkspaceType(tables, projects, leadForms) {
   const tableNames = tables.map((t) => t.name.toLowerCase()).join(' ');
   const projectCount = projects?.length || 0;
