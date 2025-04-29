@@ -12,6 +12,8 @@ export const createQAPrompt = () => {
     {history}
     
     {currentUser}
+
+    Current Path: {currentPath}
     
     Question: {query}
     

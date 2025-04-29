@@ -338,6 +338,7 @@ export function createQAChain(vectorStoreData) {
 
         return contextString;
       },
+      currentPath: (input) => input.currentPath || '',
       query: (input) => input.query || '',
       history: (input) => input.history || '',
       workspace: (input) => `Workspace ID: ${input.workspaceId || 'Unknown'}`,

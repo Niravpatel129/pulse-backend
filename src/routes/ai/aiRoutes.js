@@ -405,9 +405,10 @@ router.post('/chat', async (req, res) => {
 router.post('/chat/stream', async (req, res) => {
   try {
     console.log('Received streaming chat request');
-    const { message, sessionId: providedSessionId } = req.body;
+    const { message, sessionId: providedSessionId, pageContext } = req.body;
     const workspaceId = req.workspace._id.toString();
     const userId = req.user.userId; // Get the authenticated user ID
+    const currentPath = pageContext?.path;
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
@@ -477,6 +478,7 @@ router.post('/chat/stream', async (req, res) => {
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
         workspaceId, // Pass workspaceId for context
         userId, // Pass userId for personalization
+        currentPath, // Pass current page path for context
       });
 
       // Stream each chunk to the client
