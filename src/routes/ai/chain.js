@@ -6,11 +6,14 @@ import NodeCache from 'node-cache';
 import { createQAPrompt, enhanceGeneralQueries } from './prompts.js';
 import { getDomainVectorStore } from './vectorStore.js';
 
-// Create query result cache with 30 minute TTL
+// Create query result cache with 30 minute TTL - workspace-specific
 const retrievalCache = new NodeCache({ stdTTL: 1800 });
 
-export function createQAChain(vectorStore) {
-  console.log('Creating QA chain with vector store:', !!vectorStore);
+export function createQAChain(vectorStoreData) {
+  console.log('Creating QA chain with vector store:', !!vectorStoreData);
+
+  // Extract the main vector store from the data structure
+  const vectorStore = vectorStoreData.main || vectorStoreData;
 
   const llm = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
@@ -27,8 +30,13 @@ export function createQAChain(vectorStore) {
   });
 
   // Wrap the retriever to handle potential errors and enhance queries by entity type
-  const safeRetriever = async (query) => {
-    console.log('Retrieving documents for query:', query);
+  const safeRetriever = async (query, workspaceId) => {
+    if (!workspaceId) {
+      console.error('No workspaceId provided for retrieval');
+      return 'Error: No workspace context available.';
+    }
+
+    console.log(`Retrieving documents for query: "${query}" in workspace: ${workspaceId}`);
 
     try {
       // Make sure we're passing a string to the retriever
@@ -39,11 +47,11 @@ export function createQAChain(vectorStore) {
           ? query.query
           : 'What tables are available?';
 
-      // Check if we have cached results
-      const cacheKey = `retrieval_${q}`;
+      // Check if we have cached results - use workspace-specific cache key
+      const cacheKey = `retrieval_${workspaceId}_${q}`;
       const cachedResult = retrievalCache.get(cacheKey);
       if (cachedResult) {
-        console.log('Using cached retrieval result');
+        console.log('Using cached retrieval result for workspace:', workspaceId);
         return cachedResult;
       }
 
@@ -76,8 +84,8 @@ export function createQAChain(vectorStore) {
 
       // If entity types were detected, get additional context for those entity types
       for (const entityType of entityTypes) {
-        // Use domain-specific vector stores if available
-        const domainVS = getDomainVectorStore(entityType);
+        // Use domain-specific vector stores if available - with workspace isolation
+        const domainVS = getDomainVectorStore(workspaceId, entityType);
         const domainRetriever = domainVS ? domainVS.asRetriever({ k: 6 }) : retriever;
 
         fetchPromises.push(
@@ -109,12 +117,12 @@ export function createQAChain(vectorStore) {
         }
       }
 
-      console.log(`Retrieved ${uniqueDocs.length} unique documents`);
+      console.log(`Retrieved ${uniqueDocs.length} unique documents for workspace ${workspaceId}`);
 
       // Convert to string format
       const docsString = formatDocumentsAsString(uniqueDocs);
 
-      // Cache the result
+      // Cache the result with workspace-specific key
       retrievalCache.set(cacheKey, docsString);
 
       return docsString;
@@ -133,10 +141,18 @@ export function createQAChain(vectorStore) {
       // Map inputs to feed into prompt with optimized context retrieval
       context: async (input) => {
         const query = input.query || '';
-        return safeRetriever(query);
+        const workspaceId = input.workspaceId;
+
+        if (!workspaceId) {
+          console.error('Missing workspaceId in chain input');
+          return 'Error: No workspace context provided.';
+        }
+
+        return safeRetriever(query, workspaceId);
       },
       query: (input) => input.query || '',
       history: (input) => input.history || '',
+      workspace: (input) => `Workspace ID: ${input.workspaceId || 'Unknown'}`,
     },
     prompt,
     llm,
@@ -173,8 +189,20 @@ function detectEntityTypes(query) {
 }
 
 // Helper to clear cache when needed
-export function clearRetrieverCache() {
-  retrievalCache.flushAll();
-  console.log('Retriever cache cleared');
+export function clearRetrieverCache(workspaceId) {
+  if (workspaceId) {
+    // Clear cache for specific workspace
+    const keys = retrievalCache.keys();
+    for (const key of keys) {
+      if (key.includes(`_${workspaceId}_`)) {
+        retrievalCache.del(key);
+      }
+    }
+    console.log(`Retriever cache cleared for workspace ${workspaceId}`);
+  } else {
+    // Clear all cache
+    retrievalCache.flushAll();
+    console.log('All retriever cache cleared');
+  }
   return true;
 }

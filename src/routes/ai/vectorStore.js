@@ -13,30 +13,34 @@ import Workspace from '../../models/Workspace.js';
 
 dotenv.config();
 
-let vectorStore;
-let mongoClient;
+// Store vectorStores by workspaceId
+const workspaceVectorStores = new Map();
 
 // Domain-specific vector stores for better search performance
-const vectorStores = {
+const createDomainStores = () => ({
   workspace: null,
   projects: null,
   users: null,
   leads: null,
   meetings: null,
   tables: null,
-};
+});
 
-export async function initVectorStore() {
-  // Return cached vector store if already initialized
-  if (vectorStore) {
-    console.log('Using cached vector store');
-    return vectorStore;
+export async function initVectorStore(workspaceId) {
+  if (!workspaceId) {
+    throw new Error('workspaceId is required for vector store initialization');
   }
 
-  console.log('Initializing vector store...');
+  console.log(`Initializing vector store for workspace: ${workspaceId}`);
+
+  // Return cached vector store if already initialized for this workspace
+  if (workspaceVectorStores.has(workspaceId)) {
+    console.log('Using cached vector store for workspace');
+    return workspaceVectorStores.get(workspaceId);
+  }
 
   // 1️⃣ Connect MongoDB Driver with connection pooling for better scalability
-  mongoClient = new MongoClient(process.env.MONGO_URI, {
+  const mongoClient = new MongoClient(process.env.MONGO_URI, {
     maxPoolSize: 50,
     minPoolSize: 5,
     maxIdleTimeMS: 30000,
@@ -63,94 +67,107 @@ export async function initVectorStore() {
   // Use memory store for development or when MongoDB Atlas Vector Search is not available
   const { MemoryVectorStore } = await import('langchain/vectorstores/memory');
 
-  // Create domain-specific vector stores for better search performance
-  for (const domain of Object.keys(vectorStores)) {
-    vectorStores[domain] = new MemoryVectorStore(embeddings);
+  // Create domain-specific vector stores for this workspace
+  const domainStores = createDomainStores();
+
+  for (const domain of Object.keys(domainStores)) {
+    domainStores[domain] = new MemoryVectorStore(embeddings);
   }
 
-  // Main vector store that can search across all domains
-  vectorStore = new MemoryVectorStore(embeddings);
+  // Main vector store that can search across all domains for this workspace
+  const vectorStore = new MemoryVectorStore(embeddings);
 
   // 3️⃣ Connect Mongoose with optimized connection settings
-  await mongoose.connect(process.env.MONGO_URI, {
-    dbName: process.env.DB_NAME,
-    maxPoolSize: 10,
-    minPoolSize: 2,
-    socketTimeoutMS: 30000,
-  });
-  console.log('Connected to Mongoose');
+  if (mongoose.connection.readyState === 0) {
+    await mongoose.connect(process.env.MONGO_URI, {
+      dbName: process.env.DB_NAME,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      socketTimeoutMS: 30000,
+    });
+    console.log('Connected to Mongoose');
+  }
 
-  // 4️⃣ Load data in parallel for better performance
+  // 4️⃣ Load data in parallel for better performance - filtered by workspaceId
   await Promise.all([
-    loadWorkspaceData(),
-    loadProjectData(),
-    loadUserData(),
-    loadLeadData(),
-    loadMeetingData(),
-    loadTableData(),
+    loadWorkspaceData(workspaceId, vectorStore, domainStores.workspace),
+    loadProjectData(workspaceId, vectorStore, domainStores.projects),
+    loadUserData(workspaceId, vectorStore, domainStores.users),
+    loadLeadData(workspaceId, vectorStore, domainStores.leads),
+    loadMeetingData(workspaceId, vectorStore, domainStores.meetings),
+    loadTableData(workspaceId, vectorStore, domainStores.tables),
   ]);
 
-  console.log('Vector store initialization complete');
-  return vectorStore;
+  // Store workspace-specific stores
+  workspaceVectorStores.set(workspaceId, {
+    main: vectorStore,
+    domains: domainStores,
+    mongoClient,
+  });
+
+  console.log(`Vector store initialization complete for workspace: ${workspaceId}`);
+  return { main: vectorStore, domains: domainStores };
 }
 
 // Helper function to load workspace data
-async function loadWorkspaceData() {
+async function loadWorkspaceData(workspaceId, vectorStore, domainStore) {
   try {
-    const workspaces = await Workspace.find().populate('members.user createdBy').lean();
+    // Load only the specific workspace
+    const workspace = await Workspace.findById(workspaceId)
+      .populate('members.user createdBy')
+      .lean();
 
-    if (!workspaces || workspaces.length === 0) {
-      console.log('No workspace data found');
+    if (!workspace) {
+      console.log(`Workspace ${workspaceId} not found`);
       return;
     }
 
-    console.log(`Loading ${workspaces.length} workspaces`);
+    console.log(`Loading workspace: ${workspace.name}`);
 
-    const workspaceSummaries = [];
+    const summary = `
+      Workspace: ${workspace.name || 'Unnamed'}
+      ID: ${workspace._id}
+      Description: ${workspace.description || 'No description available'}
+      Created by: ${workspace.createdBy?.name || 'Unknown'}
+      Member count: ${workspace.members?.length || 0}
+      Created at: ${
+        workspace.createdAt ? new Date(workspace.createdAt).toLocaleDateString() : 'Unknown'
+      }
+    `;
 
-    for (const workspace of workspaces) {
-      const summary = `
-        Workspace: ${workspace.name || 'Unnamed'}
-        ID: ${workspace._id}
-        Description: ${workspace.description || 'No description available'}
-        Created by: ${workspace.createdBy?.name || 'Unknown'}
-        Member count: ${workspace.members?.length || 0}
-        Created at: ${
-          workspace.createdAt ? new Date(workspace.createdAt).toLocaleDateString() : 'Unknown'
-        }
-      `;
-
-      workspaceSummaries.push({
-        pageContent: summary,
-        metadata: {
-          type: 'workspace',
-          id: workspace._id.toString(),
-          name: workspace.name,
-        },
-      });
-    }
+    const workspaceSummary = {
+      pageContent: summary,
+      metadata: {
+        type: 'workspace',
+        id: workspace._id.toString(),
+        name: workspace.name,
+      },
+    };
 
     // Add to main vector store and domain-specific store
-    await vectorStore.addDocuments(workspaceSummaries);
-    await vectorStores.workspace.addDocuments(workspaceSummaries);
+    await vectorStore.addDocuments([workspaceSummary]);
+    await domainStore.addDocuments([workspaceSummary]);
 
-    console.log(`Added ${workspaceSummaries.length} workspace summaries to vector stores`);
+    console.log(`Added workspace summary to vector stores for ${workspace.name}`);
   } catch (error) {
     console.error('Error loading workspace data:', error);
   }
 }
 
 // Helper function to load project data
-async function loadProjectData() {
+async function loadProjectData(workspaceId, vectorStore, domainStore) {
   try {
-    const projects = await Project.find().populate('team.user manager createdBy').lean();
+    // Only load projects associated with this workspace
+    const projects = await Project.find({ workspace: workspaceId })
+      .populate('team.user manager createdBy')
+      .lean();
 
     if (!projects || projects.length === 0) {
-      console.log('No project data found');
+      console.log(`No project data found for workspace ${workspaceId}`);
       return;
     }
 
-    console.log(`Loading ${projects.length} projects`);
+    console.log(`Loading ${projects.length} projects for workspace ${workspaceId}`);
 
     // Process in chunks of 50 for better memory management
     const CHUNK_SIZE = 50;
@@ -184,12 +201,13 @@ async function loadProjectData() {
           id: project._id.toString(),
           name: project.name,
           status: project.status,
+          workspaceId: workspaceId,
         },
       }));
 
       // Add to main vector store and domain-specific store
       await vectorStore.addDocuments(projectDocs);
-      await vectorStores.projects.addDocuments(projectDocs);
+      await domainStore.addDocuments(projectDocs);
 
       console.log(`Added ${projectDocs.length} project documents (chunk ${i / CHUNK_SIZE + 1})`);
     }
@@ -199,16 +217,32 @@ async function loadProjectData() {
 }
 
 // Helper function to load user data
-async function loadUserData() {
+async function loadUserData(workspaceId, vectorStore, domainStore) {
   try {
-    const users = await User.find().select('-password').lean();
+    // Find the workspace to get member users
+    const workspace = await Workspace.findById(workspaceId).lean();
 
-    if (!users || users.length === 0) {
-      console.log('No user data found');
+    if (!workspace || !workspace.members || workspace.members.length === 0) {
+      console.log(`No members found for workspace ${workspaceId}`);
       return;
     }
 
-    console.log(`Loading ${users.length} users`);
+    // Get user IDs from workspace members
+    const memberUserIds = workspace.members.map((member) => member.user);
+
+    // Only load users who are members of this workspace
+    const users = await User.find({
+      _id: { $in: memberUserIds },
+    })
+      .select('-password')
+      .lean();
+
+    if (!users || users.length === 0) {
+      console.log(`No user data found for workspace ${workspaceId}`);
+      return;
+    }
+
+    console.log(`Loading ${users.length} users for workspace ${workspaceId}`);
 
     const userDocs = users.map((user) => ({
       pageContent: `
@@ -226,34 +260,44 @@ async function loadUserData() {
         name: user.name,
         email: user.email,
         role: user.role,
+        workspaceId: workspaceId,
       },
     }));
 
     // Add to main vector store and domain-specific store
     await vectorStore.addDocuments(userDocs);
-    await vectorStores.users.addDocuments(userDocs);
+    await domainStore.addDocuments(userDocs);
 
-    console.log(`Added ${userDocs.length} user documents`);
+    console.log(`Added ${userDocs.length} user documents for workspace ${workspaceId}`);
   } catch (error) {
     console.error('Error loading user data:', error);
   }
 }
 
 // Helper function to load lead data
-async function loadLeadData() {
+async function loadLeadData(workspaceId, vectorStore, domainStore) {
   try {
-    const leadForms = await LeadForm.find().lean();
-    const leadSubmissions = await Submission.find().limit(200).lean();
+    // Only load lead forms for this workspace
+    const leadForms = await LeadForm.find({ workspace: workspaceId }).lean();
 
-    if (
-      (!leadForms || leadForms.length === 0) &&
-      (!leadSubmissions || leadSubmissions.length === 0)
-    ) {
-      console.log('No lead data found');
+    if (!leadForms || leadForms.length === 0) {
+      console.log(`No lead forms found for workspace ${workspaceId}`);
       return;
     }
 
-    console.log(`Loading ${leadForms.length} lead forms and ${leadSubmissions.length} submissions`);
+    // Get form IDs to filter submissions
+    const formIds = leadForms.map((form) => form._id);
+
+    // Only get submissions for forms in this workspace
+    const leadSubmissions = await Submission.find({
+      formId: { $in: formIds },
+    })
+      .limit(200)
+      .lean();
+
+    console.log(
+      `Loading ${leadForms.length} lead forms and ${leadSubmissions.length} submissions for workspace ${workspaceId}`,
+    );
 
     const leadFormDocs = leadForms.map((form) => ({
       pageContent: `
@@ -269,6 +313,7 @@ async function loadLeadData() {
         type: 'lead_form',
         id: form._id.toString(),
         title: form.title,
+        workspaceId: workspaceId,
       },
     }));
 
@@ -291,6 +336,7 @@ async function loadLeadData() {
           type: 'lead_submission',
           id: submission._id.toString(),
           formId: submission.formId?.toString(),
+          workspaceId: workspaceId,
         },
       };
     });
@@ -298,27 +344,32 @@ async function loadLeadData() {
     // Combine documents
     const leadDocs = [...leadFormDocs, ...leadSubmissionDocs];
 
-    // Add to main vector store and domain-specific store
-    await vectorStore.addDocuments(leadDocs);
-    await vectorStores.leads.addDocuments(leadDocs);
+    if (leadDocs.length > 0) {
+      // Add to main vector store and domain-specific store
+      await vectorStore.addDocuments(leadDocs);
+      await domainStore.addDocuments(leadDocs);
 
-    console.log(`Added ${leadDocs.length} lead documents`);
+      console.log(`Added ${leadDocs.length} lead documents for workspace ${workspaceId}`);
+    }
   } catch (error) {
     console.error('Error loading lead data:', error);
   }
 }
 
 // Helper function to load meeting data
-async function loadMeetingData() {
+async function loadMeetingData(workspaceId, vectorStore, domainStore) {
   try {
-    const meetings = await Meeting.find().populate('participants.participant organizer').lean();
+    // Only load meetings associated with this workspace
+    const meetings = await Meeting.find({ workspace: workspaceId })
+      .populate('participants.participant organizer')
+      .lean();
 
     if (!meetings || meetings.length === 0) {
-      console.log('No meeting data found');
+      console.log(`No meeting data found for workspace ${workspaceId}`);
       return;
     }
 
-    console.log(`Loading ${meetings.length} meetings`);
+    console.log(`Loading ${meetings.length} meetings for workspace ${workspaceId}`);
 
     const meetingDocs = meetings.map((meeting) => ({
       pageContent: `
@@ -343,30 +394,32 @@ async function loadMeetingData() {
         id: meeting._id.toString(),
         title: meeting.title,
         date: meeting.date ? new Date(meeting.date).toISOString() : null,
+        workspaceId: workspaceId,
       },
     }));
 
     // Add to main vector store and domain-specific store
     await vectorStore.addDocuments(meetingDocs);
-    await vectorStores.meetings.addDocuments(meetingDocs);
+    await domainStore.addDocuments(meetingDocs);
 
-    console.log(`Added ${meetingDocs.length} meeting documents`);
+    console.log(`Added ${meetingDocs.length} meeting documents for workspace ${workspaceId}`);
   } catch (error) {
     console.error('Error loading meeting data:', error);
   }
 }
 
 // Helper function to load table data
-async function loadTableData() {
+async function loadTableData(workspaceId, vectorStore, domainStore) {
   try {
-    const tables = await Table.find().lean();
+    // Only load tables for this workspace
+    const tables = await Table.find({ workspace: workspaceId }).lean();
 
     if (!tables || tables.length === 0) {
-      console.log('No table data found');
+      console.log(`No table data found for workspace ${workspaceId}`);
       return;
     }
 
-    console.log(`Loading ${tables.length} tables`);
+    console.log(`Loading ${tables.length} tables for workspace ${workspaceId}`);
 
     // Process each table
     for (const table of tables) {
@@ -418,14 +471,15 @@ async function loadTableData() {
           type: 'table',
           id: table._id.toString(),
           name: table.name,
+          workspaceId: workspaceId,
         },
       };
 
       // Add to main vector store and domain-specific store
       await vectorStore.addDocuments([tableDoc]);
-      await vectorStores.tables.addDocuments([tableDoc]);
+      await domainStore.addDocuments([tableDoc]);
 
-      console.log(`Added table ${table.name} to vector stores`);
+      console.log(`Added table ${table.name} to vector stores for workspace ${workspaceId}`);
     }
   } catch (error) {
     console.error('Error loading table data:', error);
@@ -433,33 +487,53 @@ async function loadTableData() {
 }
 
 // Get domain-specific vector store for more focused searches
-export function getDomainVectorStore(domain) {
-  if (!vectorStores[domain]) {
-    console.warn(`Domain vector store for '${domain}' not found, using main vector store`);
-    return vectorStore;
+export function getDomainVectorStore(workspaceId, domain) {
+  const workspaceStore = workspaceVectorStores.get(workspaceId);
+
+  if (!workspaceStore) {
+    console.warn(`Vector store for workspace '${workspaceId}' not found`);
+    return null;
   }
-  return vectorStores[domain];
+
+  if (!workspaceStore.domains[domain]) {
+    console.warn(
+      `Domain vector store for '${domain}' not found in workspace ${workspaceId}, using main vector store`,
+    );
+    return workspaceStore.main;
+  }
+
+  return workspaceStore.domains[domain];
 }
 
 // Clean up function to close connections when shutting down
-export async function closeVectorStore() {
-  if (mongoClient) {
-    await mongoClient.close();
-    console.log('MongoDB connection closed');
+export async function closeVectorStore(workspaceId) {
+  if (workspaceId) {
+    // Close specific workspace vector store
+    const workspaceStore = workspaceVectorStores.get(workspaceId);
+    if (workspaceStore) {
+      if (workspaceStore.mongoClient) {
+        await workspaceStore.mongoClient.close();
+      }
+      workspaceVectorStores.delete(workspaceId);
+      console.log(`Vector store for workspace ${workspaceId} closed and cleared`);
+    }
+  } else {
+    // Close all vector stores
+    for (const [id, store] of workspaceVectorStores.entries()) {
+      if (store.mongoClient) {
+        await store.mongoClient.close();
+      }
+    }
+
+    workspaceVectorStores.clear();
+    console.log('All vector stores cleared');
   }
 
-  if (mongoose.connection.readyState !== 0) {
+  // Only disconnect mongoose if this was the last workspace
+  if (workspaceVectorStores.size === 0 && mongoose.connection.readyState !== 0) {
     await mongoose.disconnect();
     console.log('Mongoose connection closed');
   }
-
-  // Clear vector stores
-  vectorStore = null;
-  for (const domain of Object.keys(vectorStores)) {
-    vectorStores[domain] = null;
-  }
-
-  console.log('Vector stores cleared');
 }
 
 // Function to infer workspace type
@@ -512,4 +586,10 @@ function inferWorkspaceType(tables, projects, leadForms) {
   }
 
   return types.join(' and ');
+}
+
+// For backward compatibility
+export function clearRetrieverCache(workspaceId) {
+  // Clear any retriever caches specific to this workspace
+  console.log(`Clearing retriever cache for workspace ${workspaceId}`);
 }

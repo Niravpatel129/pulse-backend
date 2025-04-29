@@ -11,7 +11,8 @@ import { clearRetrieverCache, createQAChain } from './chain.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
 const router = express.Router();
-let qaChain;
+// Store chains by workspace ID instead of a single global chain
+const qaChains = new Map();
 
 // Create caches with TTL
 const vectorStoreCache = new NodeCache({ stdTTL: 3600 }); // 1 hour
@@ -87,9 +88,11 @@ function estimateQueryCost(query, response) {
             `Processing job ${jobId} with message: "${message}" for workspace: ${workspaceId}, session: ${sessionId}`,
           );
 
-          // Initialize QA chain if not already done
-          if (!qaChain) {
-            console.log('Initializing vector store and QA chain from worker...');
+          // Initialize QA chain if not already done for this workspace
+          if (!qaChains.has(workspaceId)) {
+            console.log(
+              `Initializing vector store and QA chain for workspace ${workspaceId} from worker...`,
+            );
 
             // Check if vector store is cached
             let vs;
@@ -104,9 +107,14 @@ function estimateQueryCost(query, response) {
             }
 
             console.log('Creating QA chain...');
-            qaChain = createQAChain(vs);
-            console.log('QA chain initialized:', !!qaChain);
+            const workspaceChain = createQAChain(vs);
+            // Store chain by workspace ID
+            qaChains.set(workspaceId, workspaceChain);
+            console.log(`QA chain initialized for workspace ${workspaceId}`);
           }
+
+          // Get the chain for this workspace
+          const workspaceChain = qaChains.get(workspaceId);
 
           // Get current conversation history
           let sessionHistory = history || conversationHistory.get(workspaceSessionId) || [];
@@ -114,7 +122,7 @@ function estimateQueryCost(query, response) {
           // Process query with conversation context
           console.log(`Worker processing query: "${message}"`);
           const startTime = Date.now();
-          const result = await qaChain.invoke({
+          const result = await workspaceChain.invoke({
             query: message,
             history: sessionHistory
               .map((h) => `Human: ${h.question}\nAI: ${h.answer}`)
@@ -188,6 +196,9 @@ function estimateQueryCost(query, response) {
           // Clear caches for this workspace
           vectorStoreCache.del(`vectorStore:${workspaceId}`);
 
+          // Remove the QA chain for this workspace
+          qaChains.delete(workspaceId);
+
           // Clear conversation histories for this workspace
           const keys = conversationHistory.keys();
           for (const key of keys) {
@@ -198,15 +209,13 @@ function estimateQueryCost(query, response) {
 
           clearRetrieverCache(workspaceId);
 
-          // Reset the QA chain if it was using this workspace's vector store
-          qaChain = null;
-
           // Reinitialize vector store for this workspace
           const vs = await initVectorStore(workspaceId);
           vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
 
-          // Recreate QA chain
-          qaChain = createQAChain(vs);
+          // Recreate QA chain for this workspace
+          const workspaceChain = createQAChain(vs);
+          qaChains.set(workspaceId, workspaceChain);
 
           console.log(`Vector store refresh completed for workspace ${workspaceId}, job ${job.id}`);
           return { success: true, workspaceId };
@@ -283,9 +292,9 @@ router.post('/chat', async (req, res) => {
 
     // If Redis is unavailable, or traffic is low, process directly
     if (!isRedisAvailable || (await isLowTraffic())) {
-      // Initialize QA chain if needed
-      if (!qaChain) {
-        console.log('Initializing vector store and QA chain for direct processing...');
+      // Initialize QA chain if needed for this workspace
+      if (!qaChains.has(workspaceId)) {
+        console.log(`Initializing vector store and QA chain for workspace ${workspaceId}...`);
 
         // Check if vector store is cached
         let vs;
@@ -300,16 +309,21 @@ router.post('/chat', async (req, res) => {
         }
 
         console.log('Creating QA chain...');
-        qaChain = createQAChain(vs);
-        console.log('QA chain initialized:', !!qaChain);
+        const workspaceChain = createQAChain(vs);
+        // Store chain by workspace ID
+        qaChains.set(workspaceId, workspaceChain);
+        console.log(`QA chain initialized for workspace ${workspaceId}`);
       }
+
+      // Get the chain for this workspace
+      const workspaceChain = qaChains.get(workspaceId);
 
       // Process query directly with conversation history
       console.log(`Processing query directly: "${message}" with sessionId: ${workspaceSessionId}`);
       const startTime = Date.now();
 
       // Add history to the query context
-      const result = await qaChain.invoke({
+      const result = await workspaceChain.invoke({
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
         workspaceId, // Pass workspaceId for context
@@ -411,9 +425,9 @@ router.post('/chat/stream', async (req, res) => {
       history = [];
     }
 
-    // Initialize QA chain if needed (we can't use queue for streaming)
-    if (!qaChain) {
-      console.log('Initializing vector store and QA chain for streaming...');
+    // Initialize QA chain if needed for this workspace
+    if (!qaChains.has(workspaceId)) {
+      console.log(`Initializing vector store and QA chain for workspace ${workspaceId}...`);
 
       // Check if vector store is cached
       let vs;
@@ -428,9 +442,14 @@ router.post('/chat/stream', async (req, res) => {
       }
 
       console.log('Creating QA chain...');
-      qaChain = createQAChain(vs);
-      console.log('QA chain initialized:', !!qaChain);
+      const workspaceChain = createQAChain(vs);
+      // Store chain by workspace ID
+      qaChains.set(workspaceId, workspaceChain);
+      console.log(`QA chain initialized for workspace ${workspaceId}`);
     }
+
+    // Get the chain for this workspace
+    const workspaceChain = qaChains.get(workspaceId);
 
     // Send initial event
     res.write(`data: ${JSON.stringify({ type: 'start', sessionId })}\n\n`);
@@ -446,7 +465,7 @@ router.post('/chat/stream', async (req, res) => {
 
     try {
       // Use stream instead of invoke
-      const stream = await qaChain.stream({
+      const stream = await workspaceChain.stream({
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
         workspaceId, // Pass workspaceId for context
@@ -554,9 +573,9 @@ router.post('/chat/stream-events', async (req, res) => {
       history = [];
     }
 
-    // Initialize QA chain if needed (we can't use queue for streaming)
-    if (!qaChain) {
-      console.log('Initializing vector store and QA chain for streaming events...');
+    // Initialize QA chain if needed for this workspace
+    if (!qaChains.has(workspaceId)) {
+      console.log(`Initializing vector store and QA chain for workspace ${workspaceId}...`);
 
       // Check if vector store is cached
       let vs;
@@ -571,9 +590,14 @@ router.post('/chat/stream-events', async (req, res) => {
       }
 
       console.log('Creating QA chain...');
-      qaChain = createQAChain(vs);
-      console.log('QA chain initialized:', !!qaChain);
+      const workspaceChain = createQAChain(vs);
+      // Store chain by workspace ID
+      qaChains.set(workspaceId, workspaceChain);
+      console.log(`QA chain initialized for workspace ${workspaceId}`);
     }
+
+    // Get the chain for this workspace
+    const workspaceChain = qaChains.get(workspaceId);
 
     // Send initial event
     res.write(`data: ${JSON.stringify({ type: 'start', sessionId })}\n\n`);
@@ -590,7 +614,7 @@ router.post('/chat/stream-events', async (req, res) => {
 
     try {
       // Use astream_events instead of stream for detailed events
-      const eventStream = await qaChain.astream_events({
+      const eventStream = await workspaceChain.astream_events({
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
         workspaceId, // Pass workspaceId for context
@@ -806,8 +830,11 @@ router.post('/refresh', async (req, res) => {
 
         // Clear caches for this workspace
         vectorStoreCache.del(`vectorStore:${workspaceId}`);
+
+        // Remove the QA chain for this workspace
+        qaChains.delete(workspaceId);
+
         // Clear conversation histories for this workspace
-        // This is a simple approach - for production, consider a more efficient method
         const keys = conversationHistory.keys();
         for (const key of keys) {
           if (key.startsWith(`${workspaceId}:`)) {
@@ -817,15 +844,13 @@ router.post('/refresh', async (req, res) => {
 
         clearRetrieverCache(workspaceId);
 
-        // Reset the QA chain
-        qaChain = null;
-
         // Reinitialize vector store for this workspace
         const vs = await initVectorStore(workspaceId);
         vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
 
-        // Recreate QA chain
-        qaChain = createQAChain(vs);
+        // Recreate QA chain for this workspace
+        const workspaceChain = createQAChain(vs);
+        qaChains.set(workspaceId, workspaceChain);
 
         console.log(`Vector store refresh completed successfully for workspace ${workspaceId}`);
         return res.json({
