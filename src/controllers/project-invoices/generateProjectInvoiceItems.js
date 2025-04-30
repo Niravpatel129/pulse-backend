@@ -381,7 +381,7 @@ const generateProjectInvoiceItems = async (req, res) => {
       createdBy: del.createdBy || null,
       fields: {
         ...fieldsWithoutRecords,
-        linkedItems: relatedRecords,
+        ...(relatedRecords.length > 0 && { linkedItems: relatedRecords }),
       },
       attachments: del.attachments || [],
     });
