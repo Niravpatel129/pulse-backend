@@ -32,6 +32,7 @@ import noteRoutes from './src/routes/noteRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
 import pipelineRoutes from './src/routes/pipelineRoutes.js';
 import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
+import projectInvoiceRoutes from './src/routes/projectInvoiceRoutes.js';
 import projectModuleRoutes from './src/routes/projectModuleRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import stripeRoutes from './src/routes/stripeRoutes.js';
@@ -39,7 +40,6 @@ import tablesRoutes from './src/routes/tablesRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
 import AppError from './src/utils/AppError.js';
-
 // Load env vars
 dotenv.config();
 
@@ -144,6 +144,9 @@ app.use(`${routesPrefix}/product-catalog`, productCatalogRoutes);
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
 app.use(`${routesPrefix}/stripe`, stripeRoutes);
+
+// project invoices
+app.use(`${routesPrefix}/project-invoices`, projectInvoiceRoutes);
 
 // Invoices
 app.use(`${routesPrefix}/invoices`, invoiceRoutes);
