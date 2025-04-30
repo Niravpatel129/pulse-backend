@@ -59,6 +59,38 @@ const attachmentSchema = new mongoose.Schema(
   { _id: true },
 );
 
+// Time entry schema
+const timeEntrySchema = new mongoose.Schema(
+  {
+    hours: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    description: {
+      type: String,
+    },
+    recordedBy: {
+      id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+      },
+      name: String,
+      avatar: String,
+    },
+    recordedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    isBillable: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: true },
+);
+
 const kanbanTaskSchema = new mongoose.Schema(
   {
     projectId: {
@@ -124,6 +156,11 @@ const kanbanTaskSchema = new mongoose.Schema(
     },
     comments: [commentSchema],
     attachments: [attachmentSchema],
+    timeEntries: [timeEntrySchema],
+    totalHours: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
