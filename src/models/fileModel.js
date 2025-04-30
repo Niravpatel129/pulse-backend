@@ -50,7 +50,6 @@ const fileSchema = new mongoose.Schema(
 
 // Indexes for better query performance
 fileSchema.index({ workspaceId: 1, moduleId: 1 });
-fileSchema.index({ storagePath: 1 }, { unique: true });
 fileSchema.index({ status: 1 });
 
 const File = mongoose.model('File', fileSchema);

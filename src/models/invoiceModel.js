@@ -83,12 +83,12 @@ const invoiceSchema = new mongoose.Schema(
 );
 
 // Add indexes for better query performance
-invoiceSchema.index({ invoiceNumber: 1 });
+// invoiceSchema.index({ invoiceNumber: 1 }); - Removed as it's already indexed with unique: true
 invoiceSchema.index({ client: 1 });
 invoiceSchema.index({ project: 1 });
 invoiceSchema.index({ status: 1 });
 invoiceSchema.index({ workspace: 1 });
-invoiceSchema.index({ paymentIntentId: 1 });
+// invoiceSchema.index({ paymentIntentId: 1 }); - Removed as it's already indexed with unique: true
 
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 
