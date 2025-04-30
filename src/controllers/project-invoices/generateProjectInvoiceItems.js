@@ -379,9 +379,11 @@ const generateProjectInvoiceItems = async (req, res) => {
       labels: del.labels || [],
       createdAt: del.createdAt || new Date(),
       createdBy: del.createdBy || null,
-      fields: fieldsWithoutRecords,
+      fields: {
+        ...fieldsWithoutRecords,
+        linkedItems: relatedRecords,
+      },
       attachments: del.attachments || [],
-      records: relatedRecords,
     });
   }
 
