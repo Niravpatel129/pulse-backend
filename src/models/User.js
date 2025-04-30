@@ -96,6 +96,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    billableRate: {
+      type: Number,
+      default: 0,
+    },
     timezone: {
       type: String,
       default: 'America/New_York',
