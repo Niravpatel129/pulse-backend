@@ -374,6 +374,7 @@ const generateProjectInvoiceItems = async (req, res) => {
 
     // Ensure the records field is always an array (even if empty)
     enrichedDeliverables.push({
+      _id: Math.random().toString(36).substring(2, 15),
       name: del.name,
       description: del.description || '',
       labels: del.labels || [],
@@ -421,6 +422,7 @@ const generateProjectInvoiceItems = async (req, res) => {
         userEntry.description.length > 0 ? userEntry.description.join('; ') : task.description;
 
       invoiceTasks.push({
+        _id: Math.random().toString(36).substring(2, 15),
         name: `${task.title} (${userEntry.user.name})`,
         description: descriptions,
         unitPrice: rate,
