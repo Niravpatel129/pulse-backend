@@ -14,10 +14,6 @@ const participantSchema = new mongoose.Schema(
       lowercase: true,
     },
     shippingAddress: {
-      fullName: {
-        type: String,
-        trim: true,
-      },
       streetAddress1: {
         type: String,
         trim: true,
