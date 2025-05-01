@@ -13,6 +13,36 @@ const participantSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    shippingAddress: {
+      fullName: {
+        type: String,
+        trim: true,
+      },
+      streetAddress1: {
+        type: String,
+        trim: true,
+      },
+      streetAddress2: {
+        type: String,
+        trim: true,
+      },
+      city: {
+        type: String,
+        trim: true,
+      },
+      state: {
+        type: String,
+        trim: true,
+      },
+      postalCode: {
+        type: String,
+        trim: true,
+      },
+      country: {
+        type: String,
+        trim: true,
+      },
+    },
     phone: {
       type: String,
       trim: true,
