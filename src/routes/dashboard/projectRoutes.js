@@ -20,6 +20,7 @@ import { getTeam } from '../../controllers/project/getTeam.js';
 import { addParticipant } from '../../controllers/project/participants.js';
 import { patchProject } from '../../controllers/project/patchProject.js';
 import { getProjectSharing, updateProjectSharing } from '../../controllers/project/sharing.js';
+import { updateParticipant } from '../../controllers/project/updateParticipant.js';
 import { updateProject } from '../../controllers/project/updateProject.js';
 import { updateProjectStatus } from '../../controllers/project/updateProjectStatus.js';
 import { authenticate } from '../../middleware/auth.js';
@@ -62,6 +63,7 @@ router.delete('/:projectId/invoices/:invoiceId', deleteProjectInvoice);
 // Project participants routes
 router.post('/:projectId/participants', addParticipant);
 router.get('/:projectId/participants', getParticipants);
+router.put('/:projectId/participants/:participantId', updateParticipant);
 router.delete('/:projectId/participants/:participantId', deleteParticipant);
 
 // Project collaborators routes
