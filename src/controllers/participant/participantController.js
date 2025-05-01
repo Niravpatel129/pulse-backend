@@ -111,8 +111,17 @@ export const updateParticipant = async (req, res, next) => {
     }
 
     const workspaceId = req.workspace._id;
-    const { name, email, phone, website, jobTitle, mailingAddress, comments, customFields } =
-      req.body;
+    const {
+      name,
+      email,
+      phone,
+      website,
+      jobTitle,
+      mailingAddress,
+      shippingAddress,
+      comments,
+      customFields,
+    } = req.body;
 
     const participant = await Participant.findOne({
       _id: id,
@@ -129,6 +138,7 @@ export const updateParticipant = async (req, res, next) => {
     participant.website = website || participant.website;
     participant.jobTitle = jobTitle || participant.jobTitle;
     participant.mailingAddress = mailingAddress || participant.mailingAddress;
+    participant.shippingAddress = shippingAddress || participant.shippingAddress;
     participant.comments = comments || participant.comments;
     participant.customFields = customFields || participant.customFields;
 
