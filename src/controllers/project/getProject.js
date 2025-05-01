@@ -48,6 +48,7 @@ export const getProject = async (req, res, next) => {
           workspaces: item.participant.workspaces || [],
           createdBy: item.participant.createdBy,
           createdAt: item.participant.createdAt,
+          shippingAddress: item.participant.shippingAddress || '',
           updatedAt: item.participant.updatedAt,
           participant: undefined, // Remove the nested participant object
         };
