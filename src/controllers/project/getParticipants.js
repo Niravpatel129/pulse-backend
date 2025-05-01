@@ -10,10 +10,7 @@ export const getParticipants = async (req, res, next) => {
       throw new ApiError(400, 'Project ID is required');
     }
 
-    const project = await Project.findById(projectId).populate(
-      'participants.participant',
-      'name email',
-    );
+    const project = await Project.findById(projectId).populate('participants.participant');
 
     if (!project) {
       throw new ApiError(404, 'Project not found');
