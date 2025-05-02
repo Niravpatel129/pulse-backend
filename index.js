@@ -16,6 +16,7 @@ import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
 import calendarRoutes from './src/routes/calendarRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
+import deliverableRoutes from './src/routes/deliverableRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
 import figmaRoutes from './src/routes/figmaRoutes.js';
@@ -113,6 +114,7 @@ app.use(`${routesPrefix}/participants`, participantRoutes);
 app.use(`${routesPrefix}/activities`, activityRoutes);
 app.use(`${routesPrefix}/pipeline`, pipelineRoutes);
 app.use(`${routesPrefix}/alerts`, alertRoutes);
+app.use(`${routesPrefix}/deliverables`, deliverableRoutes);
 
 app.use(`${routesPrefix}/kanban`, kanbanRoutes);
 
