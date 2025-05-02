@@ -19,12 +19,20 @@ const customFieldSchema = new mongoose.Schema({
     default: '',
   },
   attachments: [
-    {
-      name: String,
-      type: String,
-      size: Number,
-      url: String,
-    },
+    new mongoose.Schema(
+      {
+        name: String,
+        type: String,
+        size: Number,
+        url: String,
+        firebaseUrl: String,
+        storagePath: String,
+      },
+      {
+        strict: false, // This allows additional fields without validation errors
+        _id: false,
+      },
+    ),
   ],
   selectedItem: {
     id: String,

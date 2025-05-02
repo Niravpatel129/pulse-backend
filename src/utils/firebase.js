@@ -40,22 +40,55 @@ export const firebaseStorage = {
   },
 
   /**
+   * Validates the Firebase configuration
+   */
+  validateConfig() {
+    // Check if Firebase is properly initialized
+    if (!app || !storage) {
+      console.error('Firebase not properly initialized');
+      return false;
+    }
+
+    // Check if storage bucket is configured
+    if (!storage.app.options.storageBucket) {
+      console.error('Firebase storage bucket not configured');
+      return false;
+    }
+
+    return true;
+  },
+
+  /**
    * Uploads a file to Firebase Storage
    */
   async uploadFile(fileBuffer, storagePath, contentType) {
     try {
+      // Validate the Firebase config first
+      if (!this.validateConfig()) {
+        throw new Error('Firebase storage not properly configured');
+      }
+
       console.log('Starting file upload:', {
         storagePath,
         contentType,
         bufferSize: fileBuffer.length,
       });
 
+      // Validate input parameters
+      if (!fileBuffer || fileBuffer.length === 0) {
+        throw new Error('Invalid file buffer provided for upload');
+      }
+
+      if (!storagePath) {
+        throw new Error('Invalid storage path provided for upload');
+      }
+
       const storageRef = ref(storage, storagePath);
       console.log('Created storage reference:', storageRef.fullPath);
 
       // Add metadata to the upload
       const metadata = {
-        contentType: contentType,
+        contentType: contentType || 'application/octet-stream',
         cacheControl: 'public,max-age=3600',
       };
 
@@ -73,6 +106,12 @@ export const firebaseStorage = {
       console.log('Getting download URL for:', snapshot.ref.fullPath);
       const downloadURL = await getDownloadURL(storageRef);
       console.log('Download URL obtained:', downloadURL);
+
+      // Verify download URL is valid
+      if (!downloadURL) {
+        console.error('Warning: Firebase returned empty download URL');
+        throw new Error('Failed to obtain download URL from Firebase');
+      }
 
       return {
         url: downloadURL,
@@ -94,12 +133,19 @@ export const firebaseStorage = {
       } else if (error.code === 'storage/unknown') {
         throw new Error(
           `Firebase Storage: Unknown error. Server response: ${JSON.stringify(
-            error.serverResponse,
+            error.serverResponse || {},
           )}`,
         );
+      } else if (error.code === 'storage/object-not-found') {
+        throw new Error('Firebase Storage: The object does not exist.');
+      } else if (error.code === 'storage/bucket-not-found') {
+        throw new Error('Firebase Storage: Bucket not found. Check your storage configuration.');
+      } else if (error.code === 'storage/quota-exceeded') {
+        throw new Error('Firebase Storage: Quota exceeded. Please check your storage quota.');
       }
 
-      throw error;
+      // Rethrow with better error message
+      throw new Error(`Firebase upload failed: ${error.message}`);
     }
   },
 
