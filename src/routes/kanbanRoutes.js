@@ -34,6 +34,12 @@ import {
   restoreTask,
   updateTask,
 } from '../controllers/kanban/taskController.js';
+import {
+  addTimeEntry,
+  deleteTimeEntry,
+  getTimeEntries,
+  updateTimeEntry,
+} from '../controllers/kanban/timeTrackingController.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -76,6 +82,12 @@ router.get('/:projectId/tasks/:taskId/attachments', getAttachments);
 router.post('/:projectId/tasks/:taskId/attachments', addAttachment);
 router.put('/:projectId/tasks/:taskId/attachments/:attachmentId', updateAttachment);
 router.delete('/:projectId/tasks/:taskId/attachments/:attachmentId', removeAttachment);
+
+// Time tracking routes
+router.get('/:projectId/tasks/:taskId/time', getTimeEntries);
+router.post('/:projectId/tasks/:taskId/time', addTimeEntry);
+router.put('/:projectId/tasks/:taskId/time/:timeEntryId', updateTimeEntry);
+router.delete('/:projectId/tasks/:taskId/time/:timeEntryId', deleteTimeEntry);
 
 // Column-specific task routes
 router.get('/:projectId/columns/:columnId/tasks', getTasksByColumn);

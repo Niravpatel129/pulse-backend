@@ -70,7 +70,7 @@ const timeEntrySchema = new mongoose.Schema(
     description: {
       type: String,
     },
-    recordedBy: {
+    user: {
       id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -79,7 +79,7 @@ const timeEntrySchema = new mongoose.Schema(
       name: String,
       avatar: String,
     },
-    recordedAt: {
+    date: {
       type: Date,
       default: Date.now,
     },
@@ -166,6 +166,16 @@ const kanbanTaskSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+// Pre-save middleware to update totalHours
+kanbanTaskSchema.pre('save', function (next) {
+  if (this.timeEntries && this.timeEntries.length > 0) {
+    this.totalHours = this.timeEntries.reduce((total, entry) => total + (entry.hours || 0), 0);
+  } else {
+    this.totalHours = 0;
+  }
+  next();
+});
 
 const KanbanTask = mongoose.model('KanbanTask', kanbanTaskSchema);
 
