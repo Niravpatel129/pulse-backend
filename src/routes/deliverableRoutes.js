@@ -5,6 +5,7 @@ import {
   deleteDeliverable,
   getAllDeliverables,
   getDeliverable,
+  getDeliverablesByProject,
   updateDeliverable,
 } from '../controllers/deliverable/deliverableController.js';
 import { resolveInactivityAlerts } from '../middleware/alertsMiddleware.js';
@@ -126,6 +127,9 @@ router.use(resolveInactivityAlerts);
 
 // Get all deliverables
 router.get('/', getAllDeliverables);
+
+// Get deliverables by project
+router.get('/project/:projectId', getDeliverablesByProject);
 
 // Get single deliverable
 router.get('/:id', getDeliverable);
