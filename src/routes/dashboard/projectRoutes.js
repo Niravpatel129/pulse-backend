@@ -18,6 +18,7 @@ import { getProjectInvoices } from '../../controllers/project/getProjectInvoices
 import { getProjects } from '../../controllers/project/getProjects.js';
 import { getSuggestedLineItems } from '../../controllers/project/getSuggestedLineItems.js';
 import { getTeam } from '../../controllers/project/getTeam.js';
+import { markProjectInvoiceAsPaid } from '../../controllers/project/markProjectInvoiceAsPaid.js';
 import { addParticipant } from '../../controllers/project/participants.js';
 import { patchProject } from '../../controllers/project/patchProject.js';
 import { getProjectSharing, updateProjectSharing } from '../../controllers/project/sharing.js';
@@ -60,6 +61,7 @@ router.post('/:projectId/invoices', createProjectInvoice);
 router.post('/:projectId/invoices/v2', createProjectInvoiceV2);
 router.get('/:projectId/invoices', getProjectInvoices);
 router.patch('/:projectId/invoices/:invoiceId', archiveProjectInvoice);
+router.patch('/:projectId/invoices/:invoiceId/mark-paid', markProjectInvoiceAsPaid);
 router.delete('/:projectId/invoices/:invoiceId', deleteProjectInvoice);
 
 // Project participants routes

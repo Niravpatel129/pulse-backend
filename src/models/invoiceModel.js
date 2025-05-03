@@ -32,6 +32,10 @@ const invoiceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    paidBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
     discountAmount: {
       type: Number,
       default: 0,
