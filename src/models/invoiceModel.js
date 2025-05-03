@@ -12,6 +12,9 @@ const invoiceSchema = new mongoose.Schema(
       ref: 'Participant',
       required: true,
     },
+    selectedClient: {
+      type: Object,
+    },
     project: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
@@ -22,7 +25,14 @@ const invoiceSchema = new mongoose.Schema(
         ref: 'ProductCatalog',
       },
     ],
+    selectedItems: {
+      type: Array,
+    },
     discount: {
+      type: Number,
+      default: 0,
+    },
+    discountAmount: {
       type: Number,
       default: 0,
     },
@@ -31,6 +41,31 @@ const invoiceSchema = new mongoose.Schema(
       required: true,
     },
     tax: {
+      type: Number,
+      default: 0,
+    },
+    taxRate: {
+      type: Number,
+      default: 0,
+    },
+    taxAmount: {
+      type: Number,
+      default: 0,
+    },
+    taxId: {
+      type: String,
+    },
+    showTaxId: {
+      type: Boolean,
+      default: false,
+    },
+    selectedTax: {
+      type: Object,
+    },
+    shipping: {
+      type: Object,
+    },
+    shippingTotal: {
       type: Number,
       default: 0,
     },
@@ -53,7 +88,7 @@ const invoiceSchema = new mongoose.Schema(
       type: String,
       default: 'USD',
     },
-    deliveryMethod: {
+    deliveryOptions: {
       type: String,
       enum: ['email', 'sms', 'both'],
       default: 'email',

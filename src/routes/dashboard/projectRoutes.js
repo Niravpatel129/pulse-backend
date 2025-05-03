@@ -5,6 +5,7 @@ import { addTeamMember } from '../../controllers/project/addTeamMember.js';
 import { archiveProjectInvoice } from '../../controllers/project/archiveProjectInvoice.js';
 import { createProject } from '../../controllers/project/createProject.js';
 import { createProjectInvoice } from '../../controllers/project/createProjectInvoice.js';
+import { createProjectInvoiceV2 } from '../../controllers/project/createProjectInvoiceV2.js';
 import { deleteCollaborator } from '../../controllers/project/deleteCollaborator.js';
 import { deleteParticipant } from '../../controllers/project/deleteParticipant.js';
 import { deleteProject } from '../../controllers/project/deleteProject.js';
@@ -56,6 +57,7 @@ router.get('/:projectId/suggested-line-items', getSuggestedLineItems);
 
 // Project invoice routes
 router.post('/:projectId/invoices', createProjectInvoice);
+router.post('/:projectId/invoices/v2', createProjectInvoiceV2);
 router.get('/:projectId/invoices', getProjectInvoices);
 router.patch('/:projectId/invoices/:invoiceId', archiveProjectInvoice);
 router.delete('/:projectId/invoices/:invoiceId', deleteProjectInvoice);
