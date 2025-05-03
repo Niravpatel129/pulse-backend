@@ -89,10 +89,11 @@ export const createProjectInvoiceV2 = async (req, res, next) => {
     // Update project with the new invoice if needed
     if (project.invoices) {
       project.invoices.push(invoice._id);
-      project.state = 'invoice-created';
-      await project.save();
     }
 
+    project.state = 'invoice-created';
+    const pro = await project.save();
+    console.log('🚀 pro:', pro);
     res.status(201).json(new ApiResponse(201, invoice, 'Project invoice created successfully'));
   } catch (error) {
     next(error);
