@@ -10,6 +10,7 @@ const projectSchema = new mongoose.Schema(
     state: {
       type: String,
       required: false,
+      default: 'in-progress',
     },
     isClosed: {
       type: Boolean,
