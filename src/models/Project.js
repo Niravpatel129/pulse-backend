@@ -7,6 +7,10 @@ const projectSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    state: {
+      type: String,
+      required: false,
+    },
     isClosed: {
       type: Boolean,
       default: false,

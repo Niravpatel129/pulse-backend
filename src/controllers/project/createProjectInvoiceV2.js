@@ -89,6 +89,7 @@ export const createProjectInvoiceV2 = async (req, res, next) => {
     // Update project with the new invoice if needed
     if (project.invoices) {
       project.invoices.push(invoice._id);
+      project.state = 'invoice-created';
       await project.save();
     }
 
