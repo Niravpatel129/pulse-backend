@@ -1,5 +1,7 @@
+import axios from 'axios';
 import Table from '../../models/Table/Table.js';
 import { clearRetrieverCache } from '../../routes/ai/chain.js';
+import { closeVectorStore, initVectorStore } from '../../routes/ai/vectorStore.js';
 import AppError from '../../utils/AppError.js';
 
 /**
@@ -28,6 +30,9 @@ const updateTableName = async (req, res, next) => {
       return next(new AppError('Table not found or you do not have access to this table', 404));
     }
 
+    // Keep track if AI guide was updated
+    const aiGuideWasUpdated = aiPromptGuide !== undefined && aiPromptGuide !== table.aiPromptGuide;
+
     // Update the table properties
     table.name = name;
 
@@ -37,14 +42,65 @@ const updateTableName = async (req, res, next) => {
     }
 
     // Update AI prompt guide if provided
-    if (aiPromptGuide !== undefined) {
+    if (aiGuideWasUpdated) {
       table.aiPromptGuide = aiPromptGuide;
-
-      // Clear the retriever cache for this workspace to refresh AI context
-      clearRetrieverCache(workspaceId.toString());
     }
 
     await table.save();
+
+    // If the AI guide was updated, trigger vector store refresh
+    if (aiGuideWasUpdated) {
+      try {
+        console.log(
+          `AI Prompt Guide updated for table ${table.name}. Refreshing vector store for workspace ${workspaceId}`,
+        );
+
+        // Clear immediate caches
+        clearRetrieverCache(workspaceId.toString());
+
+        // Trigger a background refresh of the vector store
+        const refreshVectorStore = async () => {
+          try {
+            // Close existing vector store to free up resources
+            await closeVectorStore(workspaceId.toString());
+
+            // Reinitialize the vector store to include the updated AI guide
+            await initVectorStore(workspaceId.toString());
+
+            console.log(`Vector store successfully refreshed for workspace ${workspaceId}`);
+          } catch (refreshError) {
+            console.error(`Error refreshing vector store: ${refreshError.message}`);
+          }
+        };
+
+        // Execute refresh in the background
+        refreshVectorStore();
+
+        // Try to call the refresh endpoint if we're in production
+        // This is a backup method that works if we're running distributed services
+        if (process.env.NODE_ENV === 'production' && process.env.AI_REFRESH_TOKEN) {
+          try {
+            const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+            await axios.post(
+              `${baseUrl}/api/ai/refresh`,
+              { workspaceId: workspaceId.toString() },
+              {
+                headers: {
+                  Authorization: `Bearer ${process.env.AI_REFRESH_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+              },
+            );
+          } catch (axiosError) {
+            // Don't fail if this doesn't work, it's just a backup method
+            console.error('Error calling refresh endpoint:', axiosError.message);
+          }
+        }
+      } catch (refreshError) {
+        // Don't fail the update if refresh has issues
+        console.error(`Error during refresh process: ${refreshError.message}`);
+      }
+    }
 
     res.status(200).json({
       success: true,

@@ -822,7 +822,7 @@ router.delete('/chat/history/:sessionId', async (req, res) => {
 router.post('/refresh', async (req, res) => {
   try {
     console.log('Received refresh request');
-    const workspaceId = req.workspace._id.toString();
+    const workspaceId = req.body.workspaceId || req.workspace._id.toString();
 
     // Only allow authorized requests
     const authHeader = req.headers.authorization;
@@ -834,6 +834,8 @@ router.post('/refresh', async (req, res) => {
     if (token !== process.env.AI_REFRESH_TOKEN) {
       return res.status(403).json({ error: 'Forbidden' });
     }
+
+    console.log(`Refreshing vector store for workspace: ${workspaceId}`);
 
     // If Redis is not available, perform direct refresh
     if (!isRedisAvailable) {

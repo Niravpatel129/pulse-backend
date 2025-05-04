@@ -16,6 +16,9 @@ dotenv.config();
 // Store vectorStores by workspaceId
 const workspaceVectorStores = new Map();
 
+// Export for cache management in other modules
+export { workspaceVectorStores };
+
 // Domain-specific vector stores for better search performance
 const createDomainStores = () => ({
   workspace: null,
