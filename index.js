@@ -15,6 +15,7 @@ import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
 import calendarRoutes from './src/routes/calendarRoutes.js';
+import chatSettingsRoutes from './src/routes/chatSettingsRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import deliverableRoutes from './src/routes/deliverableRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
@@ -105,6 +106,7 @@ app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
 
 // AI routes
 app.use(`${routesPrefix}/ai`, aiRoutes2);
+app.use(`${routesPrefix}/chat-settings`, chatSettingsRoutes);
 
 // Project management
 // Apply inactivity resolver middleware to project routes
