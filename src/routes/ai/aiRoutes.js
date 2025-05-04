@@ -830,11 +830,6 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const token = authHeader.split(' ')[1];
-    if (token !== process.env.AI_REFRESH_TOKEN) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
     console.log(`Refreshing vector store for workspace: ${workspaceId}`);
 
     // If Redis is not available, perform direct refresh
