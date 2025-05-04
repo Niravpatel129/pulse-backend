@@ -292,6 +292,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
       // Use a parallel approach to fetch documents more efficiently
       const fetchPromises = [];
+      const tableSpecificGuides = [];
 
       // First get workspace summary for context
       fetchPromises.push(
@@ -336,6 +337,28 @@ export async function createQAChain(vectorStoreData, workspaceId) {
         );
       }
 
+      // Check specifically for table-related questions and add targeted queries for table guides
+      if (entityTypes.includes('tables') || q.toLowerCase().includes('table')) {
+        console.log('Detected table-related query, adding targeted searches for table guides');
+
+        // Get tables domain vector store if available
+        const tablesVS = getDomainVectorStore(workspaceId, 'tables');
+        const tablesRetriever = tablesVS ? tablesVS.asRetriever({ k: 4 }) : retriever;
+
+        // Add specific table name search if mentioned in query
+        const tableNameMatch = q.match(/\b(table|tables)\s+(\w+)/i);
+        if (tableNameMatch && tableNameMatch[2]) {
+          const tableName = tableNameMatch[2];
+          console.log(`Detected specific table name: ${tableName}`);
+          fetchPromises.push(
+            tablesRetriever.getRelevantDocuments(`table ${tableName}`).catch((err) => {
+              console.error(`Error fetching specific table: ${tableName}`, err);
+              return [];
+            }),
+          );
+        }
+      }
+
       // Wait for all fetches to complete
       const docSets = await Promise.all(fetchPromises);
 
@@ -343,6 +366,27 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       let allDocs = [];
       for (const docSet of docSets) {
         allDocs = [...allDocs, ...docSet];
+      }
+
+      // Check for tables with AI guides and collect them separately
+      const tablesWithGuides = allDocs.filter(
+        (doc) => doc.metadata?.type === 'table' && doc.metadata?.hasAiGuide === true,
+      );
+
+      if (tablesWithGuides.length > 0) {
+        console.log(`Found ${tablesWithGuides.length} tables with AI guides`);
+        tableSpecificGuides.push(
+          '\n## TABLE-SPECIFIC AI GUIDES ##\n' +
+            tablesWithGuides
+              .map((doc) => {
+                const content = doc.pageContent;
+                const guidePart = content.includes('AI Prompt Guide:')
+                  ? content.split('AI Prompt Guide:')[1].split('Sample Records:')[0].trim()
+                  : '';
+                return `Guide for table ${doc.metadata.name}:\n${guidePart}`;
+              })
+              .join('\n\n'),
+        );
       }
 
       // Remove duplicates by pageContent
@@ -360,7 +404,12 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       console.log(`Retrieved ${uniqueDocs.length} unique documents for workspace ${workspaceId}`);
 
       // Convert to string format
-      const docsString = formatDocumentsAsString(uniqueDocs);
+      let docsString = formatDocumentsAsString(uniqueDocs);
+
+      // Add table-specific guides if available
+      if (tableSpecificGuides.length > 0) {
+        docsString += '\n' + tableSpecificGuides.join('\n');
+      }
 
       // Cache the result with workspace-specific key
       retrievalCache.set(cacheKey, docsString);

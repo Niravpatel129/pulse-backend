@@ -497,6 +497,11 @@ async function loadTableData(workspaceId, vectorStore, domainStore) {
         Columns: ${table.columns?.map((c) => `${c.name} (${c.type})`).join(', ') || 'None'}
       `;
 
+      // Include AI prompt guide if available
+      const aiGuideSection = table.aiPromptGuide
+        ? `\nAI Prompt Guide:\n${table.aiPromptGuide}\n`
+        : '';
+
       // Create records description
       let recordsDescription = '';
       if (records.length > 0) {
@@ -526,12 +531,13 @@ async function loadTableData(workspaceId, vectorStore, domainStore) {
 
       // Create document
       const tableDoc = {
-        pageContent: `${schemaDescription}\n${recordsDescription}`,
+        pageContent: `${schemaDescription}${aiGuideSection}\n${recordsDescription}`,
         metadata: {
           type: 'table',
           id: table._id.toString(),
           name: table.name,
           workspaceId: workspaceId,
+          hasAiGuide: !!table.aiPromptGuide,
         },
       };
 

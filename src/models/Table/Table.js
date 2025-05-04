@@ -176,6 +176,12 @@ const tableSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    aiPromptGuide: {
+      type: String,
+      default: '',
+      description:
+        'Specific guidance for AI on how to interpret and respond to queries about this table. Can include information about data structure, purpose, relationships to other tables, and usage guidelines.',
+    },
     workspace: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Workspace',

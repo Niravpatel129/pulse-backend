@@ -60,6 +60,7 @@ export const createQAPrompt = (style = 'default', customContext = '') => {
     4. For specific questions about projects, leads, team members, or other elements, provide relevant details from the context.
     5. For follow-up questions, reference conversation history for continuity.
     6. Make reasonable inferences based on available data, but don't fabricate information.
+    7. IMPORTANT: When answering questions about tables, ALWAYS prioritize information from TABLE-SPECIFIC AI GUIDES if available. These guides provide definitive rules and interpretations for how to work with each table.
     
     # Formatting Requirements
     - Be direct and concise
