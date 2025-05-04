@@ -36,6 +36,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
   // Get workspace chat settings
   let modelName = 'gpt-4o'; // Default model
   let temperature = 0.1; // Default temperature
+  let contextSettings = ''; // Default empty context settings
 
   if (workspaceId) {
     // Check cache first
@@ -76,6 +77,12 @@ export async function createQAChain(vectorStoreData, workspaceId) {
         temperature = 0.1;
       } else {
         temperature = 0.1; // Default
+      }
+
+      // Get custom context settings if available
+      if (settings.contextSettings) {
+        contextSettings = settings.contextSettings;
+        console.log('Using custom context settings from workspace');
       }
     }
   }
@@ -367,15 +374,24 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
   // Get the appropriate style from settings if available
   let promptStyle = 'default';
+  let customContext = '';
+
   if (workspaceId && settingsCache.has(`settings_${workspaceId}`)) {
     const settings = settingsCache.get(`settings_${workspaceId}`);
-    if (settings && settings.selectedStyle) {
-      promptStyle = settings.selectedStyle;
+    if (settings) {
+      if (settings.selectedStyle) {
+        promptStyle = settings.selectedStyle;
+      }
+
+      // Get custom context settings if available
+      if (settings.contextSettings) {
+        customContext = settings.contextSettings;
+      }
     }
   }
 
   // Get the prompt from prompts.js with the selected style
-  const prompt = createQAPrompt(promptStyle);
+  const prompt = createQAPrompt(promptStyle, customContext);
 
   // Create an optimized chain with better error handling
   const chain = RunnableSequence.from([

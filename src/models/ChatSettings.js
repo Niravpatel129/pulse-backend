@@ -10,6 +10,8 @@ const ChatSettingsSchema = new mongoose.Schema(
     contextSettings: {
       type: String,
       default: '',
+      description:
+        'Custom context provided by the user to override or augment AI behavior. This can be used to provide specific instructions, domain knowledge, or personal preferences that will be included in every prompt.',
     },
     webSearchEnabled: {
       type: Boolean,

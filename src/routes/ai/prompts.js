@@ -18,8 +18,11 @@ function getStyleInstructions(style = 'default') {
 }
 
 // Main QA prompt template
-export const createQAPrompt = (style = 'default') => {
+export const createQAPrompt = (style = 'default', customContext = '') => {
   const styleInstruction = getStyleInstructions(style);
+
+  // Prepare custom context section if available
+  const customContextSection = customContext ? `\n# User-Provided Context\n${customContext}\n` : '';
 
   return ChatPromptTemplate.fromTemplate(`
     # Role
@@ -30,7 +33,7 @@ export const createQAPrompt = (style = 'default') => {
     
     # Context Information
     {context}
-    
+    ${customContextSection}
     {history}
     
     {currentUser}
