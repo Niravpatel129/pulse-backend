@@ -5,7 +5,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 // @route   GET /api/chat-settings/:workspaceId
 // @access  Private
 export const getChatSettings = asyncHandler(async (req, res) => {
-  const { workspaceId } = req.workspace;
+  const workspaceId = req.workspace._id;
 
   // Find chat settings or create default if doesn't exist
   let chatSettings = await ChatSettings.findOne({ workspace: workspaceId });
@@ -24,6 +24,8 @@ export const getChatSettings = asyncHandler(async (req, res) => {
 // @route   PUT /api/chat-settings/:workspaceId
 // @access  Private
 export const updateChatSettings = asyncHandler(async (req, res) => {
+  const workspaceId = req.workspace._id;
+
   const { contextSettings, webSearchEnabled, selectedStyle, selectedModel, gmailConnected } =
     req.body;
 
@@ -50,17 +52,26 @@ export const updateChatSettings = asyncHandler(async (req, res) => {
 // @route   DELETE /api/chat-settings/:workspaceId
 // @access  Private
 export const resetChatSettings = asyncHandler(async (req, res) => {
-  const { workspaceId } = req.workspace;
+  const workspaceId = req.workspace._id;
 
-  // Find and remove chat settings
-  await ChatSettings.findOneAndDelete({ workspace: workspaceId });
+  // Use findOneAndUpdate to reset to defaults instead of delete-then-create
+  // This avoids the race condition that can cause duplicate key errors
+  const defaultSettings = new ChatSettings({ workspace: workspaceId });
+  const defaultValues = defaultSettings.toObject();
 
-  // Create new settings with defaults
-  const newChatSettings = await ChatSettings.create({ workspace: workspaceId });
+  // Remove _id from default values to avoid conflicts
+  delete defaultValues._id;
+  delete defaultValues.workspace;
+
+  const resetChatSettings = await ChatSettings.findOneAndUpdate(
+    { workspace: workspaceId },
+    { $set: defaultValues },
+    { new: true, upsert: true, runValidators: true },
+  );
 
   res.status(200).json({
     success: true,
-    data: newChatSettings,
+    data: resetChatSettings,
     message: 'Chat settings reset to defaults',
   });
 });
