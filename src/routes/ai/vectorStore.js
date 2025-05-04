@@ -486,69 +486,144 @@ async function loadTableData(workspaceId, vectorStore, domainStore) {
 
     // Process each table
     for (const table of tables) {
-      console.log(`Processing table: ${table.name}`);
+      console.log(`Processing table: ${table.name} (ID: ${table._id})`);
 
-      // Fetch sample records
-      const records = await Record.find({ tableId: table._id }).limit(50).lean();
-      console.log(`Found ${records.length} records for table ${table.name}`);
+      try {
+        // Find rows for this table
+        const mongoose = await import('mongoose');
+        const Row = mongoose.default.model('Row');
 
-      // Build schema description
-      const schemaDescription = `
-        Table Name: ${table.name}
-        ID: ${table._id}
-        Description: ${table.description || 'No description'}
-        Columns: ${table.columns?.map((c) => `${c.name} (${c.type})`).join(', ') || 'None'}
-      `;
+        // Get rows first
+        const rows = await Row.find({ tableId: table._id }).lean();
+        console.log(`Found ${rows.length} rows for table ${table.name}`);
 
-      // Include AI prompt guide if available
-      const aiGuideSection = table.aiPromptGuide
-        ? `\nAI Prompt Guide:\n${table.aiPromptGuide}\n`
-        : '';
+        // Get rowIds
+        const rowIds = rows.map((row) => row._id);
 
-      // Create records description
-      let recordsDescription = '';
-      if (records.length > 0) {
-        recordsDescription = 'Sample Records:\n';
-        records.forEach((record, index) => {
-          let valEntries = [];
-          if (record.values) {
-            if (typeof record.values.entries === 'function') {
-              // It's a Map
-              valEntries = Array.from(record.values.entries());
-            } else if (typeof record.values === 'object') {
-              // It's a regular object
-              valEntries = Object.entries(record.values);
-            }
+        // Fetch records for these rows
+        const records = await Record.find({
+          tableId: table._id,
+          rowId: { $in: rowIds },
+        }).lean();
+
+        console.log(`Found ${records.length} records for table ${table.name}`);
+
+        // Debug the first record
+        if (records.length > 0) {
+          console.log('DEBUG - First record:', JSON.stringify(records[0], null, 2));
+        }
+
+        // Build schema description
+        const schemaDescription = `
+          Table Name: ${table.name}
+          ID: ${table._id}
+          Description: ${table.description || 'No description'}
+          Columns: ${table.columns?.map((c) => `${c.name} (${c.type})`).join(', ') || 'None'}
+        `;
+
+        // Include AI prompt guide if available
+        const aiGuideSection = table.aiPromptGuide
+          ? `\nAI Prompt Guide:\n${table.aiPromptGuide}\n`
+          : '';
+
+        // Group records by rowId for proper table structure
+        const recordsByRow = {};
+
+        // First organize records by row
+        records.forEach((record) => {
+          if (!record.rowId) return;
+
+          const rowIdStr = record.rowId.toString();
+          if (!recordsByRow[rowIdStr]) {
+            recordsByRow[rowIdStr] = {};
           }
 
-          const values = valEntries
-            .map(([colId, val]) => {
-              const col = table.columns?.find((c) => c.id === colId);
-              return `${col?.name || colId}: ${JSON.stringify(val)}`;
-            })
-            .join(', ');
+          // Store this record's value under the column ID
+          if (record.columnId) {
+            // Extract values - they could be in record.values or directly in the record
+            let value;
+            if (record.values && typeof record.values === 'object') {
+              if (record.values instanceof Map || typeof record.values.get === 'function') {
+                value = record.values.get(record.columnId);
+              } else {
+                // Regular object
+                value = record.values[record.columnId];
+              }
+            } else {
+              // Direct value
+              value = record.value;
+            }
 
-          recordsDescription += `  Record ${index + 1}: ${values}\n`;
+            // Store the value
+            recordsByRow[rowIdStr][record.columnId] = value;
+          }
         });
+
+        // Extract row data as an array
+        const rowsData = Object.values(recordsByRow);
+        console.log(`Organized into ${rowsData.length} complete rows`);
+
+        // Create records description as markdown table
+        let recordsDescription = '';
+        if (rowsData.length > 0 && table.columns?.length > 0) {
+          // Start building the markdown table
+          recordsDescription = 'Sample Records (Table Format):\n\n';
+
+          // Add header row with column names
+          recordsDescription +=
+            '| ' + table.columns.map((col) => col.name || 'Unnamed').join(' | ') + ' |\n';
+          recordsDescription += '| ' + table.columns.map(() => '---').join(' | ') + ' |\n';
+
+          // Add data rows (limit to 10)
+          const rowsToShow = rowsData.slice(0, 10);
+          rowsToShow.forEach((rowData) => {
+            const rowValues = table.columns.map((col) => {
+              const value = rowData[col.id];
+
+              // Format value
+              if (value === undefined || value === null) {
+                return '';
+              } else if (typeof value === 'object') {
+                // For objects, just show a simple representation
+                try {
+                  return JSON.stringify(value);
+                } catch (e) {
+                  return '[Complex Object]';
+                }
+              }
+
+              return String(value).substring(0, 50); // Truncate very long values
+            });
+
+            recordsDescription += '| ' + rowValues.join(' | ') + ' |\n';
+          });
+
+          recordsDescription += '\n';
+        } else {
+          // Fallback if no structured data
+          recordsDescription = 'No data available for this table.\n';
+        }
+
+        // Create document
+        const tableDoc = {
+          pageContent: `${schemaDescription}${aiGuideSection}\n${recordsDescription}`,
+          metadata: {
+            type: 'table',
+            id: table._id.toString(),
+            name: table.name,
+            workspaceId: workspaceId,
+            hasAiGuide: !!table.aiPromptGuide,
+          },
+        };
+
+        // Add to main vector store and domain-specific store
+        await vectorStore.addDocuments([tableDoc]);
+        await domainStore.addDocuments([tableDoc]);
+
+        console.log('🚀 tableDoc:', tableDoc);
+      } catch (tableError) {
+        console.error(`Error processing table ${table.name}:`, tableError);
       }
-
-      // Create document
-      const tableDoc = {
-        pageContent: `${schemaDescription}${aiGuideSection}\n${recordsDescription}`,
-        metadata: {
-          type: 'table',
-          id: table._id.toString(),
-          name: table.name,
-          workspaceId: workspaceId,
-          hasAiGuide: !!table.aiPromptGuide,
-        },
-      };
-
-      // Add to main vector store and domain-specific store
-      await vectorStore.addDocuments([tableDoc]);
-      await domainStore.addDocuments([tableDoc]);
-
-      console.log(`Added table ${table.name} to vector stores for workspace ${workspaceId}`);
     }
   } catch (error) {
     console.error('Error loading table data:', error);
