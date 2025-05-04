@@ -1,7 +1,26 @@
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 
+// Get style-specific instructions to customize prompt style
+function getStyleInstructions(style = 'default') {
+  const styleInstructions = {
+    default: 'Be helpful, direct, and informative.',
+    professional:
+      'Maintain a formal, business-like tone. Use precise language and industry terminology when appropriate. Avoid colloquialisms and casual phrasing.',
+    friendly:
+      'Use a warm, conversational tone. Be approachable and personable, as if speaking to a friend. Use light humor when appropriate.',
+    technical:
+      'Prioritize technical accuracy and detail. Provide specific technical explanations with precise terminology. Use a structured approach to explanations.',
+    creative:
+      'Use a more expressive and dynamic communication style. Incorporate analogies and metaphors to explain complex concepts when helpful.',
+  };
+
+  return styleInstructions[style] || styleInstructions.default;
+}
+
 // Main QA prompt template
-export const createQAPrompt = () => {
+export const createQAPrompt = (style = 'default') => {
+  const styleInstruction = getStyleInstructions(style);
+
   return ChatPromptTemplate.fromTemplate(`
     # Role
     You are an AI assistant that acts as a backend employee for the workspace.
@@ -20,6 +39,9 @@ export const createQAPrompt = () => {
     
     # Question
     {query}
+    
+    # Communication Style
+    ${styleInstruction}
     
     # Instructions
     1. If the context contains "This is a simple greeting" or the question is a simple greeting like "hi", "hello", "hey", etc., respond with a brief, friendly greeting without additional information.

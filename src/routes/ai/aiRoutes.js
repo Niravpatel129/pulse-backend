@@ -11,8 +11,12 @@ import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
 const router = express.Router();
+
 // Store chains by workspace ID instead of a single global chain
 const qaChains = new Map();
+
+// Export qaChains so it can be accessed by other modules
+export { qaChains };
 
 // Create caches with TTL
 const vectorStoreCache = new NodeCache({ stdTTL: 3600 }); // 1 hour
@@ -108,7 +112,7 @@ function estimateQueryCost(query, response) {
             }
 
             console.log('Creating QA chain...');
-            const workspaceChain = createQAChain(vs);
+            const workspaceChain = await createQAChain(vs, workspaceId);
             // Store chain by workspace ID
             qaChains.set(workspaceId, workspaceChain);
             console.log(`QA chain initialized for workspace ${workspaceId}`);
@@ -217,7 +221,7 @@ function estimateQueryCost(query, response) {
           vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
 
           // Recreate QA chain for this workspace
-          const workspaceChain = createQAChain(vs);
+          const workspaceChain = await createQAChain(vs, workspaceId);
           qaChains.set(workspaceId, workspaceChain);
 
           console.log(`Vector store refresh completed for workspace ${workspaceId}, job ${job.id}`);
@@ -313,7 +317,7 @@ router.post('/chat', async (req, res) => {
         }
 
         console.log('Creating QA chain...');
-        const workspaceChain = createQAChain(vs);
+        const workspaceChain = await createQAChain(vs, workspaceId);
         // Store chain by workspace ID
         qaChains.set(workspaceId, workspaceChain);
         console.log(`QA chain initialized for workspace ${workspaceId}`);
@@ -450,7 +454,7 @@ router.post('/chat/stream', async (req, res) => {
       }
 
       console.log('Creating QA chain...');
-      const workspaceChain = createQAChain(vs);
+      const workspaceChain = await createQAChain(vs, workspaceId);
       // Store chain by workspace ID
       qaChains.set(workspaceId, workspaceChain);
       console.log(`QA chain initialized for workspace ${workspaceId}`);
@@ -601,7 +605,7 @@ router.post('/chat/stream-events', async (req, res) => {
       }
 
       console.log('Creating QA chain...');
-      const workspaceChain = createQAChain(vs);
+      const workspaceChain = await createQAChain(vs, workspaceId);
       // Store chain by workspace ID
       qaChains.set(workspaceId, workspaceChain);
       console.log(`QA chain initialized for workspace ${workspaceId}`);
@@ -862,7 +866,7 @@ router.post('/refresh', async (req, res) => {
         vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
 
         // Recreate QA chain for this workspace
-        const workspaceChain = createQAChain(vs);
+        const workspaceChain = await createQAChain(vs, workspaceId);
         qaChains.set(workspaceId, workspaceChain);
 
         console.log(`Vector store refresh completed successfully for workspace ${workspaceId}`);

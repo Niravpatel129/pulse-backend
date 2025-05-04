@@ -9,6 +9,8 @@ import { getDomainVectorStore } from './vectorStore.js';
 
 // Import User model
 import User from '../../models/User.js';
+// Import ChatSettings model
+import ChatSettings from '../../models/ChatSettings.js';
 
 // Create query result cache with 30 minute TTL - workspace-specific
 const retrievalCache = new NodeCache({ stdTTL: 1800 });
@@ -19,16 +21,71 @@ const userCache = new NodeCache({ stdTTL: 900 });
 // New cache for reasoning results
 const reasoningCache = new NodeCache({ stdTTL: 900 }); // 15 minutes
 
-export function createQAChain(vectorStoreData) {
+// Cache for settings with 10 minute TTL
+const settingsCache = new NodeCache({ stdTTL: 600 });
+
+// Export the settingsCache
+export { settingsCache };
+
+export async function createQAChain(vectorStoreData, workspaceId) {
   console.log('Creating QA chain with vector store:', !!vectorStoreData);
 
   // Extract the main vector store from the data structure
   const vectorStore = vectorStoreData.main || vectorStoreData;
 
+  // Get workspace chat settings
+  let modelName = 'gpt-4o'; // Default model
+  let temperature = 0.1; // Default temperature
+
+  if (workspaceId) {
+    // Check cache first
+    const cacheKey = `settings_${workspaceId}`;
+    let settings = settingsCache.get(cacheKey);
+
+    if (!settings) {
+      try {
+        settings = await ChatSettings.findOne({ workspace: workspaceId }).lean();
+        if (settings) {
+          // Cache the settings
+          settingsCache.set(cacheKey, settings);
+        }
+      } catch (error) {
+        console.error('Error fetching chat settings:', error);
+      }
+    }
+
+    if (settings) {
+      // Map the selected model to the actual OpenAI model name
+      if (settings.selectedModel === 'gpt-4') {
+        modelName = 'gpt-4o';
+      } else if (settings.selectedModel === 'gpt-3.5') {
+        modelName = 'gpt-3.5-turbo-0125';
+      } else {
+        // For now, just use gpt-4o for non-OpenAI models since we only have OpenAI
+        modelName = 'gpt-4o';
+      }
+
+      // Adjust temperature based on selected style
+      if (settings.selectedStyle === 'creative') {
+        temperature = 0.7;
+      } else if (settings.selectedStyle === 'technical') {
+        temperature = 0.0;
+      } else if (settings.selectedStyle === 'friendly') {
+        temperature = 0.3;
+      } else if (settings.selectedStyle === 'professional') {
+        temperature = 0.1;
+      } else {
+        temperature = 0.1; // Default
+      }
+    }
+  }
+
+  console.log(`Using model: ${modelName} with temperature: ${temperature}`);
+
   const llm = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: 'gpt-4o', // Using a more capable model for better context understanding
-    temperature: 0.1, // Slight increase in creativity for more natural responses
+    modelName: modelName,
+    temperature: temperature,
     maxConcurrency: 5, // Limit concurrent API calls
     cache: true, // Enable OpenAI's internal caching
     streaming: true, // Enable streaming for the model
@@ -37,7 +94,7 @@ export function createQAChain(vectorStoreData) {
   // Create a lighter LLM for reasoning
   const reasoningLlm = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: 'gpt-4o', // Can use the same model or a cheaper one like gpt-3.5-turbo
+    modelName: 'gpt-3.5-turbo-0125', // Always use a cheaper model for reasoning
     temperature: 0.0, // Lower temperature for more deterministic reasoning
     maxConcurrency: 5,
     cache: true,
@@ -308,8 +365,17 @@ export function createQAChain(vectorStoreData) {
     }
   };
 
-  // Get the prompt from prompts.js
-  const prompt = createQAPrompt();
+  // Get the appropriate style from settings if available
+  let promptStyle = 'default';
+  if (workspaceId && settingsCache.has(`settings_${workspaceId}`)) {
+    const settings = settingsCache.get(`settings_${workspaceId}`);
+    if (settings && settings.selectedStyle) {
+      promptStyle = settings.selectedStyle;
+    }
+  }
+
+  // Get the prompt from prompts.js with the selected style
+  const prompt = createQAPrompt(promptStyle);
 
   // Create an optimized chain with better error handling
   const chain = RunnableSequence.from([
@@ -418,5 +484,33 @@ export function clearUserCache(userId) {
     userCache.flushAll();
     console.log('All user cache cleared');
   }
+  return true;
+}
+
+// Add function to clear settings cache and remove the chain for a workspace
+export function clearWorkspaceChain(workspaceId) {
+  if (!workspaceId) return false;
+
+  // Clear settings cache
+  settingsCache.del(`settings_${workspaceId}`);
+  console.log(`Settings cache cleared for workspace ${workspaceId}`);
+
+  // Import the qaChains map on demand to avoid circular dependencies
+  try {
+    // Using dynamic import to avoid circular dependency
+    import('./aiRoutes.js')
+      .then((module) => {
+        if (module.qaChains && module.qaChains instanceof Map) {
+          module.qaChains.delete(workspaceId);
+          console.log(`QA chain removed for workspace ${workspaceId}`);
+        }
+      })
+      .catch((err) => {
+        console.error('Error importing aiRoutes:', err);
+      });
+  } catch (error) {
+    console.error('Error clearing workspace chain:', error);
+  }
+
   return true;
 }

@@ -1,4 +1,5 @@
 import ChatSettings from '../models/ChatSettings.js';
+import { clearWorkspaceChain } from '../routes/ai/chain.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
 // @desc    Get chat settings for a workspace
@@ -42,6 +43,9 @@ export const updateChatSettings = asyncHandler(async (req, res) => {
     { new: true, upsert: true, runValidators: true },
   );
 
+  // Clear chain and settings cache when settings are updated
+  clearWorkspaceChain(workspaceId.toString());
+
   res.status(200).json({
     success: true,
     data: chatSettings,
@@ -68,6 +72,9 @@ export const resetChatSettings = asyncHandler(async (req, res) => {
     { $set: defaultValues },
     { new: true, upsert: true, runValidators: true },
   );
+
+  // Clear chain and settings cache when settings are reset
+  clearWorkspaceChain(workspaceId.toString());
 
   res.status(200).json({
     success: true,
