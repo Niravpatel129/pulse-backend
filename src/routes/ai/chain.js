@@ -212,14 +212,36 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       let parsedResult;
       try {
         // Clean the result to handle potential markdown formatting
-        const cleanedResult = reasoningResult
+        let cleanedResult = reasoningResult
           .replace(/^```json\s*/, '') // Remove leading ```json
           .replace(/^```\s*/, '') // Remove leading ``` (without json)
           .replace(/\s*```$/, '') // Remove trailing ```
           .trim();
 
+        // Remove any additional text before or after the JSON if present
+        const jsonStartIndex = cleanedResult.indexOf('{');
+        const jsonEndIndex = cleanedResult.lastIndexOf('}');
+
+        if (jsonStartIndex >= 0 && jsonEndIndex >= 0) {
+          cleanedResult = cleanedResult.substring(jsonStartIndex, jsonEndIndex + 1);
+        }
+
         console.log('Cleaned reasoning result:', cleanedResult);
-        parsedResult = JSON.parse(cleanedResult);
+
+        try {
+          // First attempt to parse the JSON directly
+          parsedResult = JSON.parse(cleanedResult);
+        } catch (initialParseError) {
+          // If that fails, try to handle common issues with LLM outputs
+          console.warn('Initial JSON parsing failed, attempting to fix JSON:', initialParseError);
+
+          // Replace single quotes with double quotes if they exist
+          const doubleQuotedResult = cleanedResult.replace(/'/g, '"');
+
+          // Try to parse with double quotes
+          parsedResult = JSON.parse(doubleQuotedResult);
+        }
+
         console.log(`Reasoning result:`, parsedResult);
       } catch (parseError) {
         console.error('Error parsing reasoning result:', parseError);

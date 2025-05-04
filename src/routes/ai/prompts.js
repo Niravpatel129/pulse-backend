@@ -90,7 +90,7 @@ export const createReasoningPrompt = () => {
     4. Break down complex questions into simpler information needs
     
     # Output Format
-    Return a JSON object with these fields:
+    Return a valid, properly formatted JSON object with these fields:
     - intent: Core intent of the user's question
     - entity_types: Array of entity types to search for (workspace, projects, users, leads, meetings, tables)
     - expanded_query: More detailed version of the query for retrieving relevant information
@@ -98,9 +98,11 @@ export const createReasoningPrompt = () => {
     - specific_lookups: Array of specific terms or identifiers to search for
     
     # Important
-    Return ONLY the raw JSON object without markdown formatting, code blocks, or explanation.
+    - Return ONLY the raw JSON object without markdown formatting, code blocks, or explanation
+    - Ensure the output is valid parseable JSON
+    - Do not include any text before or after the JSON
     
-    Example:
+    # Example Output
     {"intent":"workspace_overview","entity_types":["workspace","projects"],"expanded_query":"Tell me about the workspace structure and main projects","requires_history":false,"specific_lookups":[]}
   `);
 };
