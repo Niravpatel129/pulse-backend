@@ -12,6 +12,7 @@ import getTableRecords from '../controllers/tables/getTableRecords.js';
 import getTables from '../controllers/tables/getTables.js';
 import updateColumnName from '../controllers/tables/updateColumnName.js';
 import updateColumnOrder from '../controllers/tables/updateColumnOrder.js';
+import updateTable from '../controllers/tables/updateTable.js';
 import updateTableColumn from '../controllers/tables/updateTableColumn.js';
 import updateTableName from '../controllers/tables/updateTableName.js';
 import updateTableRecord from '../controllers/tables/updateTableRecord.js';
@@ -39,6 +40,7 @@ router.put('/:tableId/columns/:columnId', updateColumnName);
 router.delete('/:tableId/columns/:columnId', deleteTableColumn);
 router.patch('/:tableId', updateTableName);
 router.put('/:tableId', updateTableName);
+router.put('/:tableId/updateTable', updateTable);
 router.delete('/:tableId', deleteTable);
 
 export default router;
