@@ -12,6 +12,13 @@ import User from '../../models/User.js';
 // Import ChatSettings model
 import ChatSettings from '../../models/ChatSettings.js';
 
+// Simple token estimation function
+function estimateTokens(text) {
+  if (!text) return 0;
+  // Rough estimate: 1 token ≈ 4 characters for English text
+  return Math.ceil(text.length / 4);
+}
+
 // Create query result cache with 30 minute TTL - workspace-specific
 const retrievalCache = new NodeCache({ stdTTL: 1800 });
 
@@ -96,6 +103,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     maxConcurrency: 5, // Limit concurrent API calls
     cache: true, // Enable OpenAI's internal caching
     streaming: true, // Enable streaming for the model
+    maxTokens: 500, // Limit output tokens for cost control (≈$0.15 for gpt-4o)
   });
 
   // Create a lighter LLM for reasoning
@@ -106,11 +114,12 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     maxConcurrency: 5,
     cache: true,
     streaming: false, // No streaming needed for reasoning
+    maxTokens: 250, // Limit reasoning output tokens (less than $0.01)
   });
 
   // Create a retriever wrapped in a function to handle errors
   const retriever = vectorStore.asRetriever({
-    k: 8, // Increased from 5 to get more comprehensive context
+    k: 4, // Reduced from 8 to 4 to limit context size and token usage
   });
 
   // Helper function to get user data
@@ -374,7 +383,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       for (const entityType of entityTypes) {
         // Use domain-specific vector stores if available - with workspace isolation
         const domainVS = getDomainVectorStore(workspaceId, entityType);
-        const domainRetriever = domainVS ? domainVS.asRetriever({ k: 6 }) : retriever;
+        const domainRetriever = domainVS ? domainVS.asRetriever({ k: 3 }) : retriever;
 
         fetchPromises.push(
           domainRetriever.getRelevantDocuments(`${entityType} ${expandedQuery}`).catch((err) => {
@@ -390,7 +399,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
         // Get tables domain vector store if available
         const tablesVS = getDomainVectorStore(workspaceId, 'tables');
-        const tablesRetriever = tablesVS ? tablesVS.asRetriever({ k: 4 }) : retriever;
+        const tablesRetriever = tablesVS ? tablesVS.asRetriever({ k: 2 }) : retriever;
 
         // Add specific table name search if mentioned in query
         const tableNameMatch = q.match(/\b(table|tables)\s+(\w+)/i);
@@ -450,14 +459,48 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
       console.log(`Retrieved ${uniqueDocs.length} unique documents for workspace ${workspaceId}`);
 
-      // Convert to string format
-      let docsString = formatDocumentsAsString(uniqueDocs);
+      // Limit total tokens in context to control costs
+      const maxContextTokens = 6000; // About $0.06 for GPT-4o input tokens
+      let tokenCount = 0;
+      let prunedDocs = [];
 
-      // Add table-specific guides if available
-      if (tableSpecificGuides.length > 0) {
-        docsString += '\n' + tableSpecificGuides.join('\n');
+      // Sort docs by metadata.score if available to prioritize most relevant
+      uniqueDocs.sort((a, b) => (b.metadata?.score || 0) - (a.metadata?.score || 0));
+
+      // Take docs until we hit the token limit
+      for (const doc of uniqueDocs) {
+        const docTokens = estimateTokens(doc.pageContent);
+        if (tokenCount + docTokens <= maxContextTokens) {
+          prunedDocs.push(doc);
+          tokenCount += docTokens;
+        } else {
+          // Stop once we exceed token limit
+          break;
+        }
       }
 
+      console.log(`Using ${prunedDocs.length} docs with estimated ${tokenCount} tokens`);
+
+      // Convert to string format
+      let docsString = formatDocumentsAsString(prunedDocs);
+
+      // Add table-specific guides if available (prioritize these)
+      if (tableSpecificGuides.length > 0) {
+        const guidesString = tableSpecificGuides.join('\n');
+        const guideTokens = estimateTokens(guidesString);
+
+        // Only add if we have room within reasonable token limits
+        if (tokenCount + guideTokens <= maxContextTokens + 2000) {
+          // Allow slight overflow for guides
+          docsString += '\n' + guidesString;
+          tokenCount += guideTokens;
+        } else {
+          // Add a note that guides were truncated
+          docsString += '\n\n## NOTE: Some table guides were truncated to control costs ##';
+        }
+      }
+
+      console.log(`Final context estimated at ${estimateTokens(docsString)} tokens`);
       // Cache the result with workspace-specific key
       retrievalCache.set(cacheKey, docsString);
 

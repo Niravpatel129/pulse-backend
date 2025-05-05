@@ -66,11 +66,14 @@ export const createQAPrompt = (style = 'default', customContext = '', workspaceN
     7. IMPORTANT: When answering questions about tables, ALWAYS prioritize information from TABLE-SPECIFIC AI GUIDES if available. These guides provide definitive rules and interpretations for how to work with each table.
     
     # Formatting Requirements
-    - Be direct and concise
+    - Be extremely concise and direct - use no more than 1-3 sentences when possible
+    - Limit responses to essential information only - avoid all unnecessary details
     - DO NOT add closing phrases like "If you have any more questions..." or "Feel free to ask..."
     - End your answer when you've addressed the query
-    - Format dates in long date format
-    - For tables, use proper Markdown formatting with vertical lines and dashes for headers
+    - Format dates in short date format (MM/DD/YY)
+    - For tables, use simple formatting without excessive markdown
+    - Minimize use of bullet points
+    - CRITICAL: Keep output tokens to an absolute minimum - aim for brevity
     
     # Answer
   `);
