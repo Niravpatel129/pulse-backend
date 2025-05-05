@@ -1019,26 +1019,31 @@ router.post('/line-items', async (req, res) => {
     try {
       // Create custom prompt for direct line item extraction
       const directPrompt = `
-ONLY OUTPUT VALID JSON. Do not include any explanatory text before or after the JSON.
-Your task is to extract product and service line items from this request: "${prompt}"
+ ONLY OUTPUT VALID JSON. Do not include any explanatory text before or after the JSON.
+ Your task is to extract product and service line items from this request: "${prompt}"
+ 
+ ${serviceContextData}
+ 
+ Categorize each item as either PRODUCT or SERVICE based on the description.
+ If an item is described as a service or is called/named something without physical attributes, treat it as a SERVICE.
+ Products are physical items like clothing.
+ 
+ Format your response EXACTLY like this:
+ {"lineItems":[{"name":"Item Name","description":"Item Description","price":"$XX.XX","type":"PRODUCT/SERVICE","reasoning":"Explanation of where the name, price, and description were derived from"}]}
+ 
+ For pricing: Use the mentioned price or a reasonable estimate.
+ For service items: If the price isn't mentioned, use $50.00 as default.
+ For product items: Include relevant details like color in the name and description.
+ Make sure to include ALL items mentioned in the prompt.
 
-${serviceContextData}
-
-Categorize each item as either PRODUCT or SERVICE based on the description.
-If an item is described as a service or is called/named something without physical attributes, treat it as a SERVICE.
-Products are physical items like clothing.
-
-Format your response EXACTLY like this:
-{"lineItems":[{"name":"Item Name","description":"Item Description","price":"$XX.XX","type":"PRODUCT/SERVICE"}]}
-
-For pricing: Use the mentioned price or a reasonable estimate.
-For service items: If the price isn't mentioned, use $50.00 as default.
-For product items: Include relevant details like color in the name and description.
-Make sure to include ALL items mentioned in the prompt.
-
-Example correct format:
-{"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"$19.99","type":"PRODUCT"}]}
-`;
+ For the reasoning field, explain:
+ 1. Where you got the name from (extracted from prompt, database, or generated)
+ 2. How you determined the price (explicit in prompt, estimated, or default)
+ 3. How you created the description (based on product type, extracted from database, etc.)
+ 
+ Example correct format:
+ {"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"$19.99","type":"PRODUCT","reasoning":"Name derived from 'red hoodie' in prompt. Price estimated based on market value. Description generated based on standard hoodie features."}]}
+ `;
 
       // Make direct API call with stringent formatting requirements
       const result = await workspaceChain.invoke({
@@ -1093,6 +1098,9 @@ Example correct format:
         description: item.description || 'No description provided',
         price: item.price || (item.type === 'SERVICE' ? '$50.00' : '$19.99'),
         type: item.type || 'PRODUCT',
+        reasoning:
+          item.reasoning ||
+          `Name, price, and description derived from AI analysis of the prompt: "${prompt}".`,
       }));
 
       // Estimate cost
@@ -1176,11 +1184,27 @@ function extractProductsFromPrompt(prompt) {
       const priceMatch = trimmedSegment.match(/\$\s*(\d+(?:\.\d+)?)/);
       const price = priceMatch ? `$${parseFloat(priceMatch[1]).toFixed(2)}` : '$50.00';
 
+      // Build reasoning explanation
+      let reasoning = `Name derived from `;
+      if (serviceNameMatch && serviceNameMatch[2]) {
+        reasoning += `explicit "called ${serviceNameMatch[2]}" in prompt. `;
+      } else if (trimmedSegment.includes('dtf')) {
+        reasoning += `"dtf" mention in prompt. `;
+      } else {
+        reasoning += `fallback to generic service name. `;
+      }
+
+      reasoning += `Price ${
+        priceMatch ? 'extracted from prompt' : 'set to default service price ($50.00)'
+      }. `;
+      reasoning += `Description generated as generic service description.`;
+
       products.push({
         name: serviceName,
         description: `Service item as requested by customer`,
         price: price,
         type: 'SERVICE',
+        reasoning: reasoning,
       });
 
       return;
@@ -1239,13 +1263,16 @@ function extractProductsFromPrompt(prompt) {
 
     // Set price
     let price;
+    let priceSource = '';
     if (priceMatch) {
       // Exact price
       price = `$${parseFloat(priceMatch[1]).toFixed(2)}`;
+      priceSource = `extracted from exact price in prompt ($${priceMatch[1]})`;
     } else if (priceMentionMatch) {
       // Approximate price
       const basePrice = parseFloat(priceMentionMatch[1]);
       price = `$${(basePrice + 0.99).toFixed(2)}`;
+      priceSource = `derived from approximate price in prompt (about $${priceMentionMatch[1]})`;
     } else {
       // Default prices
       const defaultPrices = {
@@ -1261,13 +1288,32 @@ function extractProductsFromPrompt(prompt) {
         sweatshirt: 17.99,
       };
       price = `$${defaultPrices[productType] || 19.99}`;
+      priceSource = `set to default price for ${productType} products ($${
+        defaultPrices[productType] || 19.99
+      })`;
     }
+
+    // Build reasoning explanation
+    let reasoning = `Name constructed from `;
+    const nameComponents = [];
+    if (color) nameComponents.push(`color ("${color}")`);
+    if (descriptor) nameComponents.push(`descriptor ("${descriptor}")`);
+    nameComponents.push(`product type ("${productType}")`);
+    reasoning += nameComponents.join(', ') + ` extracted from prompt. `;
+
+    reasoning += `Price ${priceSource}. `;
+
+    reasoning += `Description generated based on standard ${productType} features`;
+    if (color) reasoning += `, including color`;
+    if (descriptor) reasoning += ` and ${descriptor} characteristics`;
+    reasoning += `.`;
 
     products.push({
       name,
       description,
       price,
       type: 'PRODUCT',
+      reasoning: reasoning,
     });
   });
 
@@ -1278,6 +1324,8 @@ function extractProductsFromPrompt(prompt) {
       description: 'Product based on customer request.',
       price: '$19.99',
       type: 'PRODUCT',
+      reasoning:
+        'Generated as fallback when no specific products could be identified in the prompt.',
     });
   }
 
