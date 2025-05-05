@@ -103,7 +103,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     maxConcurrency: 5, // Limit concurrent API calls
     cache: true, // Enable OpenAI's internal caching
     streaming: true, // Enable streaming for the model
-    maxTokens: 500, // Limit output tokens for cost control (≈$0.15 for gpt-4o)
+    maxTokens: 1000, // Limit output tokens for cost control (≈$0.15 for gpt-4o)
   });
 
   // Create a lighter LLM for reasoning
@@ -114,12 +114,12 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     maxConcurrency: 5,
     cache: true,
     streaming: false, // No streaming needed for reasoning
-    maxTokens: 250, // Limit reasoning output tokens (less than $0.01)
+    maxTokens: 550, // Limit reasoning output tokens (less than $0.01)
   });
 
   // Create a retriever wrapped in a function to handle errors
   const retriever = vectorStore.asRetriever({
-    k: 4, // Reduced from 8 to 4 to limit context size and token usage
+    k: 8, // Reduced from 8 to 4 to limit context size and token usage
   });
 
   // Helper function to get user data

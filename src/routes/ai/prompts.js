@@ -32,7 +32,7 @@ export const createQAPrompt = (style = 'default', customContext = '', workspaceN
     Answer the following question based on the provided context and conversation history.
 
     # Table or Database Information
-    Never render the table or database information in the response, redirect the user to the table or database, unless the user asks for it and condense the information to a few sentences.
+    Never render the table or database information in the response, redirect the user to the table or database, unless the user asks for it and try to condense the information.
     
     # Context Information
     {context}
