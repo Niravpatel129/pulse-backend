@@ -161,19 +161,33 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
   // New function to apply reasoning before retrieval
   const applyReasoning = async (query, workspaceId, history) => {
-    if (!query) return null;
+    // Ensure inputs are properly formatted
+    const safeQuery = query || '';
+    const safeHistory = history || '';
+
+    // Return default reasoning if query is empty
+    if (!safeQuery.trim()) {
+      console.log('Empty query received, returning default reasoning');
+      return {
+        intent: 'unknown',
+        entity_types: [],
+        expanded_query: '',
+        requires_history: false,
+        specific_lookups: [],
+      };
+    }
 
     // Check cache first
-    const cacheKey = `reasoning_${workspaceId}_${query}`;
+    const cacheKey = `reasoning_${workspaceId}_${safeQuery}`;
     const cachedReasoning = reasoningCache.get(cacheKey);
     if (cachedReasoning) {
-      console.log(`Using cached reasoning for query: "${query}"`);
+      console.log(`Using cached reasoning for query: "${safeQuery}"`);
       return cachedReasoning;
     }
 
     // Handle simple greetings - skip reasoning step
     if (
-      query
+      safeQuery
         .toLowerCase()
         .trim()
         .match(/^(hi|hello|hey|howdy|greetings)(\?|!|\.)?$/)
@@ -190,26 +204,27 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     }
 
     // Create and run the reasoning chain
-    const reasoningPrompt = createReasoningPrompt();
-    const reasoningChain = RunnableSequence.from([
-      {
-        query: (input) => input.query || '',
-        history: (input) => input.history || '',
-      },
-      reasoningPrompt,
-      reasoningLlm,
-      new StringOutputParser(),
-    ]);
-
     try {
-      console.log(`Applying reasoning to query: "${query}"`);
+      console.log(`Applying reasoning to query: "${safeQuery}"`);
+
+      // Format inputs properly for the reasoning prompt
+      const reasoningPrompt = createReasoningPrompt();
+      const reasoningChain = RunnableSequence.from([
+        {
+          query: (input) => input.query || '',
+          history: (input) => input.history || '',
+        },
+        reasoningPrompt,
+        reasoningLlm,
+        new StringOutputParser(),
+      ]);
+
       const reasoningResult = await reasoningChain.invoke({
-        query,
-        history,
+        query: safeQuery || '',
+        history: safeHistory || '',
       });
 
       // Parse the JSON result
-      let parsedResult;
       try {
         // Clean the result to handle potential markdown formatting
         let cleanedResult = reasoningResult
@@ -228,6 +243,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
         console.log('Cleaned reasoning result:', cleanedResult);
 
+        let parsedResult;
         try {
           // First attempt to parse the JSON directly
           parsedResult = JSON.parse(cleanedResult);
@@ -243,31 +259,40 @@ export async function createQAChain(vectorStoreData, workspaceId) {
         }
 
         console.log(`Reasoning result:`, parsedResult);
+
+        // Cache the reasoning result
+        reasoningCache.set(cacheKey, parsedResult);
+        return parsedResult;
       } catch (parseError) {
         console.error('Error parsing reasoning result:', parseError);
         // Fallback to standard query if we can't parse the result
-        parsedResult = {
+        const fallbackResult = {
           intent: 'unknown',
-          entity_types: detectEntityTypes(query),
-          expanded_query: enhanceGeneralQueries(query),
-          requires_history: history ? true : false,
+          entity_types: detectEntityTypes(safeQuery),
+          expanded_query: enhanceGeneralQueries(safeQuery),
+          requires_history: safeHistory ? true : false,
           specific_lookups: [],
         };
+        reasoningCache.set(cacheKey, fallbackResult);
+        return fallbackResult;
       }
-
-      // Cache the reasoning result
-      reasoningCache.set(cacheKey, parsedResult);
-      return parsedResult;
     } catch (error) {
       console.error('Error in reasoning chain:', error);
-      // Fallback to standard query enhancement
-      return {
+      // Fallback to standard query enhancement with better error reporting
+      const entityTypes = detectEntityTypes(safeQuery);
+      console.log(`Fallback entity types detected: ${entityTypes.join(', ')}`);
+
+      const fallbackReasoning = {
         intent: 'unknown',
-        entity_types: detectEntityTypes(query),
-        expanded_query: enhanceGeneralQueries(query),
-        requires_history: history ? true : false,
+        entity_types: entityTypes,
+        expanded_query: enhanceGeneralQueries(safeQuery),
+        requires_history: safeHistory ? true : false,
         specific_lookups: [],
       };
+
+      // Cache the fallback reasoning result
+      reasoningCache.set(cacheKey, fallbackReasoning);
+      return fallbackReasoning;
     }
   };
 
