@@ -98,8 +98,7 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
   const llm = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: modelName,
-    temperature: temperature,
+    modelName: 'gpt-4.1-2025-04-14',
     maxConcurrency: 5, // Limit concurrent API calls
     cache: true, // Enable OpenAI's internal caching
     streaming: true, // Enable streaming for the model
@@ -110,7 +109,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
   const reasoningLlm = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
     modelName: 'gpt-3.5-turbo-0125', // Always use a cheaper model for reasoning
-    temperature: 0.0, // Lower temperature for more deterministic reasoning
     maxConcurrency: 5,
     cache: true,
     streaming: false, // No streaming needed for reasoning
