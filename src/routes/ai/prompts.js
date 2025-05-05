@@ -18,7 +18,7 @@ function getStyleInstructions(style = 'default') {
 }
 
 // Main QA prompt template
-export const createQAPrompt = (style = 'default', customContext = '') => {
+export const createQAPrompt = (style = 'default', customContext = '', workspaceName = '') => {
   const styleInstruction = getStyleInstructions(style);
 
   // Prepare custom context section if available
@@ -30,6 +30,9 @@ export const createQAPrompt = (style = 'default', customContext = '') => {
 
     # Task
     Answer the following question based on the provided context and conversation history.
+
+    # Table or Database Information
+    Never render the table or database information in the response, redirect the user to the table or database, unless the user asks for it and condense the information to a few sentences.
     
     # Context Information
     {context}

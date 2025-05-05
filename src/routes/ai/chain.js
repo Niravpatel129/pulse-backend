@@ -485,15 +485,17 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       }
     }
   }
+  const workspaceName = '';
 
   // Get the prompt from prompts.js with the selected style
-  const prompt = createQAPrompt(promptStyle, customContext);
+  const prompt = createQAPrompt(promptStyle, customContext, workspaceName);
 
   // Create an optimized chain with better error handling
   const chain = RunnableSequence.from([
     {
       // Map inputs to feed into prompt with optimized context retrieval
       context: async (input) => {
+        console.log('🚀 input:', input);
         const query = input.query || '';
         const workspaceId = input.workspaceId;
         const userId = input.userId;
