@@ -20,7 +20,6 @@ export { qaChains };
 
 // Create caches with TTL
 const vectorStoreCache = new NodeCache({ stdTTL: 3600 }); // 1 hour
-const queryCache = new NodeCache({ stdTTL: 300 }); // 5 minutes
 const conversationHistory = new NodeCache({ stdTTL: 1800 }); // 30 minutes
 
 // Variables for message queue
@@ -943,6 +942,347 @@ router.get('/refresh/status/:jobId', async (req, res) => {
     });
   }
 });
+
+// Endpoint to process natural language into line items
+router.post('/line-items', async (req, res) => {
+  try {
+    console.log('Received line items generation request');
+    const { prompt } = req.body;
+    const workspaceId = req.workspace._id.toString();
+    const userId = req.user.userId;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Missing prompt in request body' });
+    }
+
+    console.log(`Processing line items for prompt: "${prompt}"`);
+
+    // Initialize QA chain if needed for this workspace
+    if (!qaChains.has(workspaceId)) {
+      console.log(`Initializing vector store and QA chain for workspace ${workspaceId}...`);
+
+      // Check if vector store is cached
+      let vs;
+      if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
+        console.log('Using cached vector store for workspace');
+        vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
+      } else {
+        console.log('Initializing new vector store for workspace...');
+        vs = await initVectorStore(workspaceId);
+        // Cache the vector store
+        vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
+      }
+
+      console.log('Creating QA chain...');
+      const workspaceChain = await createQAChain(vs, workspaceId);
+      // Store chain by workspace ID
+      qaChains.set(workspaceId, workspaceChain);
+      console.log(`QA chain initialized for workspace ${workspaceId}`);
+    }
+
+    // Get the chain for this workspace
+    const workspaceChain = qaChains.get(workspaceId);
+
+    const startTime = Date.now();
+
+    // First, check if we need to get item data from tables
+    const needsTableLookup =
+      prompt.toLowerCase().includes('service') ||
+      prompt.toLowerCase().includes('line item called') ||
+      /\b(dtf|called|named)\b/i.test(prompt);
+
+    // Try to get service data from tables if needed
+    let serviceContextData = '';
+    if (needsTableLookup) {
+      try {
+        console.log('Attempting to retrieve service information from tables');
+        // Use the existing retrieval system to get information from tables
+        const tableContext = await workspaceChain.invoke({
+          query: `Find information about services or table data that might include "${
+            prompt.toLowerCase().includes('dtf') ? 'dtf' : 'service'
+          }" items`,
+          workspaceId,
+          userId,
+          context_only: true,
+        });
+
+        if (tableContext && typeof tableContext === 'string') {
+          serviceContextData = `SERVICE DATA CONTEXT:\n${tableContext}\n\nUse this context to populate service line items that match the names in the prompt.`;
+          console.log('Retrieved service data context');
+        }
+      } catch (error) {
+        console.error('Error retrieving service information:', error);
+      }
+    }
+
+    // Direct approach to get line items with careful handling of both products and services
+    try {
+      // Create custom prompt for direct line item extraction
+      const directPrompt = `
+ONLY OUTPUT VALID JSON. Do not include any explanatory text before or after the JSON.
+Your task is to extract product and service line items from this request: "${prompt}"
+
+${serviceContextData}
+
+Categorize each item as either PRODUCT or SERVICE based on the description.
+If an item is described as a service or is called/named something without physical attributes, treat it as a SERVICE.
+Products are physical items like clothing.
+
+Format your response EXACTLY like this:
+{"lineItems":[{"name":"Item Name","description":"Item Description","price":"$XX.XX","type":"PRODUCT/SERVICE"}]}
+
+For pricing: Use the mentioned price or a reasonable estimate.
+For service items: If the price isn't mentioned, use $50.00 as default.
+For product items: Include relevant details like color in the name and description.
+Make sure to include ALL items mentioned in the prompt.
+
+Example correct format:
+{"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"$19.99","type":"PRODUCT"}]}
+`;
+
+      // Make direct API call with stringent formatting requirements
+      const result = await workspaceChain.invoke({
+        query: directPrompt,
+        workspaceId,
+        userId,
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+      });
+
+      const endTime = Date.now();
+      console.log('Line items result received:', typeof result);
+
+      // Extract the lineItems from the result
+      let lineItems = [];
+      let rawResponse = '';
+
+      if (typeof result === 'string') {
+        rawResponse = result;
+        // Try to find and extract only valid JSON object pattern
+        const jsonPattern = /(\{[\s\S]*\})/g;
+        const matches = result.match(jsonPattern);
+
+        if (matches && matches.length > 0) {
+          try {
+            const jsonData = JSON.parse(matches[0]);
+            if (jsonData.lineItems) {
+              lineItems = jsonData.lineItems;
+            }
+          } catch (parseError) {
+            console.error('Error parsing JSON pattern:', parseError);
+            throw new Error('Invalid JSON format in response');
+          }
+        } else {
+          throw new Error('No valid JSON pattern found in response');
+        }
+      } else if (typeof result === 'object' && result.lineItems) {
+        lineItems = result.lineItems;
+      } else if (Array.isArray(result)) {
+        lineItems = result;
+      } else {
+        throw new Error('Unexpected response structure');
+      }
+
+      if (!lineItems || lineItems.length === 0) {
+        throw new Error('No line items found in response');
+      }
+
+      // Process the line items to ensure proper formatting
+      lineItems = lineItems.map((item) => ({
+        name: item.name || 'Unnamed Item',
+        description: item.description || 'No description provided',
+        price: item.price || (item.type === 'SERVICE' ? '$50.00' : '$19.99'),
+        type: item.type || 'PRODUCT',
+      }));
+
+      // Estimate cost
+      const responseText = JSON.stringify(lineItems);
+      const costEstimate = estimateQueryCost(prompt, responseText);
+      console.log(
+        chalk.green(
+          `💰 Line Items Generation Cost Estimate: $${costEstimate.totalCost.toFixed(6)}`,
+        ) +
+          chalk.yellow(
+            ` (Input: ~${costEstimate.inputTokens} tokens, Output: ~${
+              costEstimate.outputTokens
+            } tokens, Time: ${(endTime - startTime) / 1000}s)`,
+          ),
+      );
+
+      // Return structured response
+      return res.json({
+        lineItems,
+        meta: {
+          processingTime: (endTime - startTime) / 1000,
+          promptLength: prompt.length,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error('Error with line items generation:', error);
+      console.log('Falling back to manual extraction...');
+
+      // Use the fallback extraction with improved service item detection
+      const products = extractProductsFromPrompt(prompt);
+
+      const endTime = Date.now();
+      return res.json({
+        lineItems: products,
+        meta: {
+          processingTime: (endTime - startTime) / 1000,
+          promptLength: prompt.length,
+          timestamp: new Date().toISOString(),
+          fallback: true,
+          error: error.message,
+        },
+      });
+    }
+  } catch (err) {
+    console.error('Error in /line-items endpoint:', err);
+    return res.status(500).json({
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    });
+  }
+});
+
+// Helper function to extract multiple products from a prompt
+function extractProductsFromPrompt(prompt) {
+  const products = [];
+
+  // Split by "and" to identify multiple products
+  const productSegments = prompt.split(/,\s*and\s*|\s*and\s*|,\s*/);
+
+  productSegments.forEach((segment) => {
+    const trimmedSegment = segment.trim();
+    if (!trimmedSegment) return;
+
+    // Check if this is a service item
+    const isService =
+      trimmedSegment.includes('service') ||
+      /\b(called|named)\s+([a-zA-Z0-9]+)\b/i.test(trimmedSegment);
+
+    if (isService) {
+      // Extract service name
+      let serviceName = 'Generic Service';
+      const serviceNameMatch = trimmedSegment.match(/\b(called|named)\s+([a-zA-Z0-9]+)\b/i);
+      if (serviceNameMatch && serviceNameMatch[2]) {
+        serviceName = serviceNameMatch[2];
+      } else if (trimmedSegment.includes('dtf')) {
+        serviceName = 'DTF Service';
+      }
+
+      // Extract price if mentioned
+      const priceMatch = trimmedSegment.match(/\$\s*(\d+(?:\.\d+)?)/);
+      const price = priceMatch ? `$${parseFloat(priceMatch[1]).toFixed(2)}` : '$50.00';
+
+      products.push({
+        name: serviceName,
+        description: `Service item as requested by customer`,
+        price: price,
+        type: 'SERVICE',
+      });
+
+      return;
+    }
+
+    // Extract product type
+    const typeMatches = trimmedSegment.match(
+      /\b(hoodie|shirt|pants|jacket|sweater|hat|cap|beanie|t-shirt|sweatshirt)\b/i,
+    );
+    if (!typeMatches) return;
+
+    const productType = typeMatches[1].toLowerCase();
+
+    // Extract color
+    const colorMatch = trimmedSegment.match(
+      /\b(red|blue|green|black|white|gray|purple|yellow|orange|pink|brown)\b/i,
+    );
+    const color = colorMatch ? colorMatch[1] : null;
+
+    // Extract price
+    const priceMatch = trimmedSegment.match(/\$\s*(\d+(?:\.\d+)?)/);
+    const priceMentionMatch = trimmedSegment.match(/(?:cost|price|around|about)\s+\$?(\d+)/i);
+
+    // Extract additional descriptors
+    const descriptorMatch = trimmedSegment.match(
+      /\b(turtle|full[\s-]zip|pullover|graphic|cotton|polyester|wool|denim|regular)\b/i,
+    );
+    const descriptor = descriptorMatch ? descriptorMatch[1] : null;
+
+    // Construct product name
+    let name = '';
+    if (color) name += `${color.charAt(0).toUpperCase() + color.slice(1)} `;
+    if (descriptor) name += `${descriptor.charAt(0).toUpperCase() + descriptor.slice(1)} `;
+    name += productType.charAt(0).toUpperCase() + productType.slice(1);
+
+    // Generate product description
+    let description;
+    switch (productType) {
+      case 'hoodie':
+        description = `Comfortable ${color || ''} cotton-blend hoodie with ${
+          trimmedSegment.includes('zip') ? 'full-length zipper' : 'pullover design'
+        }, kangaroo pockets and adjustable hood${
+          descriptor ? `, featuring a ${descriptor} design` : ''
+        }.`;
+        break;
+      case 'shirt':
+        description = `Classic ${color || ''} ${
+          trimmedSegment.includes('regular') ? 'regular fit' : 'standard'
+        } shirt made of soft, breathable cotton with reinforced stitching.`;
+        break;
+      default:
+        description = `Quality ${
+          color || ''
+        } ${productType} with standard features and comfortable fit.`;
+    }
+
+    // Set price
+    let price;
+    if (priceMatch) {
+      // Exact price
+      price = `$${parseFloat(priceMatch[1]).toFixed(2)}`;
+    } else if (priceMentionMatch) {
+      // Approximate price
+      const basePrice = parseFloat(priceMentionMatch[1]);
+      price = `$${(basePrice + 0.99).toFixed(2)}`;
+    } else {
+      // Default prices
+      const defaultPrices = {
+        hoodie: 19.99,
+        shirt: 15.99,
+        pants: 24.99,
+        jacket: 39.99,
+        sweater: 29.99,
+        hat: 14.99,
+        cap: 12.99,
+        beanie: 11.99,
+        't-shirt': 12.99,
+        sweatshirt: 17.99,
+      };
+      price = `$${defaultPrices[productType] || 19.99}`;
+    }
+
+    products.push({
+      name,
+      description,
+      price,
+      type: 'PRODUCT',
+    });
+  });
+
+  // If no products were extracted, provide a fallback
+  if (products.length === 0) {
+    products.push({
+      name: 'Generic Product',
+      description: 'Product based on customer request.',
+      price: '$19.99',
+      type: 'PRODUCT',
+    });
+  }
+
+  return products;
+}
 
 // Helper function to determine if traffic is low
 async function isLowTraffic() {
