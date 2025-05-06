@@ -1029,20 +1029,22 @@ router.post('/line-items', async (req, res) => {
  Products are physical items like clothing.
  
  Format your response EXACTLY like this:
- {"lineItems":[{"name":"Item Name","description":"Item Description","price":"$XX.XX","type":"PRODUCT/SERVICE","reasoning":"Explanation of where the name, price, and description were derived from"}]}
+ {"lineItems":[{"name":"Item Name","description":"Item Description","price":"$XX.XX","type":"PRODUCT/SERVICE","qty":1,"reasoning":"Explanation of where the name, price, and description were derived from"}]}
  
  For pricing: Use the mentioned price or a reasonable estimate.
  For service items: If the price isn't mentioned, use $50.00 as default.
  For product items: Include relevant details like color in the name and description.
+ Look for quantity information in the prompt (e.g., "2 shirts" or "quantity of 3"). If no quantity is specified, default to 1.
  Make sure to include ALL items mentioned in the prompt.
 
  For the reasoning field, explain:
  1. Where you got the name from (extracted from prompt, database, or generated)
  2. How you determined the price (explicit in prompt, estimated, or default)
  3. How you created the description (based on product type, extracted from database, etc.)
+ 4. Where the quantity came from (explicit in prompt or default)
  
  Example correct format:
- {"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"$19.99","type":"PRODUCT","reasoning":"Name derived from 'red hoodie' in prompt. Price estimated based on market value. Description generated based on standard hoodie features."}]}
+ {"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"$19.99","type":"PRODUCT","qty":2,"reasoning":"Name derived from 'red hoodie' in prompt. Price estimated based on market value. Description generated based on standard hoodie features. Quantity of 2 extracted from prompt '2 red hoodies'."}]}
  `;
 
       // Make direct API call with stringent formatting requirements
@@ -1098,6 +1100,7 @@ router.post('/line-items', async (req, res) => {
         description: item.description || 'No description provided',
         price: item.price || (item.type === 'SERVICE' ? '$50.00' : '$19.99'),
         type: item.type || 'PRODUCT',
+        qty: item.qty || 1,
         reasoning:
           item.reasoning ||
           `Name, price, and description derived from AI analysis of the prompt: "${prompt}".`,
@@ -1184,6 +1187,12 @@ function extractProductsFromPrompt(prompt) {
       const priceMatch = trimmedSegment.match(/\$\s*(\d+(?:\.\d+)?)/);
       const price = priceMatch ? `$${parseFloat(priceMatch[1]).toFixed(2)}` : '$50.00';
 
+      // Extract quantity if mentioned
+      const qtyMatch =
+        trimmedSegment.match(/\b(\d+)\s+(service|item|dtf)\b/i) ||
+        trimmedSegment.match(/\bquantity\s+of\s+(\d+)\b/i);
+      const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+
       // Build reasoning explanation
       let reasoning = `Name derived from `;
       if (serviceNameMatch && serviceNameMatch[2]) {
@@ -1198,12 +1207,16 @@ function extractProductsFromPrompt(prompt) {
         priceMatch ? 'extracted from prompt' : 'set to default service price ($50.00)'
       }. `;
       reasoning += `Description generated as generic service description.`;
+      reasoning += ` Quantity ${
+        qtyMatch ? `of ${qty} extracted from prompt` : 'defaulted to 1 as no quantity specified'
+      }.`;
 
       products.push({
         name: serviceName,
         description: `Service item as requested by customer`,
         price: price,
         type: 'SERVICE',
+        qty: qty,
         reasoning: reasoning,
       });
 
@@ -1233,6 +1246,17 @@ function extractProductsFromPrompt(prompt) {
       /\b(turtle|full[\s-]zip|pullover|graphic|cotton|polyester|wool|denim|regular)\b/i,
     );
     const descriptor = descriptorMatch ? descriptorMatch[1] : null;
+
+    // Extract quantity if mentioned
+    const qtyMatch =
+      trimmedSegment.match(
+        /\b(\d+)\s+(hoodies|shirts|pants|jackets|sweaters|hats|caps|beanies|t-shirts|sweatshirts)\b/i,
+      ) ||
+      trimmedSegment.match(
+        /\b(\d+)\s+(hoodie|shirt|pant|jacket|sweater|hat|cap|beanie|t-shirt|sweatshirt)\b/i,
+      ) ||
+      trimmedSegment.match(/\bquantity\s+of\s+(\d+)\b/i);
+    const qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
 
     // Construct product name
     let name = '';
@@ -1308,11 +1332,16 @@ function extractProductsFromPrompt(prompt) {
     if (descriptor) reasoning += ` and ${descriptor} characteristics`;
     reasoning += `.`;
 
+    reasoning += ` Quantity ${
+      qtyMatch ? `of ${qty} extracted from prompt` : 'defaulted to 1 as no quantity specified'
+    }.`;
+
     products.push({
       name,
       description,
       price,
       type: 'PRODUCT',
+      qty: qty,
       reasoning: reasoning,
     });
   });
@@ -1324,6 +1353,7 @@ function extractProductsFromPrompt(prompt) {
       description: 'Product based on customer request.',
       price: '$19.99',
       type: 'PRODUCT',
+      qty: 1,
       reasoning:
         'Generated as fallback when no specific products could be identified in the prompt.',
     });
