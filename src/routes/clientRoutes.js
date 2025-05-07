@@ -1,32 +1,33 @@
 import express from 'express';
 import {
+  createClient,
   deleteClient,
   getClient,
-  getClientByUserAndWorkspace,
-  getClientsByWorkspace,
+  getClients,
   updateClient,
-} from '../controllers/workspace/clientController.js';
+} from '../controllers/client/clientController.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
 
+// Apply authentication and workspace middleware to all routes
 router.use(authenticate);
 router.use(extractWorkspace);
 
-// Get a specific client by ID
+// Get all clients
+router.get('/', getClients);
+
+// Get a single client
 router.get('/:id', getClient);
+
+// Create a new client
+router.post('/', createClient);
 
 // Update a client
 router.put('/:id', updateClient);
 
 // Delete a client
 router.delete('/:id', deleteClient);
-
-// Get all clients for a specific workspace
-router.get('/workspace/:workspaceId', getClientsByWorkspace);
-
-// Get client by user and workspace
-router.get('/user/:userId/workspace/:workspaceId', getClientByUserAndWorkspace);
 
 export default router;
