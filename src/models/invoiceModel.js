@@ -21,8 +21,30 @@ const invoiceSchema = new mongoose.Schema(
     },
     items: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'ProductCatalog',
+        name: {
+          type: String,
+          required: true,
+        },
+        description: {
+          type: String,
+        },
+        quantity: {
+          type: Number,
+          required: true,
+          default: 1,
+        },
+        price: {
+          type: Number,
+          required: true,
+        },
+        discount: {
+          type: Number,
+          default: 0,
+        },
+        tax: {
+          type: Number,
+          default: 0,
+        },
       },
     ],
     selectedItems: {
@@ -114,6 +136,17 @@ const invoiceSchema = new mongoose.Schema(
     },
     paidAt: {
       type: Date,
+    },
+    requireDeposit: {
+      type: Boolean,
+      default: false,
+    },
+    depositPercentage: {
+      type: Number,
+      default: 0,
+    },
+    teamNotes: {
+      type: String,
     },
   },
   {
