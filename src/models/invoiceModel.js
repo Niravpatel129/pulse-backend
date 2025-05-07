@@ -9,7 +9,7 @@ const invoiceSchema = new mongoose.Schema(
     },
     client: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Participant',
+      ref: 'Client',
       required: true,
     },
     selectedClient: {
