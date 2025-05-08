@@ -30,7 +30,12 @@ export const createInvoice = catchAsync(async (req, res, next) => {
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const totalDiscount = items.reduce((sum, item) => sum + (item.discount || 0), 0);
-    const totalTax = items.reduce((sum, item) => sum + (item.tax || 0), 0);
+    const totalTax = items.reduce((sum, item) => {
+      const itemSubtotal = item.price * item.quantity;
+      const itemDiscount = item.discount || 0;
+      const taxableAmount = itemSubtotal - itemDiscount;
+      return sum + taxableAmount * (taxRate / 100);
+    }, 0);
 
     const total = subtotal - totalDiscount + totalTax;
 
