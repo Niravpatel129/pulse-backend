@@ -53,7 +53,7 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       taxId,
       notes,
       teamNotes,
-      status: 'draft',
+      status: req.body.status || 'open',
       dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now if not provided
       currency: currency.toUpperCase(),
       requireDeposit,
