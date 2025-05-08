@@ -45,6 +45,10 @@ const invoiceSchema = new mongoose.Schema(
           type: Number,
           default: 0,
         },
+        taxName: {
+          type: String,
+          default: 'VAT',
+        },
       },
     ],
     selectedItems: {
