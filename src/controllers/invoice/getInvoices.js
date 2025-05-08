@@ -5,7 +5,7 @@ export const getInvoices = catchAsync(async (req, res, next) => {
   try {
     const workspace = req.workspace._id;
     const invoices = await Invoice.find({ workspace })
-      .populate('client', 'name email')
+      .populate('client')
       .populate('project', 'name description')
       .populate('items', 'name quantity price projects modules discount')
       .populate('createdBy', 'name')
