@@ -1,3 +1,4 @@
+import Activity from '../../models/Activity.js';
 import Invoice from '../../models/invoiceModel.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
@@ -54,6 +55,22 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       depositPercentage,
       workspace: req.workspace._id,
       createdBy: req.user.userId,
+    });
+
+    // Record activity
+    await Activity.create({
+      user: req.user.userId,
+      workspace: req.workspace._id,
+      type: 'invoice',
+      action: 'created',
+      description: `Invoice #${invoiceNumber} created`,
+      entityId: invoice._id,
+      entityType: 'invoice',
+      metadata: {
+        invoiceNumber,
+        total,
+        status: 'draft',
+      },
     });
 
     res.status(201).json({

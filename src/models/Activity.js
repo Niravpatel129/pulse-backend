@@ -15,17 +15,26 @@ const activitySchema = new mongoose.Schema(
     project: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
-      required: true,
     },
     type: {
       type: String,
       required: true,
-      enum: ['project', 'meeting', 'task', 'document', 'comment', 'other'],
+      enum: ['project', 'meeting', 'task', 'document', 'comment', 'invoice', 'other'],
     },
     action: {
       type: String,
       required: true,
-      enum: ['created', 'updated', 'deleted', 'commented', 'assigned', 'completed'],
+      enum: [
+        'created',
+        'updated',
+        'deleted',
+        'commented',
+        'assigned',
+        'completed',
+        'paid',
+        'sent',
+        'overdue',
+      ],
     },
     description: {
       type: String,
@@ -38,6 +47,7 @@ const activitySchema = new mongoose.Schema(
     entityType: {
       type: String,
       required: true,
+      enum: ['project', 'task', 'document', 'comment', 'invoice', 'payment'],
     },
     metadata: {
       type: mongoose.Schema.Types.Mixed,
@@ -50,6 +60,7 @@ const activitySchema = new mongoose.Schema(
 
 // Index for faster queries
 activitySchema.index({ user: 1, workspace: 1, createdAt: -1 });
+activitySchema.index({ entityType: 1, entityId: 1, createdAt: -1 });
 
 const Activity = mongoose.model('Activity', activitySchema);
 

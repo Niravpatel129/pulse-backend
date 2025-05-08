@@ -5,6 +5,7 @@ import { createPaymentIntent } from '../controllers/invoice/createPaymentIntent.
 import { deleteInvoice } from '../controllers/invoice/deleteInvoice.js';
 import { deletePayment } from '../controllers/invoice/deletePayment.js';
 import { getInvoice } from '../controllers/invoice/getInvoice.js';
+import { getInvoiceActivities } from '../controllers/invoice/getInvoiceActivities.js';
 import { getInvoicePayments } from '../controllers/invoice/getInvoicePayments.js';
 import { getInvoices } from '../controllers/invoice/getInvoices.js';
 import { getInvoiceSettings } from '../controllers/invoice/getInvoiceSettings.js';
@@ -20,6 +21,8 @@ import { extractWorkspace } from '../middleware/workspace.js';
 const router = express.Router();
 
 router.get('/invoice-settings', authenticate, extractWorkspace, getInvoiceSettings);
+
+router.get('/activities', authenticate, extractWorkspace, getInvoiceActivities);
 
 router.get('/:id', getInvoice);
 router.get('/:id/payments', authenticate, extractWorkspace, getInvoicePayments);
