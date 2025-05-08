@@ -27,6 +27,7 @@ router.patch('/invoice-settings', authenticate, extractWorkspace, updateInvoiceS
 router.post('/', authenticate, extractWorkspace, createInvoice);
 
 router.patch('/:id', authenticate, extractWorkspace, updateInvoice);
+router.put('/:id', authenticate, extractWorkspace, updateInvoice);
 
 router.delete('/:id', authenticate, extractWorkspace, deleteInvoice);
 

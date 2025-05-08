@@ -10,11 +10,28 @@ export const updateInvoice = catchAsync(async (req, res, next) => {
   }
 
   // Check if the invoice belongs to the user's workspace
-  if (invoice.workspace.toString() !== req.user.workspace.toString()) {
+  if (invoice.workspace.toString() !== req.workspace._id.toString()) {
     return next(new AppError('You do not have permission to update this invoice', 403));
   }
 
-  // Only allow updates to draft invoices
+  // Allow status changes from draft to sent
+  if (req.body.status === 'sent' && invoice.status === 'draft') {
+    const updatedInvoice = await Invoice.findByIdAndUpdate(
+      req.params.id,
+      { status: 'sent' },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    return res.status(200).json({
+      status: 'success',
+      data: updatedInvoice,
+    });
+  }
+
+  // For other updates, only allow updates to draft invoices
   if (invoice.status !== 'draft') {
     return next(new AppError('Can only update draft invoices', 400));
   }
