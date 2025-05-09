@@ -5,6 +5,9 @@ import catchAsync from '../../utils/catchAsync.js';
 export const updateInvoice = catchAsync(async (req, res, next) => {
   const invoice = await Invoice.findById(req.params.id);
 
+  // update the req.body to store clientId to client
+  req.body.client = req.body.clientId;
+
   if (!invoice) {
     return next(new AppError('No invoice found with that ID', 404));
   }
