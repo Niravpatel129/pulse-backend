@@ -26,7 +26,7 @@ export function extractProductsFromPrompt(prompt) {
 
       // Extract price if mentioned
       const priceMatch = trimmedSegment.match(/\$\s*(\d+(?:\.\d+)?)/);
-      const price = priceMatch ? `$${parseFloat(priceMatch[1]).toFixed(2)}` : '$50.00';
+      const price = priceMatch ? parseFloat(priceMatch[1]).toFixed(2) : '50.00';
 
       // Extract quantity if mentioned
       const qtyMatch =
@@ -109,21 +109,55 @@ export function extractProductsFromPrompt(prompt) {
     let description;
     switch (productType) {
       case 'hoodie':
-        description = `Comfortable ${color || ''} cotton-blend hoodie with ${
-          trimmedSegment.includes('zip') ? 'full-length zipper' : 'pullover design'
-        }, kangaroo pockets and adjustable hood${
-          descriptor ? `, featuring a ${descriptor} design` : ''
-        }.`;
+        description = `Premium ${color || ''} cotton-blend hoodie featuring ${
+          trimmedSegment.includes('zip')
+            ? 'a full-length zipper closure'
+            : 'a classic pullover design'
+        }, dual kangaroo pockets for storage, and an adjustable drawstring hood${
+          descriptor ? `. Includes ${descriptor} design elements` : ''
+        }. Made with high-quality materials for comfort and durability.`;
         break;
       case 'shirt':
-        description = `Classic ${color || ''} ${
-          trimmedSegment.includes('regular') ? 'regular fit' : 'standard'
-        } shirt made of soft, breathable cotton with reinforced stitching.`;
+        description = `Professional ${color || ''} ${
+          trimmedSegment.includes('regular') ? 'regular fit' : 'standard cut'
+        } shirt crafted from premium cotton fabric. Features reinforced stitching, classic collar design, and a comfortable fit suitable for both casual and business settings.`;
+        break;
+      case 'pants':
+        description = `Classic ${color || ''} pants made from high-quality ${
+          descriptor || 'cotton-blend'
+        } fabric. Features a comfortable waistband, reinforced seams, and a versatile design suitable for various occasions.`;
+        break;
+      case 'jacket':
+        description = `Stylish ${color || ''} jacket constructed from durable ${
+          descriptor || 'water-resistant'
+        } materials. Features multiple pockets, adjustable cuffs, and a comfortable lining for added warmth and comfort.`;
+        break;
+      case 'sweater':
+        description = `Premium ${color || ''} sweater made from soft, high-quality ${
+          descriptor || 'wool-blend'
+        } yarn. Features a comfortable fit, reinforced stitching, and a classic design suitable for layering.`;
+        break;
+      case 'hat':
+      case 'cap':
+      case 'beanie':
+        description = `Classic ${color || ''} ${productType} made from high-quality ${
+          descriptor || 'cotton-blend'
+        } materials. Features comfortable fit, reinforced stitching, and a timeless design.`;
+        break;
+      case 't-shirt':
+        description = `Premium ${
+          color || ''
+        } t-shirt crafted from soft, breathable cotton fabric. Features reinforced stitching, classic crew neck design, and a comfortable fit suitable for everyday wear.`;
+        break;
+      case 'sweatshirt':
+        description = `Comfortable ${
+          color || ''
+        } sweatshirt made from premium cotton-blend fabric. Features a classic design, reinforced stitching, and a comfortable fit perfect for casual wear.`;
         break;
       default:
-        description = `Quality ${
+        description = `High-quality ${
           color || ''
-        } ${productType} with standard features and comfortable fit.`;
+        } ${productType} crafted from premium materials. Features professional construction, reinforced stitching, and a comfortable fit suitable for various occasions.`;
     }
 
     // Set price
@@ -131,12 +165,12 @@ export function extractProductsFromPrompt(prompt) {
     let priceSource = '';
     if (priceMatch) {
       // Exact price
-      price = `$${parseFloat(priceMatch[1]).toFixed(2)}`;
+      price = parseFloat(priceMatch[1]).toFixed(2);
       priceSource = `extracted from exact price in prompt ($${priceMatch[1]})`;
     } else if (priceMentionMatch) {
       // Approximate price
       const basePrice = parseFloat(priceMentionMatch[1]);
-      price = `$${(basePrice + 0.99).toFixed(2)}`;
+      price = (basePrice + 0.99).toFixed(2);
       priceSource = `derived from approximate price in prompt (about $${priceMentionMatch[1]})`;
     } else {
       // Default prices
@@ -152,7 +186,7 @@ export function extractProductsFromPrompt(prompt) {
         't-shirt': 12.99,
         sweatshirt: 17.99,
       };
-      price = `$${defaultPrices[productType] || 19.99}`;
+      price = (defaultPrices[productType] || 19.99).toFixed(2);
       priceSource = `set to default price for ${productType} products ($${
         defaultPrices[productType] || 19.99
       })`;
@@ -183,6 +217,9 @@ export function extractProductsFromPrompt(prompt) {
       price,
       type: 'PRODUCT',
       qty: qty,
+      discount: '0',
+      taxName: '',
+      taxRate: '0',
       reasoning: reasoning,
     });
   });
@@ -192,9 +229,12 @@ export function extractProductsFromPrompt(prompt) {
     products.push({
       name: 'Generic Product',
       description: 'Product based on customer request.',
-      price: '$19.99',
+      price: '19.99',
       type: 'PRODUCT',
       qty: 1,
+      discount: '0',
+      taxName: '',
+      taxRate: '0',
       reasoning:
         'Generated as fallback when no specific products could be identified in the prompt.',
     });

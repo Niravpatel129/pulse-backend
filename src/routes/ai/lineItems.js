@@ -68,12 +68,14 @@ export async function processLineItems(prompt, workspaceChain, workspaceId, user
  Products are physical items like clothing.
  
  Format your response EXACTLY like this:
- {"lineItems":[{"name":"Item Name","description":"Item Description","price":"$XX.XX","type":"PRODUCT/SERVICE","qty":1,"reasoning":"Explanation of where the name, price, and description were derived from"}]}
+ {"lineItems":[{"name":"Item Name","description":"Item Description","price":"XX.XX","type":"PRODUCT/SERVICE","qty":1,"discount":"0","taxName":"","taxRate":"0","reasoning":"Explanation of where the name, price, and description were derived from"}]}
  
  For pricing: Use the mentioned price or a reasonable estimate.
- For service items: If the price isn't mentioned, use $50.00 as default.
+ For service items: If the price isn't mentioned, use 50.00 as default.
  For product items: Include relevant details like color in the name and description.
  Look for quantity information in the prompt (e.g., "2 shirts" or "quantity of 3"). If no quantity is specified, default to 1.
+ For discounts: If a percentage discount is mentioned (e.g., "15% discount"), use just the number (e.g., "15"). If no discount mentioned, use "0".
+ For tax: If "no tax" is mentioned, use empty string for taxName and "0" for taxRate. If specific tax is mentioned, use that name and rate.
  Make sure to include ALL items mentioned in the prompt.
 
  For the reasoning field, explain:
@@ -81,9 +83,10 @@ export async function processLineItems(prompt, workspaceChain, workspaceId, user
  2. How you determined the price (explicit in prompt, estimated, or default)
  3. How you created the description (based on product type, extracted from database, etc.)
  4. Where the quantity came from (explicit in prompt or default)
+ 5. Any discounts or tax information mentioned in the prompt
  
  Example correct format:
- {"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"$19.99","type":"PRODUCT","qty":2,"reasoning":"Name derived from 'red hoodie' in prompt. Price estimated based on market value. Description generated based on standard hoodie features. Quantity of 2 extracted from prompt '2 red hoodies'."}]}
+ {"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"19.99","type":"PRODUCT","qty":2,"discount":"15","taxName":"","taxRate":"0","reasoning":"Name derived from 'red hoodie' in prompt. Price estimated based on market value. Description generated based on standard hoodie features. Quantity of 2 extracted from prompt '2 red hoodies'. 15% discount applied as specified. No tax as mentioned in prompt."}]}
  `;
 
     // Make direct API call with stringent formatting requirements
@@ -137,9 +140,12 @@ export async function processLineItems(prompt, workspaceChain, workspaceId, user
     lineItems = lineItems.map((item) => ({
       name: item.name || 'Unnamed Item',
       description: item.description || 'No description provided',
-      price: item.price || (item.type === 'SERVICE' ? '$50.00' : '$19.99'),
+      price: item.price ? item.price.replace('$', '') : item.type === 'SERVICE' ? '50.00' : '19.99',
       type: item.type || 'PRODUCT',
       qty: item.qty || 1,
+      discount: item.discount || '0',
+      taxName: item.taxName || '',
+      taxRate: item.taxRate || '0',
       reasoning:
         item.reasoning ||
         `Name, price, and description derived from AI analysis of the prompt: "${prompt}".`,
