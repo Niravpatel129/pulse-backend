@@ -9,6 +9,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
 import { processLineItems } from './lineItems.js';
+import { processSmartResponse } from './smartResponse.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
 const router = express.Router();
@@ -991,6 +992,60 @@ router.post('/line-items', async (req, res) => {
     return res.json(result);
   } catch (err) {
     console.error('Error in /line-items endpoint:', err);
+    return res.status(500).json({
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    });
+  }
+});
+
+// Smart response endpoint that intelligently handles both line items and general responses
+router.post('/smart-response', async (req, res) => {
+  try {
+    console.log('Received smart response request');
+    const { prompt } = req.body;
+    const workspaceId = req.workspace._id.toString();
+    const userId = req.user.userId;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Missing prompt in request body' });
+    }
+
+    console.log(`Processing smart response for prompt: "${prompt}"`);
+
+    // Initialize QA chain if needed for this workspace
+    if (!qaChains.has(workspaceId)) {
+      console.log(`Initializing vector store and QA chain for workspace ${workspaceId}...`);
+
+      // Check if vector store is cached
+      let vs;
+      if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
+        console.log('Using cached vector store for workspace');
+        vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
+      } else {
+        console.log('Initializing new vector store for workspace...');
+        vs = await initVectorStore(workspaceId);
+        // Cache the vector store
+        vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
+      }
+
+      console.log('Creating QA chain...');
+      const workspaceChain = await createQAChain(vs, workspaceId);
+      // Store chain by workspace ID
+      qaChains.set(workspaceId, workspaceChain);
+      console.log(`QA chain initialized for workspace ${workspaceId}`);
+    }
+
+    // Get the chain for this workspace
+    const workspaceChain = qaChains.get(workspaceId);
+
+    // Process the smart response
+    const result = await processSmartResponse(prompt, workspaceChain, workspaceId, userId);
+
+    // Return the result
+    return res.json(result);
+  } catch (err) {
+    console.error('Error in /smart-response endpoint:', err);
     return res.status(500).json({
       error: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
