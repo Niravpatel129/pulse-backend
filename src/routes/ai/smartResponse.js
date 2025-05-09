@@ -39,7 +39,13 @@ function createNaturalMessage(reasoning) {
   return message;
 }
 
-export async function processSmartResponse(prompt, workspaceChain, workspaceId, userId) {
+export async function processSmartResponse(
+  prompt,
+  workspaceChain,
+  workspaceId,
+  userId,
+  history = '',
+) {
   const startTime = Date.now();
 
   // First, analyze the prompt to determine if it's a line item request
@@ -50,12 +56,20 @@ A line item request typically:
 - Includes quantities, prices, or descriptions
 - Asks for itemized lists or breakdowns
 - Contains words like "add", "include", "list", "items", "products", "services"
+- Modifies or refers to previously mentioned items (e.g., "make it blue" when a shirt was previously mentioned)
 
 A general response request typically:
 - Asks for information or explanations
 - Seeks advice or recommendations
 - Requests clarification or details
 - Contains questions or statements about general topics
+- Is completely new and unrelated to previous items
+
+${
+  history
+    ? `Previous conversation context:\n${history}\n\nUse this context to understand if the current request is modifying or referring to previously mentioned items.`
+    : ''
+}
 
 User request: "${prompt}"
 
@@ -63,7 +77,7 @@ Respond with a JSON object in this exact format:
 {
   "type": "LINE_ITEMS" or "GENERAL_RESPONSE",
   "confidence": number between 0 and 1,
-  "reasoning": "Explanation of why this type was chosen"
+  "reasoning": "Explanation of why this type was chosen, including how the conversation history influenced the decision"
 }
 `;
 
@@ -94,7 +108,13 @@ Respond with a JSON object in this exact format:
     // If it's a line items request with high confidence, process it as line items
     if (type === 'LINE_ITEMS' && confidence >= 0.7) {
       console.log('Processing as line items request:', reasoning);
-      const lineItemsResult = await processLineItems(prompt, workspaceChain, workspaceId, userId);
+      const lineItemsResult = await processLineItems(
+        prompt,
+        workspaceChain,
+        workspaceId,
+        userId,
+        history,
+      );
 
       const endTime = Date.now();
       return {

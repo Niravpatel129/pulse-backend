@@ -21,7 +21,7 @@ function estimateQueryCost(query, response) {
   };
 }
 
-export async function processLineItems(prompt, workspaceChain, workspaceId, userId) {
+export async function processLineItems(prompt, workspaceChain, workspaceId, userId, history = '') {
   const startTime = Date.now();
 
   // First, check if we need to get item data from tables
@@ -63,6 +63,12 @@ export async function processLineItems(prompt, workspaceChain, workspaceId, user
  
  ${serviceContextData}
  
+ ${
+   history
+     ? `Previous conversation context:\n${history}\n\nUse this context to better understand the current request and maintain consistency with previously mentioned items.`
+     : ''
+ }
+ 
  Categorize each item as either PRODUCT or SERVICE based on the description.
  If an item is described as a service or is called/named something without physical attributes, treat it as a SERVICE.
  Products are physical items like clothing.
@@ -84,10 +90,11 @@ export async function processLineItems(prompt, workspaceChain, workspaceId, user
  3. How you created the description (based on product type, extracted from database, etc.)
  4. Where the quantity came from (explicit in prompt or default)
  5. Any discounts or tax information mentioned in the prompt
+ 6. How the conversation history influenced the item details (if applicable)
  
  Example correct format:
  {"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"19.99","type":"PRODUCT","qty":2,"discount":"15","taxName":"","taxRate":"0","reasoning":"Name derived from 'red hoodie' in prompt. Price estimated based on market value. Description generated based on standard hoodie features. Quantity of 2 extracted from prompt '2 red hoodies'. 15% discount applied as specified. No tax as mentioned in prompt."}]}
- `;
+`;
 
     // Make direct API call with stringent formatting requirements
     const result = await workspaceChain.invoke({

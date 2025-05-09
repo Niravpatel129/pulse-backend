@@ -2,8 +2,6 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
-import LeadForm from '../../models/LeadForm.js';
-import Submission from '../../models/LeadForm/SubmissionSchema.js';
 import Meeting from '../../models/Meeting.js';
 import Project from '../../models/Project.js';
 import Record from '../../models/Table/Record.js';
@@ -96,7 +94,6 @@ export async function initVectorStore(workspaceId) {
     loadWorkspaceData(workspaceId, vectorStore, domainStores.workspace),
     loadProjectData(workspaceId, vectorStore, domainStores.projects),
     loadUserData(workspaceId, vectorStore, domainStores.users),
-    loadLeadData(workspaceId, vectorStore, domainStores.leads),
     loadMeetingData(workspaceId, vectorStore, domainStores.meetings),
     loadTableData(workspaceId, vectorStore, domainStores.tables),
   ]);
@@ -334,88 +331,6 @@ async function loadUserData(workspaceId, vectorStore, domainStore) {
     console.log(`Added ${userDocs.length} user documents for workspace ${workspaceId}`);
   } catch (error) {
     console.error('Error loading user data:', error);
-  }
-}
-
-// Helper function to load lead data
-async function loadLeadData(workspaceId, vectorStore, domainStore) {
-  try {
-    // Only load lead forms for this workspace
-    const leadForms = await LeadForm.find({ workspace: workspaceId }).lean();
-
-    if (!leadForms || leadForms.length === 0) {
-      console.log(`No lead forms found for workspace ${workspaceId}`);
-      return;
-    }
-
-    // Get form IDs to filter submissions
-    const formIds = leadForms.map((form) => form._id);
-
-    // Only get submissions for forms in this workspace
-    const leadSubmissions = await Submission.find({
-      formId: { $in: formIds },
-    })
-      .limit(200)
-      .lean();
-
-    console.log(
-      `Loading ${leadForms.length} lead forms and ${leadSubmissions.length} submissions for workspace ${workspaceId}`,
-    );
-
-    const leadFormDocs = leadForms.map((form) => ({
-      pageContent: `
-        Lead Form: ${form.title}
-        ID: ${form._id}
-        Description: ${form.description || 'No description'}
-        Status: ${form.status}
-        Fields: ${form.fields?.map((f) => f.label).join(', ') || 'None'}
-        Submission Count: ${form.submissions?.length || 0}
-        Created At: ${form.createdAt ? new Date(form.createdAt).toLocaleDateString() : 'Unknown'}
-      `,
-      metadata: {
-        type: 'lead_form',
-        id: form._id.toString(),
-        title: form.title,
-        workspaceId: workspaceId,
-      },
-    }));
-
-    // Process submissions
-    const leadSubmissionDocs = leadSubmissions.map((submission) => {
-      // Extract field values
-      const fieldValues =
-        submission.fieldValues?.map((fv) => `${fv.fieldId}: ${fv.value}`).join(', ') || 'No values';
-
-      return {
-        pageContent: `
-          Lead Submission ID: ${submission._id}
-          Form ID: ${submission.formId}
-          Values: ${fieldValues}
-          Created At: ${
-            submission.createdAt ? new Date(submission.createdAt).toLocaleDateString() : 'Unknown'
-          }
-        `,
-        metadata: {
-          type: 'lead_submission',
-          id: submission._id.toString(),
-          formId: submission.formId?.toString(),
-          workspaceId: workspaceId,
-        },
-      };
-    });
-
-    // Combine documents
-    const leadDocs = [...leadFormDocs, ...leadSubmissionDocs];
-
-    if (leadDocs.length > 0) {
-      // Add to main vector store and domain-specific store
-      await vectorStore.addDocuments(leadDocs);
-      await domainStore.addDocuments(leadDocs);
-
-      console.log(`Added ${leadDocs.length} lead documents for workspace ${workspaceId}`);
-    }
-  } catch (error) {
-    console.error('Error loading lead data:', error);
   }
 }
 
@@ -678,58 +593,6 @@ export async function closeVectorStore(workspaceId) {
     await mongoose.disconnect();
     console.log('Mongoose connection closed');
   }
-}
-
-// Function to infer workspace type
-function inferWorkspaceType(tables, projects, leadForms) {
-  const tableNames = tables.map((t) => t.name.toLowerCase()).join(' ');
-  const projectCount = projects?.length || 0;
-  const leadFormCount = leadForms?.length || 0;
-
-  let types = [];
-
-  // Check for project management characteristics
-  if (projectCount > 0 || tableNames.includes('project') || tableNames.includes('task')) {
-    types.push('project management');
-  }
-
-  // Check for CRM characteristics
-  if (leadFormCount > 0 || tableNames.includes('lead') || tableNames.includes('customer')) {
-    types.push('customer relationship management (CRM)');
-  }
-
-  // Check for e-commerce
-  if (
-    tableNames.includes('product') ||
-    tableNames.includes('order') ||
-    tableNames.includes('inventory')
-  ) {
-    types.push('e-commerce');
-  }
-
-  // Check for healthcare
-  if (
-    tableNames.includes('patient') ||
-    tableNames.includes('appointment') ||
-    tableNames.includes('medical')
-  ) {
-    types.push('healthcare management');
-  }
-
-  // Check for educational
-  if (
-    tableNames.includes('student') ||
-    tableNames.includes('course') ||
-    tableNames.includes('class')
-  ) {
-    types.push('educational management');
-  }
-
-  if (types.length === 0) {
-    return 'data management';
-  }
-
-  return types.join(' and ');
 }
 
 // For backward compatibility

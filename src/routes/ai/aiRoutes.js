@@ -1003,7 +1003,7 @@ router.post('/line-items', async (req, res) => {
 router.post('/smart-response', async (req, res) => {
   try {
     console.log('Received smart response request');
-    const { prompt } = req.body;
+    const { prompt, history } = req.body;
     const workspaceId = req.workspace._id.toString();
     const userId = req.user.userId;
 
@@ -1040,7 +1040,7 @@ router.post('/smart-response', async (req, res) => {
     const workspaceChain = qaChains.get(workspaceId);
 
     // Process the smart response
-    const result = await processSmartResponse(prompt, workspaceChain, workspaceId, userId);
+    const result = await processSmartResponse(prompt, workspaceChain, workspaceId, userId, history);
 
     // Return the result
     return res.json(result);
