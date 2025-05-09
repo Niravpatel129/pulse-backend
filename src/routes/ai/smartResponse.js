@@ -20,18 +20,40 @@ function estimateQueryCost(query, response) {
 // Helper function to create a natural message from reasoning
 function createNaturalMessage(reasoning) {
   // Extract key information from reasoning
-  const hasPrice = reasoning.includes('price');
-  const hasQuantity = reasoning.includes('quantity');
-  const hasColor = reasoning.includes('color');
-  const hasType = reasoning.includes('type');
+  const hasPrice = reasoning.toLowerCase().includes('price');
+  const hasQuantity = reasoning.toLowerCase().includes('quantity');
+  const hasColor = reasoning.toLowerCase().includes('color');
+  const hasType = reasoning.toLowerCase().includes('type');
+  const isModification =
+    reasoning.toLowerCase().includes('modif') || reasoning.toLowerCase().includes('change');
+  const isNewItem =
+    reasoning.toLowerCase().includes('new') || reasoning.toLowerCase().includes('additional');
 
   // Build a natural message based on what was found
-  let message = "I've processed your request";
+  let message = '';
 
-  if (hasPrice || hasQuantity || hasColor || hasType) {
-    message += ' for the specified item';
-    if (hasPrice) message += ' with the given price';
-    if (hasQuantity) message += ' and quantity';
+  if (isModification) {
+    message = "I've updated the item";
+    if (hasColor) message += ' with the new color';
+    if (hasPrice) message += ' and adjusted the price';
+    if (hasQuantity) message += ' with the new quantity';
+  } else if (isNewItem) {
+    message = "I've added the new item";
+    if (hasColor) message += ' in the requested color';
+    if (hasPrice) message += ' at the specified price';
+    if (hasQuantity) message += ' with the requested quantity';
+  } else {
+    message = "I've processed your request";
+    if (hasColor) message += ' for the specified color';
+    if (hasPrice) message += ' at the given price';
+    if (hasQuantity) message += ' with the requested quantity';
+  }
+
+  // Add a helpful context about what was done
+  if (hasType) {
+    message += `. The item has been categorized as a ${
+      reasoning.match(/type\s*[":]\s*([^,\.]+)/i)?.[1] || 'product'
+    }`;
   }
 
   message += '. Here are the details:';
