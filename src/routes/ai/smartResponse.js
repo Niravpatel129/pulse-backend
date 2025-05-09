@@ -61,6 +61,67 @@ function createNaturalMessage(reasoning) {
   return message;
 }
 
+// Helper function to extract client information from text
+function extractClientInfo(text) {
+  const clientInfo = {
+    user: '',
+    contact: '',
+    phone: '',
+    address: '',
+    shippingAddress: '',
+    taxId: '',
+    accountNumber: '',
+    fax: '',
+    mobile: '',
+    tollFree: '',
+    website: '',
+    internalNotes: '',
+    customFields: {},
+  };
+
+  // Extract email
+  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+  if (emailMatch) {
+    clientInfo.contact = emailMatch[0];
+  }
+
+  // Extract phone number
+  const phoneMatch = text.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+  if (phoneMatch) {
+    clientInfo.phone = phoneMatch[0];
+  }
+
+  // Extract company name (improved pattern)
+  const companyMatch = text.match(
+    /(?:new client:?\s*)([^,]+?)(?=\s*(?:contact|email|phone|\+|\d|$))/i,
+  );
+  if (companyMatch) {
+    clientInfo.user = companyMatch[1].trim();
+  }
+
+  // Extract address (improved pattern)
+  const addressMatch = text.match(
+    /(?:USA|US|United States|Canada|UK|United Kingdom|Australia)(?:[^,]+?)(?=\s*(?:account|tax|$))/i,
+  );
+  if (addressMatch) {
+    clientInfo.address = addressMatch[0].trim();
+  }
+
+  // Extract account number
+  const accountMatch = text.match(/account number is (\d+)/i);
+  if (accountMatch) {
+    clientInfo.accountNumber = accountMatch[1];
+  }
+
+  // Extract tax ID
+  const taxIdMatch = text.match(/taxId is (\d+)/i);
+  if (taxIdMatch) {
+    clientInfo.taxId = taxIdMatch[1];
+  }
+
+  return clientInfo;
+}
+
 export async function processSmartResponse(
   prompt,
   workspaceChain,
@@ -72,13 +133,19 @@ export async function processSmartResponse(
 
   // First, analyze the prompt to determine if it's a line item request
   const analysisPrompt = `
-Analyze this user request and determine if it's asking for line items or a general response.
+Analyze this user request and determine if it's asking for line items, client information, or a general response.
 A line item request typically:
 - Mentions specific products or services
 - Includes quantities, prices, or descriptions
 - Asks for itemized lists or breakdowns
 - Contains words like "add", "include", "list", "items", "products", "services"
 - Modifies or refers to previously mentioned items (e.g., "make it blue" when a shirt was previously mentioned)
+
+A client information request typically:
+- Mentions "new client", "building invoice", "client details"
+- Contains company names, contact information, addresses
+- Includes email addresses, phone numbers, or physical addresses
+- References business or client-related information
 
 A general response request typically:
 - Asks for information or explanations
@@ -97,7 +164,7 @@ User request: "${prompt}"
 
 Respond with a JSON object in this exact format:
 {
-  "type": "LINE_ITEMS" or "GENERAL_RESPONSE",
+  "type": "LINE_ITEMS" or "CLIENT_INFO" or "GENERAL_RESPONSE",
   "confidence": number between 0 and 1,
   "reasoning": "Explanation of why this type was chosen, including how the conversation history influenced the decision"
 }
@@ -148,6 +215,102 @@ Respond with a JSON object in this exact format:
           {
             type: 'LINE_ITEMS',
             items: lineItemsResult.lineItems,
+          },
+        ],
+        meta: {
+          processingTime: (endTime - startTime) / 1000,
+          promptLength: prompt.length,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+
+    // If it's a client information request with high confidence, process it as client information
+    if (type === 'CLIENT_INFO' && confidence >= 0.7) {
+      console.log('Processing as client information request:', reasoning);
+
+      const clientPrompt = `
+You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
+
+IMPORTANT: Respond with ONLY a valid JSON object. Do not include any markdown formatting, backticks, or additional text.
+
+For example:
+- If asked for a "random location", generate a realistic address in the specified country
+- If asked for "any number", generate a realistic number in the expected format
+- If information seems incomplete or unclear, make reasonable assumptions based on context
+- Always maintain consistency in the generated data (e.g., if generating a Canadian address, use proper Canadian postal code format)
+
+User request: "${prompt}"
+
+Return ONLY a JSON object in this exact format (no markdown, no backticks):
+{
+  "client": {
+    "user": "Company name",
+    "contact": "Email address",
+    "phone": "Phone number",
+    "address": "Primary address",
+    "shippingAddress": "Shipping address if different",
+    "taxId": "Tax ID number",
+    "accountNumber": "Account number",
+    "fax": "",
+    "mobile": "",
+    "tollFree": "",
+    "website": "",
+    "internalNotes": "Any relevant notes about the client",
+    "customFields": {}
+  },
+  "suggestions": [
+    "List of suggestions for additional information or improvements"
+  ],
+  "message": "A natural language response explaining what was done and any suggestions",
+  "assumptions": [
+    "List any assumptions made while processing the request"
+  ]
+}
+
+Guidelines for generating data:
+1. Addresses should be realistic and follow proper formatting for the country
+2. Phone numbers should match the country's format
+3. Tax IDs and account numbers should follow expected patterns
+4. When generating random data, ensure it's consistent with the client's context
+5. If the user asks for something random, generate something that makes sense for a business
+6. If multiple phone numbers are provided, use the most appropriate one as primary and others as mobile/fax
+`;
+
+      const clientResult = await workspaceChain.invoke({
+        query: clientPrompt,
+        workspaceId,
+        userId,
+        response_format: { type: 'json_object' },
+        temperature: 0.8,
+      });
+
+      let parsedClientResponse;
+      if (typeof clientResult === 'string') {
+        try {
+          // Clean the response string to ensure it's valid JSON
+          const cleanedResponse = clientResult.replace(/```json\s*|\s*```/g, '').trim();
+          parsedClientResponse = JSON.parse(cleanedResponse);
+        } catch (error) {
+          console.error('Error parsing client response:', error);
+          throw new Error('Invalid client response format');
+        }
+      } else {
+        parsedClientResponse = clientResult;
+      }
+
+      const endTime = Date.now();
+      return {
+        type: 'CHAT_RESPONSE',
+        confidence,
+        reasoning,
+        message: parsedClientResponse.message,
+        structuredData: [
+          {
+            type: 'INVOICE_CLIENT',
+            client: parsedClientResponse.client,
+            suggestions: parsedClientResponse.suggestions,
+            assumptions: parsedClientResponse.assumptions,
           },
         ],
         meta: {
