@@ -61,67 +61,6 @@ function createNaturalMessage(reasoning) {
   return message;
 }
 
-// Helper function to extract client information from text
-function extractClientInfo(text) {
-  const clientInfo = {
-    user: '',
-    contact: '',
-    phone: '',
-    address: '',
-    shippingAddress: '',
-    taxId: '',
-    accountNumber: '',
-    fax: '',
-    mobile: '',
-    tollFree: '',
-    website: '',
-    internalNotes: '',
-    customFields: {},
-  };
-
-  // Extract email
-  const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
-  if (emailMatch) {
-    clientInfo.contact = emailMatch[0];
-  }
-
-  // Extract phone number
-  const phoneMatch = text.match(/\+?1?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
-  if (phoneMatch) {
-    clientInfo.phone = phoneMatch[0];
-  }
-
-  // Extract company name (improved pattern)
-  const companyMatch = text.match(
-    /(?:new client:?\s*)([^,]+?)(?=\s*(?:contact|email|phone|\+|\d|$))/i,
-  );
-  if (companyMatch) {
-    clientInfo.user = companyMatch[1].trim();
-  }
-
-  // Extract address (improved pattern)
-  const addressMatch = text.match(
-    /(?:USA|US|United States|Canada|UK|United Kingdom|Australia)(?:[^,]+?)(?=\s*(?:account|tax|$))/i,
-  );
-  if (addressMatch) {
-    clientInfo.address = addressMatch[0].trim();
-  }
-
-  // Extract account number
-  const accountMatch = text.match(/account number is (\d+)/i);
-  if (accountMatch) {
-    clientInfo.accountNumber = accountMatch[1];
-  }
-
-  // Extract tax ID
-  const taxIdMatch = text.match(/taxId is (\d+)/i);
-  if (taxIdMatch) {
-    clientInfo.taxId = taxIdMatch[1];
-  }
-
-  return clientInfo;
-}
-
 export async function processSmartResponse(
   prompt,
   workspaceChain,
@@ -177,7 +116,7 @@ Respond with a JSON object in this exact format:
       workspaceId,
       userId,
       response_format: { type: 'json_object' },
-      temperature: 0.1,
+      temperature: 0.5,
     });
 
     let parsedAnalysis;
@@ -354,7 +293,7 @@ Format your response as a JSON object with this structure:
       workspaceId,
       userId,
       response_format: { type: 'json_object' },
-      temperature: 0.7,
+      temperature: 0.8,
     });
 
     let parsedResponse;
