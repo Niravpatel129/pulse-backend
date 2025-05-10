@@ -17,6 +17,7 @@ import { updateInvoiceSettings } from '../controllers/invoice/updateInvoiceSetti
 import { updatePayment } from '../controllers/invoice/updatePayment.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
+import invoiceNoteRoutes from './invoiceNoteRoutes.js';
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ router.get('/invoice-settings', authenticate, extractWorkspace, getInvoiceSettin
 
 router.get('/activities', authenticate, extractWorkspace, getInvoiceActivities);
 
-router.get('/:id', getInvoice);
+router.get('/:id', authenticate, extractWorkspace, getInvoice);
 router.get('/:id/payments', authenticate, extractWorkspace, getInvoicePayments);
 router.post('/:id/payment-intent', createPaymentIntent);
 
@@ -48,5 +49,8 @@ router.post('/:id/payments', authenticate, extractWorkspace, recordPayment);
 router.delete('/:id/payments/:paymentId', authenticate, extractWorkspace, deletePayment);
 
 router.put('/:id/payments/:paymentId', authenticate, extractWorkspace, updatePayment);
+
+// Invoice notes routes
+router.use('/:id/notes', invoiceNoteRoutes);
 
 export default router;
