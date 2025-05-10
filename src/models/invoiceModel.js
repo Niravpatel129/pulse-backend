@@ -152,6 +152,10 @@ const invoiceSchema = new mongoose.Schema(
     teamNotes: {
       type: String,
     },
+    starred: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

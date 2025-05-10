@@ -12,6 +12,8 @@ import { getInvoiceSettings } from '../controllers/invoice/getInvoiceSettings.js
 import { markAsPaid } from '../controllers/invoice/markAsPaid.js';
 import { recordPayment } from '../controllers/invoice/recordPayment.js';
 import { sendInvoice } from '../controllers/invoice/sendInvoice.js';
+import { toggleArchive } from '../controllers/invoice/toggleArchive.js';
+import { toggleStar } from '../controllers/invoice/toggleStar.js';
 import { updateInvoice } from '../controllers/invoice/updateInvoice.js';
 import { updateInvoiceSettings } from '../controllers/invoice/updateInvoiceSettings.js';
 import { updatePayment } from '../controllers/invoice/updatePayment.js';
@@ -49,6 +51,9 @@ router.post('/:id/payments', authenticate, extractWorkspace, recordPayment);
 router.delete('/:id/payments/:paymentId', authenticate, extractWorkspace, deletePayment);
 
 router.put('/:id/payments/:paymentId', authenticate, extractWorkspace, updatePayment);
+
+router.put('/:id/star', authenticate, extractWorkspace, toggleStar);
+router.put('/:id/archive', authenticate, extractWorkspace, toggleArchive);
 
 // Invoice notes routes
 router.use('/:id/notes', invoiceNoteRoutes);
