@@ -8,6 +8,16 @@ export const updateInvoice = catchAsync(async (req, res, next) => {
   // update the req.body to store clientId to client
   req.body.client = req.body.clientId;
 
+  // if status is sent, add the dateSent to the invoice
+  if (req.body.status === 'sent') {
+    req.body.dateSent = new Date();
+  }
+
+  // if status is paid, add the datePaid to the invoice
+  if (req.body.status === 'paid') {
+    req.body.datePaid = new Date();
+  }
+
   if (!invoice) {
     return next(new AppError('No invoice found with that ID', 404));
   }
