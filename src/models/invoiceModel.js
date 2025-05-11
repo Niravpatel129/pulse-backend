@@ -5,7 +5,6 @@ const invoiceSchema = new mongoose.Schema(
     invoiceNumber: {
       type: String,
       required: true,
-      unique: true,
     },
     client: {
       type: mongoose.Schema.Types.ObjectId,
