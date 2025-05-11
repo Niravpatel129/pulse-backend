@@ -15,6 +15,12 @@ const invoiceSchema = new mongoose.Schema(
     selectedClient: {
       type: Object,
     },
+    dateSent: {
+      type: Date,
+    },
+    datePaid: {
+      type: Date,
+    },
     project: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Project',
