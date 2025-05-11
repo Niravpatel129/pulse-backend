@@ -10,7 +10,7 @@ export const getInvoices = catchAsync(async (req, res, next) => {
       .populate('items', 'name quantity price projects modules discount')
       .populate('createdBy', 'name')
       .select(
-        'invoiceNumber total status dueDate notes createdAt project modules items currency status archived starred',
+        'invoiceNumber total status dueDate notes createdAt project modules items currency status archived starred dateSent datePaid',
       )
       .sort({ createdAt: -1 });
 
