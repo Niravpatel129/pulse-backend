@@ -9,6 +9,7 @@ import { getInvoiceActivities } from '../controllers/invoice/getInvoiceActivitie
 import { getInvoicePayments } from '../controllers/invoice/getInvoicePayments.js';
 import { getInvoices } from '../controllers/invoice/getInvoices.js';
 import { getInvoiceSettings } from '../controllers/invoice/getInvoiceSettings.js';
+import { getPublicInvoice } from '../controllers/invoice/getPublicInvoice.js';
 import { markAsPaid } from '../controllers/invoice/markAsPaid.js';
 import { recordPayment } from '../controllers/invoice/recordPayment.js';
 import { sendInvoice } from '../controllers/invoice/sendInvoice.js';
@@ -27,7 +28,10 @@ router.get('/invoice-settings', authenticate, extractWorkspace, getInvoiceSettin
 
 router.get('/activities', authenticate, extractWorkspace, getInvoiceActivities);
 
+router.get('/:id/public', getPublicInvoice);
+
 router.get('/:id', authenticate, extractWorkspace, getInvoice);
+
 router.get('/:id/payments', authenticate, extractWorkspace, getInvoicePayments);
 router.post('/:id/payment-intent', createPaymentIntent);
 
