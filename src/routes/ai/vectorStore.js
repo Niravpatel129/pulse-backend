@@ -55,7 +55,7 @@ export async function initVectorStore(workspaceId) {
   // 2️⃣ Build the LangChain-backed Atlas vector store with optimized settings
   const embeddings = new OpenAIEmbeddings({
     openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: 'text-embedding-ada-002',
+    modelName: 'text-embedding-3-small',
     stripNewLines: true,
     batchSize: 1000, // Increase batch size for better performance
     maxConcurrency: 5, // Limit concurrent API calls
