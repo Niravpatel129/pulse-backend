@@ -30,6 +30,7 @@ export async function processLineItems(
   documentContext = '',
 ) {
   const startTime = Date.now();
+  console.log('🚀 documentContext at lineItems.js:');
 
   // First, check if we need to get item data from tables
   const needsTableLookup =

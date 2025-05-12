@@ -114,60 +114,9 @@ export async function processSmartResponse(
       },
     });
 
-    // Debug: Check collection and index setup
-    console.log('Debug - Vector search setup:', {
-      collectionName: 'document_vectors',
-      indexName: 'vector_index',
-      totalDocuments: await mongoClient.db().collection('document_vectors').countDocuments(),
-      documentsInWorkspace: await mongoClient
-        .db()
-        .collection('document_vectors')
-        .countDocuments({ workspaceId: new ObjectId(String(workspaceId)) }),
-    });
-
     // Search for relevant document chunks
     const relevantDocs = await vectorStore.similaritySearch(prompt, 10);
 
-    console.log('Vector search results:', {
-      totalDocs: relevantDocs.length,
-      firstDoc: relevantDocs[0]
-        ? {
-            content: relevantDocs[0].pageContent.substring(0, 100) + '...',
-            metadata: relevantDocs[0].metadata,
-            workspaceId: relevantDocs[0].metadata.workspaceId,
-          }
-        : null,
-      searchParams: {
-        prompt: prompt.substring(0, 50) + '...',
-        workspaceId: workspaceId.toString(),
-        indexName: 'vector_index',
-        embeddingField: 'embedding',
-      },
-    });
-
-    // Add debug logging for vector search
-    if (relevantDocs.length === 0) {
-      console.log('Debug - Vector search returned no results:', {
-        collection: 'document_vectors',
-        totalDocuments: await mongoClient.db().collection('document_vectors').countDocuments(),
-        documentsInWorkspace: await mongoClient
-          .db()
-          .collection('document_vectors')
-          .countDocuments({
-            workspaceId: new ObjectId(String(workspaceId)),
-          }),
-        searchPrompt: prompt,
-        workspaceId: workspaceId.toString(),
-        sampleDocuments: await mongoClient
-          .db()
-          .collection('document_vectors')
-          .find()
-          .limit(2)
-          .toArray(),
-      });
-    }
-
-    // Add document context to the analysis prompt if relevant documents are found
     const documentContext =
       relevantDocs.length > 0
         ? `\nThe following is context from your workspace documents.\nIf the answer to the user's request (such as a policy number) is present in this context, use it directly in your response.\nIf the answer is not present, say so.\n\n--- DOCUMENT CONTEXT START ---\n${relevantDocs
