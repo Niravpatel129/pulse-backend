@@ -1,4 +1,32 @@
+import { MongoDBAtlasVectorSearch } from '@langchain/mongodb';
+import { OpenAIEmbeddings } from '@langchain/openai';
+import dotenv from 'dotenv';
+import { MongoClient, ObjectId } from 'mongodb';
 import { processLineItems } from './lineItems.js';
+dotenv.config();
+
+// Initialize MongoDB client
+const mongoClient = new MongoClient(process.env.MONGO_URI);
+
+// Connect to MongoDB
+await mongoClient.connect();
+
+// Helper function to validate ObjectId
+function isValidObjectId(id) {
+  try {
+    return ObjectId.isValid(id) && new ObjectId(id).toString() === id.toString();
+  } catch (error) {
+    return false;
+  }
+}
+
+// Helper function to calculate cosine similarity
+function cosineSimilarity(vecA, vecB) {
+  const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
+  const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
+  const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
+  return dotProduct / (magnitudeA * magnitudeB);
+}
 
 // Helper function to estimate query cost
 function estimateQueryCost(query, response) {
@@ -70,8 +98,95 @@ export async function processSmartResponse(
 ) {
   const startTime = Date.now();
 
-  // First, analyze the prompt to determine if it's a line item request
-  const analysisPrompt = `
+  // Validate workspaceId
+  if (!workspaceId || !isValidObjectId(workspaceId)) {
+    throw new Error('Invalid workspace ID provided');
+  }
+
+  try {
+    // Initialize embeddings for document search
+    const embeddings = new OpenAIEmbeddings({
+      openAIApiKey: process.env.OPENAI_API_KEY,
+      modelName: 'text-embedding-ada-002',
+      stripNewLines: true,
+    });
+
+    // Create vector store instance using the existing vector_index
+    const vectorStore = new MongoDBAtlasVectorSearch(embeddings, {
+      collection: mongoClient.db().collection('document_vectors'),
+      indexName: 'vector_index',
+      embeddingField: 'embedding',
+      textField: 'text',
+      filter: {
+        workspaceId: new ObjectId(String(workspaceId)),
+      },
+    });
+
+    // Debug: Check collection and index setup
+    console.log('Debug - Vector search setup:', {
+      collectionName: 'document_vectors',
+      indexName: 'vector_index',
+      totalDocuments: await mongoClient.db().collection('document_vectors').countDocuments(),
+      documentsInWorkspace: await mongoClient
+        .db()
+        .collection('document_vectors')
+        .countDocuments({ workspaceId: new ObjectId(String(workspaceId)) }),
+    });
+
+    // Search for relevant document chunks
+    const relevantDocs = await vectorStore.similaritySearch(prompt, 10);
+
+    console.log('Vector search results:', {
+      totalDocs: relevantDocs.length,
+      firstDoc: relevantDocs[0]
+        ? {
+            content: relevantDocs[0].pageContent.substring(0, 100) + '...',
+            metadata: relevantDocs[0].metadata,
+            workspaceId: relevantDocs[0].metadata.workspaceId,
+          }
+        : null,
+      searchParams: {
+        prompt: prompt.substring(0, 50) + '...',
+        workspaceId: workspaceId.toString(),
+        indexName: 'vector_index',
+        embeddingField: 'embedding',
+      },
+    });
+
+    // Add debug logging for vector search
+    if (relevantDocs.length === 0) {
+      console.log('Debug - Vector search returned no results:', {
+        collection: 'document_vectors',
+        totalDocuments: await mongoClient.db().collection('document_vectors').countDocuments(),
+        documentsInWorkspace: await mongoClient
+          .db()
+          .collection('document_vectors')
+          .countDocuments({
+            workspaceId: new ObjectId(String(workspaceId)),
+          }),
+        searchPrompt: prompt,
+        workspaceId: workspaceId.toString(),
+        sampleDocuments: await mongoClient
+          .db()
+          .collection('document_vectors')
+          .find()
+          .limit(2)
+          .toArray(),
+      });
+    }
+
+    // Add document context to the analysis prompt if relevant documents are found
+    const documentContext =
+      relevantDocs.length > 0
+        ? `\nThe following is context from your workspace documents.\nIf the answer to the user's request (such as a policy number) is present in this context, use it directly in your response.\nIf the answer is not present, say so.\n\n--- DOCUMENT CONTEXT START ---\n${relevantDocs
+            .map((doc) => doc.pageContent)
+            .join('\n\n---\n\n')}\n--- DOCUMENT CONTEXT END ---\n`
+        : '';
+
+    // First, analyze the prompt to determine if it's a line item request
+    const analysisPrompt = `
+Use ONLY the information in the document context below to answer the user's request. If the answer is not present, say so.
+
 Analyze this user request and determine if it's asking for line items, client information, or a general response.
 A line item request typically:
 - Mentions specific products or services
@@ -85,6 +200,7 @@ A client information request typically:
 - Contains company names, contact information, addresses
 - Includes email addresses, phone numbers, or physical addresses
 - References business or client-related information
+- Specifically asks for client-specific information like account numbers, tax IDs, or client identifiers
 
 A general response request typically:
 - Asks for information or explanations
@@ -92,12 +208,15 @@ A general response request typically:
 - Requests clarification or details
 - Contains questions or statements about general topics
 - Is completely new and unrelated to previous items
+- Asks about identifying or validating numbers, codes, or identifiers
+- Requests information about what a specific number or code represents
+- Asks for number format validation or explanation
 
-${
-  history
-    ? `Previous conversation context:\n${history}\n\nUse this context to understand if the current request is modifying or referring to previously mentioned items.`
-    : ''
-}
+$${
+      history
+        ? `Previous conversation context:\n${history}\n\nUse this context to understand if the current request is modifying or referring to previously mentioned items.`
+        : ''
+    }${documentContext}
 
 User request: "${prompt}"
 
@@ -105,11 +224,10 @@ Respond with a JSON object in this exact format:
 {
   "type": "LINE_ITEMS" or "CLIENT_INFO" or "GENERAL_RESPONSE",
   "confidence": number between 0 and 1,
-  "reasoning": "Explanation of why this type was chosen, including how the conversation history influenced the decision"
+  "reasoning": "Explanation of why this type was chosen, including how the conversation history and document context influenced the decision"
 }
 `;
 
-  try {
     // Get the analysis result
     const analysisResult = await workspaceChain.invoke({
       query: analysisPrompt,
@@ -132,6 +250,7 @@ Respond with a JSON object in this exact format:
     }
 
     const { type, confidence, reasoning } = parsedAnalysis;
+    console.log('🚀 type:', type);
 
     // If it's a line items request with high confidence, process it as line items
     if (type === 'LINE_ITEMS' && confidence >= 0.7) {
@@ -171,6 +290,10 @@ Respond with a JSON object in this exact format:
       const clientPrompt = `
 You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
 
+IMPORTANT: First, check the document context below for any existing client information that matches the request. If found, use that information. Only generate new data if no matching information is found in the context.
+
+${documentContext}
+
 IMPORTANT: Respond with ONLY a valid JSON object. Do not include any markdown formatting, backticks, or additional text.
 
 For example:
@@ -204,7 +327,8 @@ Return ONLY a JSON object in this exact format (no markdown, no backticks):
   "message": "A natural language response explaining what was done and any suggestions",
   "assumptions": [
     "List any assumptions made while processing the request"
-  ]
+  ],
+  "source": "DOCUMENT_CONTEXT" or "GENERATED"
 }
 
 Guidelines for generating data:
@@ -214,6 +338,7 @@ Guidelines for generating data:
 4. When generating random data, ensure it's consistent with the client's context
 5. If the user asks for something random, generate something that makes sense for a business
 6. If multiple phone numbers are provided, use the most appropriate one as primary and others as mobile/fax
+7. If client information is found in the document context, use it directly and indicate this in the source field
 `;
 
       const clientResult = await workspaceChain.invoke({

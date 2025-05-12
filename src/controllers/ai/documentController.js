@@ -119,6 +119,8 @@ export const uploadDocument = async (req, res) => {
         {
           collection: mongoClient.db().collection('document_vectors'),
           indexName: 'document_vector_index',
+          embeddingField: 'embedding',
+          textField: 'text',
         },
       );
 
