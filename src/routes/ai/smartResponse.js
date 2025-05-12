@@ -119,7 +119,7 @@ export async function processSmartResponse(
 
     const documentContext =
       relevantDocs.length > 0
-        ? `\nThe following is context from your workspace documents.\nIf the answer to the user's request (such as a policy number) is present in this context, use it directly in your response.\nIf the answer is not present, say so.\n\n--- DOCUMENT CONTEXT START ---\n${relevantDocs
+        ? `\nThe following is context from your workspace documents.\nUse the information if relevant to the user's request.\n\n--- DOCUMENT CONTEXT START ---\n${relevantDocs
             .map((doc) => doc.pageContent)
             .join('\n\n---\n\n')}\n--- DOCUMENT CONTEXT END ---\n`
         : '';
