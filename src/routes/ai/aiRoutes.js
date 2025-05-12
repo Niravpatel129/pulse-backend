@@ -1011,8 +1011,47 @@ router.post('/smart-response', async (req, res) => {
     const workspaceId = req.workspace._id.toString();
     const userId = req.user.userId;
 
+    // Input validation and size checks
     if (!prompt) {
       return res.status(400).json({ error: 'Missing prompt in request body' });
+    }
+
+    // Check prompt length (adjust max length based on your needs)
+    const MAX_PROMPT_LENGTH = 10000; // ~2500 words
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      return res.status(400).json({
+        error: 'Prompt too long',
+        message: `Maximum prompt length is ${MAX_PROMPT_LENGTH} characters`,
+      });
+    }
+
+    // Check history length and size
+    if (history && Array.isArray(history)) {
+      const MAX_HISTORY_ITEMS = 20;
+      if (history.length > MAX_HISTORY_ITEMS) {
+        history = history.slice(-MAX_HISTORY_ITEMS); // Keep only the most recent items
+      }
+
+      // Check total history size
+      const totalHistorySize = history.reduce((acc, item) => {
+        return acc + (item.question?.length || 0) + (item.answer?.length || 0);
+      }, 0);
+
+      const MAX_HISTORY_SIZE = 50000; // ~12500 words
+      if (totalHistorySize > MAX_HISTORY_SIZE) {
+        return res.status(400).json({
+          error: 'History too large',
+          message: 'Total conversation history exceeds maximum allowed size',
+        });
+      }
+    }
+
+    // Check if we're under heavy load
+    if (!isLowTraffic()) {
+      return res.status(429).json({
+        error: 'Service busy',
+        message: 'Server is currently under heavy load. Please try again in a few moments.',
+      });
     }
 
     console.log(`Processing smart response for prompt: "${prompt}"`);
@@ -1043,13 +1082,38 @@ router.post('/smart-response', async (req, res) => {
     // Get the chain for this workspace
     const workspaceChain = qaChains.get(workspaceId);
 
-    // Process the smart response
-    const result = await processSmartResponse(prompt, workspaceChain, workspaceId, userId, history);
+    // Set a timeout for the processing
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Request timeout - processing took too long'));
+      }, 30000); // 30 second timeout
+    });
+
+    // Process the smart response with timeout
+    const result = await Promise.race([
+      processSmartResponse(prompt, workspaceChain, workspaceId, userId, history),
+      timeoutPromise,
+    ]);
+
+    // Check response size
+    const MAX_RESPONSE_SIZE = 20000; // ~5000 words
+    if (result && result.answer && result.answer.length > MAX_RESPONSE_SIZE) {
+      result.answer = result.answer.substring(0, MAX_RESPONSE_SIZE) + '... (response truncated)';
+    }
 
     // Return the result
     return res.json(result);
   } catch (err) {
     console.error('Error in /smart-response endpoint:', err);
+
+    // Handle timeout specifically
+    if (err.message.includes('timeout')) {
+      return res.status(504).json({
+        error: 'Request timeout',
+        message: 'The request took too long to process. Please try again with a simpler prompt.',
+      });
+    }
+
     return res.status(500).json({
       error: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
