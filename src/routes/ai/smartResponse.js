@@ -1,5 +1,6 @@
 import { MongoDBAtlasVectorSearch } from '@langchain/mongodb';
 import { OpenAIEmbeddings } from '@langchain/openai';
+import dedent from 'dedent';
 import dotenv from 'dotenv';
 import { MongoClient, ObjectId } from 'mongodb';
 import { processLineItems } from './lineItems.js';
@@ -125,49 +126,49 @@ export async function processSmartResponse(
         : '';
 
     // First, analyze the prompt to determine if it's a line item request
-    const analysisPrompt = `
-Use ONLY the information in the document context below to answer the user's request. If the answer is not present, say so.
+    const analysisPrompt = dedent`
+      Use ONLY the information in the document context below to answer the user's request. If the answer is not present, say so.
 
-Analyze this user request and determine if it's asking for line items, client information, or a general response.
-A line item request typically:
-- Mentions specific products or services
-- Includes quantities, prices, or descriptions
-- Asks for itemized lists or breakdowns
-- Contains words like "add", "include", "list", "items", "products", "services"
-- Modifies or refers to previously mentioned items (e.g., "make it blue" when a shirt was previously mentioned)
+      Analyze this user request and determine if it's asking for line items, client information, or a general response.
+      A line item request typically:
+      - Mentions specific products or services
+      - Includes quantities, prices, or descriptions
+      - Asks for itemized lists or breakdowns
+      - Contains words like "add", "include", "list", "items", "products", "services"
+      - Modifies or refers to previously mentioned items (e.g., "make it blue" when a shirt was previously mentioned)
 
-A client information request typically:
-- Mentions "new client", "building invoice", "client details"
-- Contains company names, contact information, addresses
-- Includes email addresses, phone numbers, or physical addresses
-- References business or client-related information
-- Specifically asks for client-specific information like account numbers, tax IDs, or client identifiers
+      A client information request typically:
+      - Mentions "new client", "building invoice", "client details"
+      - Contains company names, contact information, addresses
+      - Includes email addresses, phone numbers, or physical addresses
+      - References business or client-related information
+      - Specifically asks for client-specific information like account numbers, tax IDs, or client identifiers
 
-A general response request typically:
-- Asks for information or explanations
-- Seeks advice or recommendations
-- Requests clarification or details
-- Contains questions or statements about general topics
-- Is completely new and unrelated to previous items
-- Asks about identifying or validating numbers, codes, or identifiers
-- Requests information about what a specific number or code represents
-- Asks for number format validation or explanation
+      A general response request typically:
+      - Asks for information or explanations
+      - Seeks advice or recommendations
+      - Requests clarification or details
+      - Contains questions or statements about general topics
+      - Is completely new and unrelated to previous items
+      - Asks about identifying or validating numbers, codes, or identifiers
+      - Requests information about what a specific number or code represents
+      - Asks for number format validation or explanation
 
-$${
-      history
-        ? `Previous conversation context:\n${history}\n\nUse this context to understand if the current request is modifying or referring to previously mentioned items.`
-        : ''
-    }${documentContext}
+      ${
+        history
+          ? `Previous conversation context:\n${history}\n\nUse this context to understand if the current request is modifying or referring to previously mentioned items.`
+          : ''
+      }${documentContext}
 
-User request: "${prompt}"
+      User request: "${prompt}"
 
-Respond with a JSON object in this exact format:
-{
-  "type": "LINE_ITEMS" or "CLIENT_INFO" or "GENERAL_RESPONSE",
-  "confidence": number between 0 and 1,
-  "reasoning": "Explanation of why this type was chosen, including how the conversation history and document context influenced the decision"
-}
-`;
+      Respond with a JSON object in this exact format:
+      {
+        "type": "LINE_ITEMS" or "CLIENT_INFO" or "GENERAL_RESPONSE",
+        "confidence": number between 0 and 1,
+        "reasoning": "Explanation of why this type was chosen, including how the conversation history and document context influenced the decision"
+      }
+    `;
 
     // Get the analysis result
     const analysisResult = await workspaceChain.invoke({
@@ -226,58 +227,58 @@ Respond with a JSON object in this exact format:
 
     // If it's a client information request with high confidence, process it as client information
     if (type === 'CLIENT_INFO' && confidence >= 0.7) {
-      const clientPrompt = `
-${documentContext}
-You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
+      const clientPrompt = dedent`
+        ${documentContext}
+        You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
 
-IMPORTANT: First, check the document context below for any existing client information that matches the request. If found, use that information. Only generate new data if no matching information is found in the context.
+        IMPORTANT: First, check the document context below for any existing client information that matches the request. If found, use that information. Only generate new data if no matching information is found in the context.
 
-IMPORTANT: Respond with ONLY a valid JSON object. Do not include any markdown formatting, backticks, or additional text.
+        IMPORTANT: Respond with ONLY a valid JSON object. Do not include any markdown formatting, backticks, or additional text.
 
-For example:
-- If asked for a "random location", generate a realistic address in the specified country
-- If asked for "any number", generate a realistic number in the expected format
-- If information seems incomplete or unclear, make reasonable assumptions based on context
-- Always maintain consistency in the generated data (e.g., if generating a Canadian address, use proper Canadian postal code format)
+        For example:
+        - If asked for a "random location", generate a realistic address in the specified country
+        - If asked for "any number", generate a realistic number in the expected format
+        - If information seems incomplete or unclear, make reasonable assumptions based on context
+        - Always maintain consistency in the generated data (e.g., if generating a Canadian address, use proper Canadian postal code format)
 
-User request: "${prompt}"
+        User request: "${prompt}"
 
-Return ONLY a JSON object in this exact format (no markdown, no backticks):
-{
-  "client": {
-    "user": "Company name",
-    "contact": "Email address",
-    "phone": "Phone number",
-    "address": "Primary address",
-    "shippingAddress": "Shipping address if different",
-    "taxId": "Tax ID number",
-    "accountNumber": "Account number",
-    "fax": "",
-    "mobile": "",
-    "tollFree": "",
-    "website": "",
-    "internalNotes": "Any relevant notes about the client",
-    "customFields": {}
-  },
-  "suggestions": [
-    "List of suggestions for additional information or improvements"
-  ],
-  "message": "A natural language response explaining what was done and any suggestions",
-  "assumptions": [
-    "List any assumptions made while processing the request"
-  ],
-  "source": "DOCUMENT_CONTEXT" or "GENERATED"
-}
+        Return ONLY a JSON object in this exact format (no markdown, no backticks):
+        {
+          "client": {
+            "user": "Company name",
+            "contact": "Email address",
+            "phone": "Phone number",
+            "address": "Primary address",
+            "shippingAddress": "Shipping address if different",
+            "taxId": "Tax ID number",
+            "accountNumber": "Account number",
+            "fax": "",
+            "mobile": "",
+            "tollFree": "",
+            "website": "",
+            "internalNotes": "Any relevant notes about the client",
+            "customFields": {}
+          },
+          "suggestions": [
+            "List of suggestions for additional information or improvements"
+          ],
+          "message": "A natural language response explaining what was done and any suggestions",
+          "assumptions": [
+            "List any assumptions made while processing the request"
+          ],
+          "source": "DOCUMENT_CONTEXT" or "GENERATED"
+        }
 
-Guidelines for generating data:
-1. Addresses should be realistic and follow proper formatting for the country
-2. Phone numbers should match the country's format
-3. Tax IDs and account numbers should follow expected patterns
-4. When generating random data, ensure it's consistent with the client's context
-5. If the user asks for something random, generate something that makes sense for a business
-6. If multiple phone numbers are provided, use the most appropriate one as primary and others as mobile/fax
-7. If client information is found in the document context, use it directly and indicate this in the source field
-`;
+        Guidelines for generating data:
+        1. Addresses should be realistic and follow proper formatting for the country
+        2. Phone numbers should match the country's format
+        3. Tax IDs and account numbers should follow expected patterns
+        4. When generating random data, ensure it's consistent with the client's context
+        5. If the user asks for something random, generate something that makes sense for a business
+        6. If multiple phone numbers are provided, use the most appropriate one as primary and others as mobile/fax
+        7. If client information is found in the document context, use it directly and indicate this in the source field
+      `;
 
       const clientResult = await workspaceChain.invoke({
         query: clientPrompt,
@@ -324,32 +325,32 @@ Guidelines for generating data:
     }
 
     // Otherwise, process as a general response
-    const generalPrompt = `
-${documentContext}
-Provide a conversational response to this request: "${prompt}"
+    const generalPrompt = dedent`
+      ${documentContext}
+      Provide a conversational response to this request: "${prompt}"
 
-Your response should:
-1. Be conversational and friendly
-2. Address all aspects of the request
-3. Provide relevant details and context
-4. Be well-structured and easy to understand
-5. Include specific examples or recommendations when appropriate
+      Your response should:
+      1. Be conversational and friendly
+      2. Address all aspects of the request
+      3. Provide relevant details and context
+      4. Be well-structured and easy to understand
+      5. Include specific examples or recommendations when appropriate
 
-Format your response as a JSON object with this structure:
-{
-  "message": "Your conversational response here",
-  "hasStructuredData": boolean,  // Only true if there's structured data to include
-  "structuredData": [
-    {
-      "type": "GENERAL",
-      "summary": "A brief 1-2 sentence summary",
-      "keyPoints": ["Point 1", "Point 2", "Point 3"],
-      "recommendations": ["Recommendation 1", "Recommendation 2"],
-      "additionalContext": "Any relevant context or background information"
-    }
-  ]
-}
-`;
+      Format your response as a JSON object with this structure:
+      {
+        "message": "Your conversational response here",
+        "hasStructuredData": boolean,  // Only true if there's structured data to include
+        "structuredData": [
+          {
+            "type": "GENERAL",
+            "summary": "A brief 1-2 sentence summary",
+            "keyPoints": ["Point 1", "Point 2", "Point 3"],
+            "recommendations": ["Recommendation 1", "Recommendation 2"],
+            "additionalContext": "Any relevant context or background information"
+          }
+        ]
+      }
+    `;
 
     const generalResult = await workspaceChain.invoke({
       query: generalPrompt,
