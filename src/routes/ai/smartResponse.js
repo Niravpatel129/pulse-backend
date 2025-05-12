@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import dotenv from 'dotenv';
 import { MongoClient, ObjectId } from 'mongodb';
 import AISettings from '../../models/aiSettings.js';
+import { analyzeImageWithOpenAI } from '../../utils/openaiVision.js';
 import { processLineItems } from './lineItems.js';
 dotenv.config();
 
@@ -89,6 +90,7 @@ export async function processSmartResponse(
   workspaceId,
   userId,
   history = '',
+  imageUrls = [],
 ) {
   const startTime = Date.now();
 
@@ -130,6 +132,27 @@ export async function processSmartResponse(
             .join('\n\n---\n\n')}\n--- DOCUMENT CONTEXT END ---\n`
         : '';
 
+    // Analyze images with OpenAI Vision and build image details context
+    let imageDetailsContext = '';
+    console.log('Image URLs received for analysis:', imageUrls);
+    if (imageUrls.length > 0) {
+      const analyses = await Promise.all(
+        imageUrls.map(async (url, idx) => {
+          try {
+            console.log('Analyzing image with OpenAI Vision:', url);
+            const desc = await analyzeImageWithOpenAI(url);
+            return `Image ${idx + 1}: ${desc}`;
+          } catch (err) {
+            console.error('Error analyzing image with OpenAI Vision:', err);
+            return `Image ${idx + 1}: (Failed to analyze image)`;
+          }
+        }),
+      );
+      imageDetailsContext = `\nThe user has provided images with the following details (analyzed by AI):\n${analyses.join(
+        '\n\n',
+      )}\n`;
+    }
+
     // First, analyze the prompt to determine if it's a line item request
     const analysisPrompt = dedent`
       ${
@@ -168,7 +191,9 @@ export async function processSmartResponse(
         history
           ? `Previous conversation context:\n${history}\n\nUse this context to understand if the current request is modifying or referring to previously mentioned items.`
           : ''
-      }${documentContext}
+      }
+      ${documentContext}
+      ${imageDetailsContext}
 
       User request: "${prompt}"
 
@@ -176,7 +201,7 @@ export async function processSmartResponse(
       {
         "type": "LINE_ITEMS" or "CLIENT_INFO" or "GENERAL_RESPONSE",
         "confidence": number between 0 and 1,
-        "reasoning": "Explanation of why this type was chosen, including how the conversation history and document context influenced the decision"
+        "reasoning": "Explanation of why this type was chosen, including how the conversation history, document context, and images influenced the decision"
       }
     `;
 
@@ -202,7 +227,6 @@ export async function processSmartResponse(
     }
 
     const { type, confidence, reasoning } = parsedAnalysis;
-    console.log('🚀 type:', type);
 
     // If it's a line items request with high confidence, process it as line items
     if (type === 'LINE_ITEMS' && confidence >= 0.7) {
@@ -232,6 +256,7 @@ export async function processSmartResponse(
           processingTime: (endTime - startTime) / 1000,
           promptLength: prompt.length,
           timestamp: new Date().toISOString(),
+          imageCount: imageUrls.length,
         },
       };
     }
@@ -245,6 +270,7 @@ export async function processSmartResponse(
             : ''
         }
         ${documentContext}
+        ${imageDetailsContext}
         You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
 
         IMPORTANT: First, check the document context below for any existing client information that matches the request. If found, use that information. Only generate new data if no matching information is found in the context.
@@ -336,6 +362,7 @@ export async function processSmartResponse(
           processingTime: (endTime - startTime) / 1000,
           promptLength: prompt.length,
           timestamp: new Date().toISOString(),
+          imageCount: imageUrls.length,
         },
       };
     }
@@ -348,6 +375,7 @@ export async function processSmartResponse(
           : ''
       }
       ${documentContext}
+      ${imageDetailsContext}
       Provide a conversational response to this request: "${prompt}"
 
       Your response should:
@@ -356,6 +384,7 @@ export async function processSmartResponse(
       3. Provide relevant details and context
       4. Be well-structured and easy to understand
       5. Include specific examples or recommendations when appropriate
+      6. If images were provided, reference them in your response when relevant
 
       Format your response as a JSON object with this structure:
       {
@@ -417,6 +446,7 @@ export async function processSmartResponse(
         processingTime: (endTime - startTime) / 1000,
         promptLength: prompt.length,
         timestamp: new Date().toISOString(),
+        imageCount: imageUrls.length,
       },
     };
 
@@ -442,6 +472,7 @@ export async function processSmartResponse(
         processingTime: (endTime - startTime) / 1000,
         promptLength: prompt.length,
         timestamp: new Date().toISOString(),
+        imageCount: imageUrls.length,
         error: error.message,
       },
     };

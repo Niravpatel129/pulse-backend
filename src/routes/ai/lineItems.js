@@ -121,7 +121,6 @@ export async function processLineItems(
     });
 
     const endTime = Date.now();
-    console.log('Line items result received:', typeof result);
 
     // Extract the lineItems from the result
     let lineItems = [];
@@ -176,12 +175,6 @@ export async function processLineItems(
     // Estimate cost
     const responseText = JSON.stringify(lineItems);
     const costEstimate = estimateQueryCost(prompt, responseText);
-    console.log(
-      `💰 Line Items Generation Cost Estimate: $${costEstimate.totalCost.toFixed(6)}` +
-        ` (Input: ~${costEstimate.inputTokens} tokens, Output: ~${
-          costEstimate.outputTokens
-        } tokens, Time: ${(endTime - startTime) / 1000}s)`,
-    );
 
     // Return structured response
     return {
@@ -194,7 +187,6 @@ export async function processLineItems(
     };
   } catch (error) {
     console.error('Error with line items generation:', error);
-    console.log('Falling back to manual extraction...');
 
     // Use the fallback extraction with improved service item detection
     const products = extractProductsFromPrompt(prompt);

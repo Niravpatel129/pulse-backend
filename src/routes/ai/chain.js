@@ -35,8 +35,6 @@ const settingsCache = new NodeCache({ stdTTL: 600 });
 export { settingsCache };
 
 export async function createQAChain(vectorStoreData, workspaceId) {
-  console.log('Creating QA chain with vector store:', !!vectorStoreData);
-
   // Extract the main vector store from the data structure
   const vectorStore = vectorStoreData.main || vectorStoreData;
 
@@ -89,12 +87,9 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       // Get custom context settings if available
       if (settings.contextSettings) {
         contextSettings = settings.contextSettings;
-        console.log('Using custom context settings from workspace');
       }
     }
   }
-
-  console.log(`Using model: ${modelName} with temperature: ${temperature}`);
 
   const llm = new ChatOpenAI({
     openAIApiKey: process.env.OPENAI_API_KEY,
@@ -130,21 +125,18 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     const cacheKey = `user_${userId}`;
     const cachedUser = userCache.get(cacheKey);
     if (cachedUser) {
-      console.log(`Using cached user data for ${userId}`);
       return cachedUser;
     }
 
     try {
       // Ensure mongoose is connected
       if (mongoose.connection.readyState !== 1) {
-        console.log('Mongoose not connected, skipping user lookup');
         return null;
       }
 
       // Fetch user data
       const user = await User.findById(userId).select('-password').lean();
       if (!user) {
-        console.log(`User not found with ID: ${userId}`);
         return null;
       }
 
@@ -174,7 +166,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
     // Return default reasoning if query is empty
     if (!safeQuery.trim()) {
-      console.log('Empty query received, returning default reasoning');
       return {
         intent: 'unknown',
         entity_types: [],
@@ -188,7 +179,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     const cacheKey = `reasoning_${workspaceId}_${safeQuery}`;
     const cachedReasoning = reasoningCache.get(cacheKey);
     if (cachedReasoning) {
-      console.log(`Using cached reasoning for query: "${safeQuery}"`);
       return cachedReasoning;
     }
 
@@ -212,8 +202,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
     // Create and run the reasoning chain
     try {
-      console.log(`Applying reasoning to query: "${safeQuery}"`);
-
       // Format inputs properly for the reasoning prompt
       const reasoningPrompt = createReasoningPrompt();
       const reasoningChain = RunnableSequence.from([
@@ -248,24 +236,18 @@ export async function createQAChain(vectorStoreData, workspaceId) {
           cleanedResult = cleanedResult.substring(jsonStartIndex, jsonEndIndex + 1);
         }
 
-        console.log('Cleaned reasoning result:', cleanedResult);
-
         let parsedResult;
         try {
           // First attempt to parse the JSON directly
           parsedResult = JSON.parse(cleanedResult);
         } catch (initialParseError) {
           // If that fails, try to handle common issues with LLM outputs
-          console.warn('Initial JSON parsing failed, attempting to fix JSON:', initialParseError);
-
           // Replace single quotes with double quotes if they exist
           const doubleQuotedResult = cleanedResult.replace(/'/g, '"');
 
           // Try to parse with double quotes
           parsedResult = JSON.parse(doubleQuotedResult);
         }
-
-        console.log(`Reasoning result:`, parsedResult);
 
         // Cache the reasoning result
         reasoningCache.set(cacheKey, parsedResult);
@@ -287,7 +269,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       console.error('Error in reasoning chain:', error);
       // Fallback to standard query enhancement with better error reporting
       const entityTypes = detectEntityTypes(safeQuery);
-      console.log(`Fallback entity types detected: ${entityTypes.join(', ')}`);
 
       const fallbackReasoning = {
         intent: 'unknown',
@@ -310,8 +291,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       return 'Error: No workspace context available.';
     }
 
-    console.log(`Retrieving documents for query: "${query}" in workspace: ${workspaceId}`);
-
     try {
       // Make sure we're passing a string to the retriever
       const q =
@@ -323,11 +302,9 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
       // Apply reasoning to determine what to retrieve
       const reasoning = await applyReasoning(q, workspaceId, history);
-      console.log('Applied reasoning:', reasoning);
 
       // If it's a simple greeting, return immediately
       if (reasoning.expanded_query === 'SIMPLE_GREETING') {
-        console.log('Detected simple greeting, skipping retrieval');
         return 'This is a simple greeting. Respond with a friendly hello without providing workspace information.';
       }
 
@@ -335,14 +312,12 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       const cacheKey = `retrieval_${workspaceId}_${q}`;
       const cachedResult = retrievalCache.get(cacheKey);
       if (cachedResult) {
-        console.log('Using cached retrieval result for workspace:', workspaceId);
         return cachedResult;
       }
 
       // Use the entity types from reasoning instead of detecting them again
       const entityTypes =
         reasoning.entity_types || detectEntityTypes(reasoning.expanded_query || q);
-      console.log('Entity types from reasoning:', entityTypes);
 
       // Use a parallel approach to fetch documents more efficiently
       const fetchPromises = [];
@@ -393,8 +368,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
 
       // Check specifically for table-related questions and add targeted queries for table guides
       if (entityTypes.includes('tables') || q.toLowerCase().includes('table')) {
-        console.log('Detected table-related query, adding targeted searches for table guides');
-
         // Get tables domain vector store if available
         const tablesVS = getDomainVectorStore(workspaceId, 'tables');
         const tablesRetriever = tablesVS ? tablesVS.asRetriever({ k: 2 }) : retriever;
@@ -403,7 +376,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
         const tableNameMatch = q.match(/\b(table|tables)\s+(\w+)/i);
         if (tableNameMatch && tableNameMatch[2]) {
           const tableName = tableNameMatch[2];
-          console.log(`Detected specific table name: ${tableName}`);
           fetchPromises.push(
             tablesRetriever.getRelevantDocuments(`table ${tableName}`).catch((err) => {
               console.error(`Error fetching specific table: ${tableName}`, err);
@@ -428,7 +400,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
       );
 
       if (tablesWithGuides.length > 0) {
-        console.log(`Found ${tablesWithGuides.length} tables with AI guides`);
         tableSpecificGuides.push(
           '\n## TABLE-SPECIFIC AI GUIDES ##\n' +
             tablesWithGuides
@@ -536,7 +507,6 @@ export async function createQAChain(vectorStoreData, workspaceId) {
     {
       // Map inputs to feed into prompt with optimized context retrieval
       context: async (input) => {
-        console.log('🚀 input:', input);
         const query = input.query || '';
         const workspaceId = input.workspaceId;
         const userId = input.userId;

@@ -2,11 +2,13 @@ import { Queue, Worker } from 'bullmq';
 import chalk from 'chalk';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 import NodeCache from 'node-cache';
 import Redis from 'redis';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
+import { firebaseStorage } from '../../utils/firebase.js';
 import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
 import documentRoutes from './documentRoutes.js';
 import { processLineItems } from './lineItems.js';
@@ -33,6 +35,23 @@ let aiQueue;
 let worker;
 let redisClient;
 let isRedisAvailable = false;
+
+// Configure multer for image uploads
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow only image files
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF and WebP are allowed.'), false);
+    }
+  },
+});
 
 // Cost estimation function
 function estimateQueryCost(query, response) {
@@ -63,7 +82,6 @@ function estimateQueryCost(query, response) {
       process.env.REDIS_URL || process.env.REDISCLOUD_URL || process.env.REDIS_TLS_URL;
 
     if (!redisUrl) {
-      console.log('No Redis URL found in environment variables. Running without Redis.');
       isRedisAvailable = false;
       return;
     }
@@ -94,23 +112,14 @@ function estimateQueryCost(query, response) {
         try {
           const { message, jobId, sessionId, workspaceId, workspaceSessionId, history, userId } =
             job.data;
-          console.log(
-            `Processing job ${jobId} with message: "${message}" for workspace: ${workspaceId}, session: ${sessionId}`,
-          );
 
           // Initialize QA chain if not already done for this workspace
           if (!qaChains.has(workspaceId)) {
-            console.log(
-              `Initializing vector store and QA chain for workspace ${workspaceId} from worker...`,
-            );
-
             // Check if vector store is cached
             let vs;
             if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
-              console.log('Using cached vector store for workspace');
               vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
             } else {
-              console.log('Initializing new vector store for workspace...');
               vs = await initVectorStore(workspaceId);
               // Cache the vector store
               vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
@@ -120,7 +129,6 @@ function estimateQueryCost(query, response) {
             const workspaceChain = await createQAChain(vs, workspaceId);
             // Store chain by workspace ID
             qaChains.set(workspaceId, workspaceChain);
-            console.log(`QA chain initialized for workspace ${workspaceId}`);
           }
 
           // Get the chain for this workspace
@@ -130,7 +138,6 @@ function estimateQueryCost(query, response) {
           let sessionHistory = history || conversationHistory.get(workspaceSessionId) || [];
 
           // Process query with conversation context
-          console.log(`Worker processing query: "${message}"`);
           const startTime = Date.now();
           const result = await workspaceChain.invoke({
             query: message,
@@ -141,7 +148,6 @@ function estimateQueryCost(query, response) {
             userId, // Pass userId for personalization
           });
           const endTime = Date.now();
-          console.log('Successfully generated answer');
 
           // Extract and prepare answer
           const answer = extractAnswer(result);
@@ -229,7 +235,6 @@ function estimateQueryCost(query, response) {
           const workspaceChain = await createQAChain(vs, workspaceId);
           qaChains.set(workspaceId, workspaceChain);
 
-          console.log(`Vector store refresh completed for workspace ${workspaceId}, job ${job.id}`);
           return { success: true, workspaceId };
         } catch (error) {
           console.error(`Error refreshing vector store for job ${job.id}:`, error);
@@ -239,7 +244,6 @@ function estimateQueryCost(query, response) {
     });
   } catch (err) {
     console.error('Redis connection error:', err);
-    console.log('Continuing without Redis - queue processing will be unavailable');
     isRedisAvailable = false;
   }
 })();
@@ -281,7 +285,6 @@ function extractAnswer(result) {
 // Async chat endpoint with queue processing
 router.post('/chat', async (req, res) => {
   try {
-    console.log('Received chat request');
     const { message, sessionId: providedSessionId } = req.body;
     const workspaceId = req.workspace._id.toString();
     const userId = req.user.userId; // Get the authenticated user ID
@@ -826,7 +829,6 @@ router.delete('/chat/history/:sessionId', async (req, res) => {
 // Add a refresh endpoint to update the vector store
 router.post('/refresh', async (req, res) => {
   try {
-    console.log('Received refresh request');
     const workspaceId = req.body.workspaceId || req.workspace._id.toString();
 
     // Only allow authorized requests
@@ -835,13 +837,8 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    console.log(`Refreshing vector store for workspace: ${workspaceId}`);
-
     // If Redis is not available, perform direct refresh
     if (!isRedisAvailable) {
-      console.log(
-        `Performing direct vector store refresh for workspace ${workspaceId} (Redis unavailable)`,
-      );
       try {
         // Close existing vector store connections for this workspace
         await closeVectorStore(workspaceId);
@@ -1004,9 +1001,8 @@ router.post('/line-items', async (req, res) => {
 });
 
 // Smart response endpoint that intelligently handles both line items and general responses
-router.post('/smart-response', async (req, res) => {
+router.post('/smart-response', imageUpload.array('images', 5), async (req, res) => {
   try {
-    console.log('Received smart response request');
     const { prompt, history } = req.body;
     const workspaceId = req.workspace._id.toString();
     const userId = req.user.userId;
@@ -1023,6 +1019,64 @@ router.post('/smart-response', async (req, res) => {
         error: 'Prompt too long',
         message: `Maximum prompt length is ${MAX_PROMPT_LENGTH} characters`,
       });
+    }
+
+    // Process uploaded images if any
+    let imageUrls = [];
+    let uploadedPaths = []; // Track uploaded file paths for cleanup
+    if (req.files && req.files.length > 0) {
+      try {
+        // Upload images to Firebase storage
+        const uploadPromises = req.files.map(async (file) => {
+          const storagePath = `chat-images/${workspaceId}/${Date.now()}-${file.originalname}`;
+          const { url, storagePath: path } = await firebaseStorage.uploadFile(
+            file.buffer,
+            storagePath,
+            file.mimetype,
+          );
+          uploadedPaths.push(path); // Track the path for cleanup
+          return url;
+        });
+
+        imageUrls = await Promise.all(uploadPromises);
+
+        // Set up automatic cleanup after 1 hour
+        setTimeout(async () => {
+          try {
+            await Promise.all(
+              uploadedPaths.map(async (path) => {
+                try {
+                  await firebaseStorage.deleteFile(path);
+                } catch (error) {
+                  console.error(`Failed to clean up image ${path}:`, error);
+                }
+              }),
+            );
+          } catch (error) {
+            console.error('Error during image cleanup:', error);
+          }
+        }, 60 * 60 * 1000); // 1 hour
+      } catch (error) {
+        console.error('Error uploading images:', error);
+        // Clean up any uploaded files if there's an error
+        try {
+          await Promise.all(
+            uploadedPaths.map(async (path) => {
+              try {
+                await firebaseStorage.deleteFile(path);
+              } catch (deleteError) {
+                console.error(`Failed to clean up image ${path}:`, deleteError);
+              }
+            }),
+          );
+        } catch (cleanupError) {
+          console.error('Error during cleanup after upload failure:', cleanupError);
+        }
+        return res.status(500).json({
+          error: 'Failed to process images',
+          message: error.message,
+        });
+      }
     }
 
     // Check history length and size
@@ -1054,29 +1108,21 @@ router.post('/smart-response', async (req, res) => {
       });
     }
 
-    console.log(`Processing smart response for prompt: "${prompt}"`);
-
     // Initialize QA chain if needed for this workspace
     if (!qaChains.has(workspaceId)) {
-      console.log(`Initializing vector store and QA chain for workspace ${workspaceId}...`);
-
       // Check if vector store is cached
       let vs;
       if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
-        console.log('Using cached vector store for workspace');
         vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
       } else {
-        console.log('Initializing new vector store for workspace...');
         vs = await initVectorStore(workspaceId);
         // Cache the vector store
         vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
       }
 
-      console.log('Creating QA chain...');
       const workspaceChain = await createQAChain(vs, workspaceId);
       // Store chain by workspace ID
       qaChains.set(workspaceId, workspaceChain);
-      console.log(`QA chain initialized for workspace ${workspaceId}`);
     }
 
     // Get the chain for this workspace
@@ -1091,7 +1137,7 @@ router.post('/smart-response', async (req, res) => {
 
     // Process the smart response with timeout
     const result = await Promise.race([
-      processSmartResponse(prompt, workspaceChain, workspaceId, userId, history),
+      processSmartResponse(prompt, workspaceChain, workspaceId, userId, history, imageUrls),
       timeoutPromise,
     ]);
 
