@@ -30,7 +30,6 @@ export async function processLineItems(
   documentContext = '',
 ) {
   const startTime = Date.now();
-  console.log('🚀 documentContext at lineItems.js:');
 
   // First, check if we need to get item data from tables
   const needsTableLookup =
@@ -42,7 +41,6 @@ export async function processLineItems(
   let serviceContextData = '';
   if (needsTableLookup) {
     try {
-      console.log('Attempting to retrieve service information from tables');
       // Use the existing retrieval system to get information from tables
       const tableContext = await workspaceChain.invoke({
         query: `Find information about services or table data that might include "${
@@ -55,7 +53,6 @@ export async function processLineItems(
 
       if (tableContext && typeof tableContext === 'string') {
         serviceContextData = `SERVICE DATA CONTEXT:\n${tableContext}\n\nUse this context to populate service line items that match the names in the prompt.`;
-        console.log('Retrieved service data context');
       }
     } catch (error) {
       console.error('Error retrieving service information:', error);

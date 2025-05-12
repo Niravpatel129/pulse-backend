@@ -195,7 +195,6 @@ Respond with a JSON object in this exact format:
 
     // If it's a line items request with high confidence, process it as line items
     if (type === 'LINE_ITEMS' && confidence >= 0.7) {
-      console.log('Processing as line items request:', reasoning);
       const lineItemsResult = await processLineItems(
         prompt,
         workspaceChain,
@@ -325,7 +324,6 @@ Guidelines for generating data:
     }
 
     // Otherwise, process as a general response
-    console.log('Processing as general response:', reasoning);
     const generalPrompt = `
 ${documentContext}
 Provide a conversational response to this request: "${prompt}"
