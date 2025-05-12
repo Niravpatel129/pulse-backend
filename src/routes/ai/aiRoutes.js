@@ -8,11 +8,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
+import documentRoutes from './documentRoutes.js';
 import { processLineItems } from './lineItems.js';
 import { processSmartResponse } from './smartResponse.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
 const router = express.Router();
+
+// Register document routes
+router.use('/documents', documentRoutes);
 
 // Store chains by workspace ID instead of a single global chain
 const qaChains = new Map();
