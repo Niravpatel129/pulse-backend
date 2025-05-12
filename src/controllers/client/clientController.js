@@ -127,16 +127,39 @@ export const updateClient = async (req, res, next) => {
   }
 };
 
-// Delete a client
+// Soft delete a client
 export const deleteClient = async (req, res, next) => {
   try {
-    const client = await Client.findByIdAndDelete(req.params.id);
+    const client = await Client.findByIdAndUpdate(
+      req.params.id,
+      { deletedAt: new Date() },
+      { new: true },
+    );
 
     if (!client) {
       return next(new AppError('Client not found', 404));
     }
 
     res.status(200).json(new ApiResponse(200, null, 'Client deleted successfully'));
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Restore a soft-deleted client
+export const restoreClient = async (req, res, next) => {
+  try {
+    const client = await Client.findByIdAndUpdate(
+      req.params.id,
+      { deletedAt: null },
+      { new: true },
+    );
+
+    if (!client) {
+      return next(new AppError('Client not found', 404));
+    }
+
+    res.status(200).json(new ApiResponse(200, client, 'Client restored successfully'));
   } catch (error) {
     next(error);
   }

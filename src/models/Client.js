@@ -118,6 +118,10 @@ const clientSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -126,6 +130,12 @@ const clientSchema = new mongoose.Schema(
 
 // Create compound index for user email and workspace
 clientSchema.index({ 'user.email': 1, workspace: 1 }, { unique: true });
+
+// Add query middleware to exclude soft-deleted documents by default
+clientSchema.pre(/^find/, function (next) {
+  this.find({ deletedAt: null });
+  next();
+});
 
 const Client = mongoose.model('Client', clientSchema);
 
