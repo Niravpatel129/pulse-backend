@@ -34,6 +34,7 @@ import moduleRoutes from './src/routes/moduleRoutes.js';
 import moduleTemplatesRoutes from './src/routes/moduleTemplatesRoutes.js';
 import noteRoutes from './src/routes/noteRoutes.js';
 import participantRoutes from './src/routes/participantRoutes.js';
+import paymentRoutes from './src/routes/paymentRoutes.js';
 import pipelineRoutes from './src/routes/pipelineRoutes.js';
 import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
 import projectInvoiceRoutes from './src/routes/projectInvoiceRoutes.js';
@@ -159,6 +160,9 @@ app.use(`${routesPrefix}/project-invoices`, projectInvoiceRoutes);
 
 // Invoices
 app.use(`${routesPrefix}/invoices`, invoiceRoutes);
+
+// Payments
+app.use(`${routesPrefix}/payments`, paymentRoutes);
 
 // Lead Forms
 app.use(`${routesPrefix}/lead-forms`, leadFormRoutes);
