@@ -21,7 +21,14 @@ function estimateQueryCost(query, response) {
   };
 }
 
-export async function processLineItems(prompt, workspaceChain, workspaceId, userId, history = '') {
+export async function processLineItems(
+  prompt,
+  workspaceChain,
+  workspaceId,
+  userId,
+  history = '',
+  documentContext = '',
+) {
   const startTime = Date.now();
 
   // First, check if we need to get item data from tables
@@ -62,6 +69,8 @@ export async function processLineItems(prompt, workspaceChain, workspaceId, user
  Your task is to extract product and service line items from this request: "${prompt}"
  
  ${serviceContextData}
+ 
+ ${documentContext}
  
  ${
    history

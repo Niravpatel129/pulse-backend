@@ -253,6 +253,7 @@ Respond with a JSON object in this exact format:
         workspaceId,
         userId,
         history,
+        documentContext,
       );
 
       const endTime = Date.now();
@@ -277,14 +278,11 @@ Respond with a JSON object in this exact format:
 
     // If it's a client information request with high confidence, process it as client information
     if (type === 'CLIENT_INFO' && confidence >= 0.7) {
-      console.log('Processing as client information request:', reasoning);
-
       const clientPrompt = `
+${documentContext}
 You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
 
 IMPORTANT: First, check the document context below for any existing client information that matches the request. If found, use that information. Only generate new data if no matching information is found in the context.
-
-${documentContext}
 
 IMPORTANT: Respond with ONLY a valid JSON object. Do not include any markdown formatting, backticks, or additional text.
 
@@ -380,6 +378,7 @@ Guidelines for generating data:
     // Otherwise, process as a general response
     console.log('Processing as general response:', reasoning);
     const generalPrompt = `
+${documentContext}
 Provide a conversational response to this request: "${prompt}"
 
 Your response should:
