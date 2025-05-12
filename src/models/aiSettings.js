@@ -10,6 +10,7 @@ const aiSettingsSchema = new mongoose.Schema(
     knowledgePrompt: {
       type: String,
       default: '',
+      maxLength: 1000,
     },
     model: {
       type: String,
