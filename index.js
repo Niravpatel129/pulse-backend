@@ -10,6 +10,7 @@ import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
 import requestLogger from './src/middleware/loggingMiddleware.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import aiRoutes2 from './src/routes/ai/aiRoutes.js';
+import aiSettingsRoutes from './src/routes/ai/aiSettingsRoutes.js';
 import alertRoutes from './src/routes/alertRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
@@ -43,6 +44,7 @@ import tablesRoutes from './src/routes/tablesRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
 import AppError from './src/utils/AppError.js';
+
 // Load env vars
 dotenv.config();
 
@@ -121,6 +123,7 @@ app.use(`${routesPrefix}/alerts`, alertRoutes);
 app.use(`${routesPrefix}/deliverables`, deliverableRoutes);
 
 app.use(`${routesPrefix}/kanban`, kanbanRoutes);
+app.use(`${routesPrefix}/ai-settings`, aiSettingsRoutes);
 
 // Modules and templates
 app.use(`${routesPrefix}/modules`, moduleRoutes);

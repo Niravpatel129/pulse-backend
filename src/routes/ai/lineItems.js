@@ -28,6 +28,7 @@ export async function processLineItems(
   userId,
   history = '',
   documentContext = '',
+  knowledgePrompt = '',
 ) {
   const startTime = Date.now();
 
@@ -76,6 +77,12 @@ export async function processLineItems(
      ? `Previous conversation context:\n${history}\n\nUse this context to better understand the current request and maintain consistency with previously mentioned items.`
      : ''
  }
+ 
+ ${
+   knowledgePrompt
+     ? `\nUser has provided the following context for you to use:\n${knowledgePrompt}\n`
+     : ''
+ }  
  
  Categorize each item as either PRODUCT or SERVICE based on the description.
  If an item is described as a service or is called/named something without physical attributes, treat it as a SERVICE.

@@ -3,6 +3,7 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import { MongoClient, ObjectId } from 'mongodb';
+import AISettings from '../../models/aiSettings.js';
 import { processLineItems } from './lineItems.js';
 dotenv.config();
 
@@ -97,6 +98,10 @@ export async function processSmartResponse(
   }
 
   try {
+    // Get workspace AI settings
+    const aiSettings = await AISettings.findOne({ workspaceId });
+    const knowledgePrompt = aiSettings?.knowledgePrompt || '';
+
     // Initialize embeddings for document search
     const embeddings = new OpenAIEmbeddings({
       openAIApiKey: process.env.OPENAI_API_KEY,
@@ -120,13 +125,18 @@ export async function processSmartResponse(
 
     const documentContext =
       relevantDocs.length > 0
-        ? `\nThe following is context from your workspace documents.\nUse the information if relevant to the user's request.\n\n--- DOCUMENT CONTEXT START ---\n${relevantDocs
+        ? `\nThe following is documents attached for your reference from the workspace.\nUse the information if relevant to the user's request.\n\n--- DOCUMENT CONTEXT START ---\n${relevantDocs
             .map((doc) => doc.pageContent)
             .join('\n\n---\n\n')}\n--- DOCUMENT CONTEXT END ---\n`
         : '';
 
     // First, analyze the prompt to determine if it's a line item request
     const analysisPrompt = dedent`
+      ${
+        knowledgePrompt
+          ? `\nUser has provided the following context for you to use:\n${knowledgePrompt}\n`
+          : ''
+      }
       Use ONLY the information in the document context below to answer the user's request. If the answer is not present, say so.
 
       Analyze this user request and determine if it's asking for line items, client information, or a general response.
@@ -203,6 +213,7 @@ export async function processSmartResponse(
         userId,
         history,
         documentContext,
+        knowledgePrompt,
       );
 
       const endTime = Date.now();
@@ -228,6 +239,11 @@ export async function processSmartResponse(
     // If it's a client information request with high confidence, process it as client information
     if (type === 'CLIENT_INFO' && confidence >= 0.7) {
       const clientPrompt = dedent`
+        ${
+          knowledgePrompt
+            ? `\nUser has provided the following context for you to use:\n${knowledgePrompt}\n`
+            : ''
+        }
         ${documentContext}
         You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
 
@@ -326,6 +342,11 @@ export async function processSmartResponse(
 
     // Otherwise, process as a general response
     const generalPrompt = dedent`
+      ${
+        knowledgePrompt
+          ? `\nUser has provided the following context for you to use:\n${knowledgePrompt}\n`
+          : ''
+      }
       ${documentContext}
       Provide a conversational response to this request: "${prompt}"
 
