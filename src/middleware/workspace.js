@@ -5,6 +5,7 @@ export const extractWorkspace = async (req, res, next) => {
   try {
     const host = req.headers.host || '';
     const domain = req.headers.domain || '';
+    console.log('🚀 req.headers:', req.headers);
     console.log(`🌐 [extractWorkspace] host: ${host}, domain: ${domain}`);
 
     const domainParts = host.split('.');
