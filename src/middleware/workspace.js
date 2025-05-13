@@ -96,11 +96,11 @@ export const extractWorkspaceWithoutAuth = async (req, res, next) => {
   try {
     const host = req.headers.host || '';
     const domain = req.headers?.origin?.split('://')[1] || '';
-    console.log(`🌐 [extractWorkspace] host: ${host}, domain: ${domain}`);
+    console.log(`🌐 [extractWorkspaceWithoutAuth] host: ${host}, domain: ${domain}`);
 
     const domainParts = host.split('.');
     const subdomain = domainParts[0];
-    console.log(`🔖 [extractWorkspace] subdomain label: ${subdomain}`);
+    console.log(`🔖 [extractWorkspaceWithoutAuth] subdomain label: ${subdomain}`);
 
     let workspace = null;
 
@@ -115,28 +115,28 @@ export const extractWorkspaceWithoutAuth = async (req, res, next) => {
 
     if (workspace) {
       console.log(
-        `✅ [extractWorkspace] host-based matched workspace: ${workspace._id} (${workspace.name})`,
+        `✅ [extractWorkspaceWithoutAuth] host-based matched workspace: ${workspace._id} (${workspace.name})`,
       );
     } else {
       // 2️⃣ Fallback: header → path
       let workspaceIdentifier = req.headers.workspace;
-      console.log(`📝 [extractWorkspace] from header: ${workspaceIdentifier}`);
+      console.log(`📝 [extractWorkspaceWithoutAuth] from header: ${workspaceIdentifier}`);
 
       if (!workspaceIdentifier && req.path) {
         const pathParts = req.path.split('/');
         if (pathParts[1]) {
           workspaceIdentifier = pathParts[1];
-          console.log(`↪️ [extractWorkspace] from path: ${workspaceIdentifier}`);
+          console.log(`↪️ [extractWorkspaceWithoutAuth] from path: ${workspaceIdentifier}`);
         }
       }
 
       if (!workspaceIdentifier) {
-        console.error('❌ [extractWorkspace] no identifier from host, header, or path');
+        console.error('❌ [extractWorkspaceWithoutAuth] no identifier from host, header, or path');
         throw new ApiError(400, 'Workspace identifier is required');
       }
 
       console.log(
-        `🔍 [extractWorkspace] header/path lookup for identifier: ${workspaceIdentifier}`,
+        `🔍 [extractWorkspaceWithoutAuth] header/path lookup for identifier: ${workspaceIdentifier}`,
       );
 
       workspace = await Workspace.findOne({
@@ -150,21 +150,21 @@ export const extractWorkspaceWithoutAuth = async (req, res, next) => {
 
       if (workspace) {
         console.log(
-          `✅ [extractWorkspace] header/path matched workspace: ${workspace._id} (${workspace.name})`,
+          `✅ [extractWorkspaceWithoutAuth] header/path matched workspace: ${workspace._id} (${workspace.name})`,
         );
       } else {
         console.error(
-          `❌ [extractWorkspace] no workspace found for identifier: ${workspaceIdentifier}`,
+          `❌ [extractWorkspaceWithoutAuth] no workspace found for identifier: ${workspaceIdentifier}`,
         );
         throw new ApiError(404, 'Workspace not found');
       }
     }
 
     req.workspace = workspace;
-    console.log('🚀 [extractWorkspace] attached workspace, next()');
+    console.log('🚀 [extractWorkspaceWithoutAuth] attached workspace, next()');
     next();
   } catch (error) {
-    console.error('💥 [extractWorkspace] error:', error);
+    console.error('💥 [extractWorkspaceWithoutAuth] error:', error);
     next(error);
   }
 };

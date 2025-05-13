@@ -80,7 +80,7 @@ app.use(
         /^http?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
         /^https?:\/\/(?:[\w-]+\.)*stripe\.com$/,
         /^http?:\/\/(?:[\w-]+\.)*stripe\.com$/,
-        /^https?:\/\/(?:[\w-]+\.)*pay\.bolocreate\.com$/,
+        /^https?:\/\/(?:[\w-]+\.)*pay\.bolocreate\.com(?::\d+)?$/,
       ];
       if (
         !origin ||
