@@ -12,7 +12,15 @@ const workspaceSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    logoStoragePath: {
+      type: String,
+      default: '',
+    },
     workspaceFavicon: {
+      type: String,
+      default: '',
+    },
+    faviconStoragePath: {
       type: String,
       default: '',
     },

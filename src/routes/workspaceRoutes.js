@@ -5,6 +5,7 @@ import { deleteWorkspaceMember } from '../controllers/workspace/deleteWorkspaceM
 import { getClients } from '../controllers/workspace/getClients.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getUser } from '../controllers/workspace/getUser.js';
+import { getWorkspaceLogo } from '../controllers/workspace/getWorkspaceLogo.js';
 import { getWorkspaceMembers } from '../controllers/workspace/getWorkspaceMembers.js';
 import {
   createWorkspace,
@@ -25,6 +26,8 @@ const router = express.Router();
 // Public routes (no authentication required)
 router.get('/invite/verify/:token', verifyWorkspaceInvitation);
 router.post('/invite/accept/:token', acceptWorkspaceInvitation);
+
+router.get('/workspace-logo', extractWorkspace, getWorkspaceLogo);
 
 // All routes below require authentication
 router.use(authenticate);

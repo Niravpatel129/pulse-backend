@@ -127,11 +127,14 @@ export const updateWorkspace = async (req, res, next) => {
 
         // Update with new logo and favicon information
         updateObj.$set.logo = logoUrl;
-        updateObj.$set.favicon = faviconUrl;
+        updateObj.$set.workspaceFavicon = faviconUrl;
         // Store the storage paths in separate fields for future reference
         updateObj.$set.logoStoragePath = storagePath;
         updateObj.$set.faviconStoragePath = faviconStoragePath;
-        console.log('Setting new logo and favicon:', { logo: logoUrl, favicon: faviconUrl });
+        console.log('Setting new logo and favicon:', {
+          logo: logoUrl,
+          workspaceFavicon: faviconUrl,
+        });
 
         logoUpdateResult = {
           success: true,
@@ -167,7 +170,7 @@ export const updateWorkspace = async (req, res, next) => {
 
         // Set logo and favicon to empty strings per model definition
         updateObj.$set.logo = '';
-        updateObj.$set.favicon = '';
+        updateObj.$set.workspaceFavicon = '';
 
         // Remove the storage paths if they exist
         if (workspace.logoStoragePath || workspace.faviconStoragePath) {
@@ -191,7 +194,7 @@ export const updateWorkspace = async (req, res, next) => {
 
         // Still set logo and favicon to empty strings even if deletion fails
         updateObj.$set.logo = '';
-        updateObj.$set.favicon = '';
+        updateObj.$set.workspaceFavicon = '';
         if (workspace.logoStoragePath || workspace.faviconStoragePath) {
           updateObj.$unset = {
             logoStoragePath: '',
