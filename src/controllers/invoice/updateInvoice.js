@@ -18,6 +18,13 @@ export const updateInvoice = catchAsync(async (req, res, next) => {
     req.body.datePaid = new Date();
   }
 
+  // Handle dueDate - allow null values
+  if (req.body.dueDate === null || req.body.dueDate === undefined) {
+    req.body.dueDate = null;
+  } else if (req.body.dueDate) {
+    req.body.dueDate = new Date(req.body.dueDate);
+  }
+
   if (!invoice) {
     return next(new AppError('No invoice found with that ID', 404));
   }

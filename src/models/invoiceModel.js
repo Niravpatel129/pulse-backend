@@ -125,7 +125,6 @@ const invoiceSchema = new mongoose.Schema(
     },
     dueDate: {
       type: Date,
-      required: true,
     },
     notes: String,
     paymentTerms: String,

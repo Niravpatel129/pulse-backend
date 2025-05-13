@@ -54,7 +54,7 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       notes,
       teamNotes,
       status: req.body.status || 'open',
-      dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now if not provided
+      dueDate: dueDate ? new Date(dueDate) : null,
       currency: currency.toUpperCase(),
       requireDeposit,
       depositPercentage,
