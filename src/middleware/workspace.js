@@ -2,6 +2,7 @@ import Workspace from '../models/Workspace.js';
 import ApiError from '../utils/apiError.js';
 
 export const extractWorkspace = async (req, res, next) => {
+  console.log('🚀 req:', req);
   try {
     console.log('🔍 [extractWorkspace] start');
 
