@@ -115,6 +115,7 @@ const invoiceSchema = new mongoose.Schema(
         'sent',
         'paid',
         'overdue',
+        'overpaid',
         'cancelled',
         'open',
         'archived',
