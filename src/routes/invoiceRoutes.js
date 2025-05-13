@@ -33,6 +33,7 @@ router.get('/:id/public', getPublicInvoice);
 router.get('/:id', authenticate, extractWorkspace, getInvoice);
 
 router.get('/:id/payments', authenticate, extractWorkspace, getInvoicePayments);
+
 router.post('/:id/payment-intent', createPaymentIntent);
 
 router.get('/', authenticate, extractWorkspace, getInvoices);
