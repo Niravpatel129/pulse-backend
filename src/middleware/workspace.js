@@ -97,6 +97,7 @@ export const extractWorkspaceWithoutAuth = async (req, res, next) => {
     const host = req.headers.host || '';
     const domain = req.headers?.origin?.split('://')[1] || '';
     console.log(`🌐 [extractWorkspaceWithoutAuth] host: ${host}, domain: ${domain}`);
+    console.log('🚀 req.headers:', req.headers);
 
     const domainParts = host.split('.');
     const subdomain = domainParts[0];
