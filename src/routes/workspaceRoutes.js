@@ -19,7 +19,7 @@ import { revokeWorkspaceInvitation } from '../controllers/workspace/revokeInvita
 import { updateWorkspaceMember } from '../controllers/workspace/updateWorkspaceMember.js';
 import { verifyWorkspaceInvitation } from '../controllers/workspace/verifyInvitation.js';
 import { authenticate } from '../middleware/auth.js';
-import { extractWorkspace } from '../middleware/workspace.js';
+import { extractWorkspace, extractWorkspaceWithoutAuth } from '../middleware/workspace.js';
 
 const router = express.Router();
 
@@ -27,7 +27,8 @@ const router = express.Router();
 router.get('/invite/verify/:token', verifyWorkspaceInvitation);
 router.post('/invite/accept/:token', acceptWorkspaceInvitation);
 
-router.get('/workspace-logo', extractWorkspace, getWorkspaceLogo);
+// Semi-public routes (no authentication required)
+router.get('/logo', extractWorkspaceWithoutAuth, getWorkspaceLogo);
 
 // All routes below require authentication
 router.use(authenticate);
@@ -67,6 +68,7 @@ router.get('/current-workspace', extractWorkspace, getWorkspace);
 
 // Update a workspace (supports both PUT and PATCH)
 router.patch('/:workspaceId', extractWorkspace, updateWorkspace);
+
 // Added for multipart/form-data support with logo uploads
 router.put('/:workspaceId', extractWorkspace, handleWorkspaceFileUpload, updateWorkspace);
 
