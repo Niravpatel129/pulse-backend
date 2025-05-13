@@ -18,6 +18,10 @@ const workspaceSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
+    customDomains: {
+      type: [String],
+      default: [],
+    },
     description: {
       type: String,
       default: '',

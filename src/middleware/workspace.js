@@ -6,19 +6,32 @@ export const extractWorkspace = async (req, res, next) => {
     // Get workspace from header or URL path
     let workspaceIdentifier = req.headers.workspace;
 
-    // If no workspace in header, try to get from URL path
-    if (!workspaceIdentifier && req.path) {
-      const pathParts = req.path.split('/');
-      if (pathParts.length > 1 && pathParts[1]) {
-        workspaceIdentifier = pathParts[1];
+    // Check the host (domain) to determine the workspace
+    const host = req.headers.host || ''; // Get the host from the request headers
+    const subdomain = host.split('.')[0]; // Extract subdomain from the host
+
+    // If no workspaceIdentifier is passed, check if the domain matches any custom domain or subdomain
+    if (!workspaceIdentifier) {
+      const workspace = await Workspace.findOne({
+        $or: [
+          { subdomain: subdomain }, // For hourblock-style subdomains
+          { customDomains: host }, // For custom domains like pay.bolocreate.com
+        ],
+        isActive: true,
+      });
+
+      if (!workspace) {
+        throw new ApiError(404, 'Workspace not found');
       }
+
+      workspaceIdentifier = workspace.subdomain; // Use the subdomain of the found workspace
     }
 
     if (!workspaceIdentifier) {
       throw new ApiError(400, 'Workspace identifier is required');
     }
 
-    // Find workspace by name (subdomain)
+    // Find workspace by name, subdomain, or slug
     const workspace = await Workspace.findOne({
       $or: [
         { name: workspaceIdentifier },
