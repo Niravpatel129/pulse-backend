@@ -1,5 +1,6 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import Invoice from '../../models/invoiceModel.js';
+import Payment from '../../models/paymentModel.js';
 import StripeService from '../../services/stripeService.js';
 
 // @desc    Verify a Stripe payment
@@ -20,6 +21,9 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     paymentIntent,
     paymentIntentClientSecret,
   );
+
+  //
+  console.log('🚀 paymentIntentDetails:', paymentIntentDetails);
 
   if (paymentIntentDetails.status !== 'succeeded') {
     return res.status(400).json({
@@ -44,6 +48,22 @@ export const verifyPayment = asyncHandler(async (req, res) => {
   invoice.status = 'paid';
   invoice.paidAt = new Date();
   await invoice.save();
+
+  // create a payment
+  const payment = await Payment.create({
+    invoice: invoice._id,
+    amount: paymentIntentDetails.amount,
+    date: new Date(paymentIntentDetails.created * 1000),
+    method: paymentIntentDetails.payment_method_types[0] || 'credit-card',
+    workspace: invoice.workspace,
+    createdBy: invoice.createdBy,
+    paymentNumber: (await Payment.countDocuments({ invoice: invoice._id })) + 1,
+    remainingBalance: invoice.total - paymentIntentDetails.amount,
+    type: 'payment',
+    status: 'completed',
+    memo: `Stripe Payment ID: ${paymentIntentDetails.id}`,
+    stripePaymentDetails: paymentIntentDetails, // Store complete payment intent details
+  });
 
   res.status(200).json({
     success: true,
