@@ -1,5 +1,6 @@
 import multer from 'multer';
 import path from 'path';
+import sharp from 'sharp';
 import Workspace from '../../models/Workspace.js';
 import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
@@ -11,11 +12,18 @@ const upload = multer({
   storage,
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    const allowedTypes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/svg+xml',
+    ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG, GIF and WebP are allowed.'));
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP and SVG are allowed.'));
     }
   },
 }).single('logo');
@@ -85,31 +93,51 @@ export const updateWorkspace = async (req, res, next) => {
           req.file.mimetype,
         );
 
-        // Delete old logo if it exists
+        // Generate favicon from the uploaded logo
+        const faviconBuffer = await sharp(req.file.buffer)
+          .resize(32, 32, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .toBuffer();
+
+        // Generate a path for the favicon file
+        const faviconPath = firebaseStorage.generatePath(
+          workspaceId.toString(),
+          `favicon${path.extname(req.file.originalname)}`,
+        );
+
+        // Upload the favicon to Firebase Storage
+        const { url: faviconUrl, storagePath: faviconStoragePath } =
+          await firebaseStorage.uploadFile(faviconBuffer, faviconPath, req.file.mimetype);
+
+        // Delete old logo and favicon if they exist
         if (workspace.logo && workspace.logo.startsWith('https://')) {
           try {
             // If we have a previous storage path, use it
             if (workspace.logoStoragePath) {
               await firebaseStorage.deleteFile(workspace.logoStoragePath);
               console.log('Deleted old workspace logo:', workspace.logoStoragePath);
-            } else {
-              console.log('No storage path found for previous logo, skipping deletion');
+            }
+            if (workspace.faviconStoragePath) {
+              await firebaseStorage.deleteFile(workspace.faviconStoragePath);
+              console.log('Deleted old workspace favicon:', workspace.faviconStoragePath);
             }
           } catch (err) {
-            console.error('Failed to delete old logo, continuing anyway:', err);
+            console.error('Failed to delete old files, continuing anyway:', err);
           }
         }
 
-        // Update with new logo information
+        // Update with new logo and favicon information
         updateObj.$set.logo = logoUrl;
-        // Store the storage path in a separate field for future reference
+        updateObj.$set.favicon = faviconUrl;
+        // Store the storage paths in separate fields for future reference
         updateObj.$set.logoStoragePath = storagePath;
-        console.log('Setting new logo:', { logo: logoUrl, storagePath });
+        updateObj.$set.faviconStoragePath = faviconStoragePath;
+        console.log('Setting new logo and favicon:', { logo: logoUrl, favicon: faviconUrl });
 
         logoUpdateResult = {
           success: true,
           action: 'upload',
           url: logoUrl,
+          faviconUrl,
         };
       } catch (error) {
         console.error('Error uploading logo:', error);
@@ -124,21 +152,29 @@ export const updateWorkspace = async (req, res, next) => {
 
     // Handle logo removal if requested
     else if (removeLogo === 'true' && workspace.logo) {
-      console.log('Removing workspace logo');
+      console.log('Removing workspace logo and favicon');
 
       try {
-        // Only try to delete from storage if we have a storage path
+        // Only try to delete from storage if we have storage paths
         if (workspace.logoStoragePath) {
           await firebaseStorage.deleteFile(workspace.logoStoragePath);
           console.log('Deleted workspace logo:', workspace.logoStoragePath);
         }
+        if (workspace.faviconStoragePath) {
+          await firebaseStorage.deleteFile(workspace.faviconStoragePath);
+          console.log('Deleted workspace favicon:', workspace.faviconStoragePath);
+        }
 
-        // Set logo to empty string per model definition
+        // Set logo and favicon to empty strings per model definition
         updateObj.$set.logo = '';
+        updateObj.$set.favicon = '';
 
-        // Remove the storage path if it exists
-        if (workspace.logoStoragePath) {
-          updateObj.$unset = { logoStoragePath: '' };
+        // Remove the storage paths if they exist
+        if (workspace.logoStoragePath || workspace.faviconStoragePath) {
+          updateObj.$unset = {
+            logoStoragePath: '',
+            faviconStoragePath: '',
+          };
         }
 
         logoUpdateResult = {
@@ -146,17 +182,21 @@ export const updateWorkspace = async (req, res, next) => {
           action: 'remove',
         };
       } catch (err) {
-        console.error('Failed to delete logo from storage:', err);
+        console.error('Failed to delete files from storage:', err);
         logoUpdateResult = {
           success: false,
           action: 'remove',
-          error: err.message || 'Failed to remove logo',
+          error: err.message || 'Failed to remove logo and favicon',
         };
 
-        // Still set logo to empty string even if deletion fails
+        // Still set logo and favicon to empty strings even if deletion fails
         updateObj.$set.logo = '';
-        if (workspace.logoStoragePath) {
-          updateObj.$unset = { logoStoragePath: '' };
+        updateObj.$set.favicon = '';
+        if (workspace.logoStoragePath || workspace.faviconStoragePath) {
+          updateObj.$unset = {
+            logoStoragePath: '',
+            faviconStoragePath: '',
+          };
         }
       }
     }
