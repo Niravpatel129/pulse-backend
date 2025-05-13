@@ -42,8 +42,8 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
   // Calculate payment amount based on the request
   let paymentAmount;
   if (amount) {
-    // If custom amount is provided, use it
-    paymentAmount = Math.round(amount * 100); // Convert to cents
+    // If custom amount is provided, use it (already in cents)
+    paymentAmount = amount;
   } else if (isDeposit && invoice.requireDeposit) {
     // If deposit is requested and invoice requires deposit
     paymentAmount = Math.round(invoice.total * (invoice.depositPercentage / 100) * 100);
