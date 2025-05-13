@@ -6,7 +6,8 @@ export const extractWorkspace = async (req, res, next) => {
     console.log('🔍 [extractWorkspace] start');
 
     const host = req.headers.host || '';
-    console.log(`🌐 [extractWorkspace] host: ${host}`);
+    const domain = req.headers.domain || '';
+    console.log(`🌐 [extractWorkspace] host: ${host}, domain: ${domain}`);
 
     const domainParts = host.split('.');
     const subdomain = domainParts[0];
@@ -20,7 +21,7 @@ export const extractWorkspace = async (req, res, next) => {
       isActive: true,
       $or: [
         { subdomain }, // legacy subdomains, e.g. bolo.hourblock.com
-        { customDomains: host }, // full custom domain, e.g. pay.bolocreate.com
+        { customDomains: domain || host }, // full custom domain from header or host
       ],
     });
 
