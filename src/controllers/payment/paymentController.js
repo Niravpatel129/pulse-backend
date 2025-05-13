@@ -17,7 +17,9 @@ export const createPayment = asyncHandler(async (req, res, next) => {
 // @route   GET /api/payments
 // @access  Private
 export const getPayments = asyncHandler(async (req, res, next) => {
-  const payments = await Payment.find().populate({
+  const payments = await Payment.find({
+    workspace: req.workspace._id,
+  }).populate({
     path: 'invoice',
     populate: {
       path: 'client',
