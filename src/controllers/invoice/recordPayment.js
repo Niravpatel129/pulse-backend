@@ -110,9 +110,15 @@ export const recordPayment = catchAsync(async (req, res, next) => {
   // Update invoice status based on new balance
   const newBalance = Math.max(0, currentBalance - (type === 'payment' ? amount : 0));
   if (newBalance <= 0) {
-    invoice.status = 'paid';
+    if (overpaymentAmount > 0) {
+      invoice.status = 'overpaid';
+    } else {
+      invoice.status = 'paid';
+    }
     invoice.paidAt = new Date();
     invoice.paidBy = req.user.userId;
+  } else if (newBalance < invoice.total) {
+    invoice.status = 'partially_paid';
   } else if (invoice.status === 'draft') {
     invoice.status = 'sent';
   }
