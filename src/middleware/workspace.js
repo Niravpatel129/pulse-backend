@@ -4,7 +4,7 @@ import ApiError from '../utils/apiError.js';
 export const extractWorkspace = async (req, res, next) => {
   try {
     const host = req.headers.host || '';
-    const domain = req.headers.origin.split('://')[1] || '';
+    const domain = req?.headers?.origin?.split('://')[1] || '';
     console.log(`🌐 [extractWorkspace] host: ${host}, domain: ${domain}`);
 
     const domainParts = host.split('.');
@@ -105,7 +105,6 @@ export const extractWorkspaceWithoutAuth = async (req, res, next) => {
     let workspace = null;
 
     // 1️⃣ Try host-based lookup first (covers both *.hourblock.com and fully custom domains)
-    console.log('⏩ [extractWorkspace] attempting host-based lookup');
     workspace = await Workspace.findOne({
       isActive: true,
       $or: [
