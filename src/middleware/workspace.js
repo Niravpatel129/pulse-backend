@@ -5,7 +5,6 @@ export const extractWorkspace = async (req, res, next) => {
   try {
     const host = req.headers.host || '';
     const domain = req.headers.origin.split('://')[1] || '';
-    console.log('🚀 req.headers:', req.headers);
     console.log(`🌐 [extractWorkspace] host: ${host}, domain: ${domain}`);
 
     const domainParts = host.split('.');
@@ -96,7 +95,7 @@ export const extractWorkspace = async (req, res, next) => {
 export const extractWorkspaceWithoutAuth = async (req, res, next) => {
   try {
     const host = req.headers.host || '';
-    const domain = req.headers.domain || '';
+    const domain = req.headers.origin.split('://')[1] || '';
     console.log(`🌐 [extractWorkspace] host: ${host}, domain: ${domain}`);
 
     const domainParts = host.split('.');
