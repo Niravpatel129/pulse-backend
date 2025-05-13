@@ -83,6 +83,9 @@ app.use(
         /^https?:\/\/(?:[\w-]+\.)*pay\.bolocreate\.com(?::\d+)?$/,
         /^https?:\/\/pay\.bolocreate\.com(?::\d+)?$/,
         /^http?:\/\/pay\.bolocreate\.com(?::\d+)?$/,
+        'pay.bolocreate.com',
+        'http://pay.bolocreate.com',
+        'https://pay.bolocreate.com',
       ];
       if (
         !origin ||
