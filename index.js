@@ -78,6 +78,9 @@ app.use(
         /^https:\/\/(?:[\w-]+\.)*hourblock\.com$/,
         /^https?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
         /^http?:\/\/(?:[\w-]+\.)*toastify\.io(?::\d+)?$/,
+        /^https?:\/\/(?:[\w-]+\.)*stripe\.com$/,
+        /^http?:\/\/(?:[\w-]+\.)*stripe\.com$/,
+        /^https?:\/\/(?:[\w-]+\.)*pay\.bolocreate\.com$/,
       ];
       if (
         !origin ||
