@@ -3,15 +3,20 @@ import ApiError from '../utils/apiError.js';
 
 export const extractWorkspace = async (req, res, next) => {
   try {
+    console.log('🔍 Extracting workspace from request...');
+
     // Get workspace from header or URL path
     let workspaceIdentifier = req.headers.workspace;
+    console.log('📝 Workspace identifier from header:', workspaceIdentifier);
 
     // Check the host (domain) to determine the workspace
     const host = req.headers.host || ''; // Get the host from the request headers
     const subdomain = host.split('.')[0]; // Extract subdomain from the host
+    console.log('🌐 Host:', host, 'Subdomain:', subdomain);
 
     // If no workspaceIdentifier is passed, check if the domain matches any custom domain or subdomain
     if (!workspaceIdentifier) {
+      console.log('🔎 No workspace identifier in header, searching by domain...');
       const workspace = await Workspace.findOne({
         $or: [
           { subdomain: subdomain }, // For hourblock-style subdomains
@@ -21,17 +26,21 @@ export const extractWorkspace = async (req, res, next) => {
       });
 
       if (!workspace) {
+        console.log('❌ No workspace found for domain');
         throw new ApiError(404, 'Workspace not found');
       }
 
       workspaceIdentifier = workspace.subdomain; // Use the subdomain of the found workspace
+      console.log('✅ Found workspace by domain:', workspaceIdentifier);
     }
 
     if (!workspaceIdentifier) {
+      console.log('❌ No workspace identifier available');
       throw new ApiError(400, 'Workspace identifier is required');
     }
 
     // Find workspace by name, subdomain, or slug
+    console.log('🔍 Searching for workspace with identifier:', workspaceIdentifier);
     const workspace = await Workspace.findOne({
       $or: [
         { name: workspaceIdentifier },
@@ -42,11 +51,14 @@ export const extractWorkspace = async (req, res, next) => {
     });
 
     if (!workspace) {
+      console.log('❌ Workspace not found');
       throw new ApiError(404, 'Workspace not found');
     }
+    console.log('✅ Found workspace:', workspace.name);
 
     // Check if user exists and is authenticated
     if (!req.user.userId) {
+      console.log('❌ User not authenticated');
       throw new ApiError(401, 'User not authenticated');
     }
 
@@ -56,13 +68,16 @@ export const extractWorkspace = async (req, res, next) => {
     );
 
     if (!isMember) {
+      console.log('❌ User is not a member of the workspace');
       throw new ApiError(403, 'You do not have access to this workspace');
     }
 
     // Attach workspace to request object
     req.workspace = workspace;
+    console.log('✅ Successfully attached workspace to request');
     next();
   } catch (error) {
+    console.log('❌ Error in extractWorkspace:', error.message);
     next(error);
   }
 };
