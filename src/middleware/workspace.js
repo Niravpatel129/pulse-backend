@@ -3,114 +3,123 @@ import ApiError from '../utils/apiError.js';
 
 export const extractWorkspace = async (req, res, next) => {
   try {
-    console.log('🔍 Extracting workspace from request...');
+    console.log('🔍 [extractWorkspace] start');
 
-    // Get workspace from header or URL path
+    // 1. Header
     let workspaceIdentifier = req.headers.workspace;
-    console.log('📝 Workspace identifier from header:', workspaceIdentifier);
+    console.log(`📝 [extractWorkspace] from header: ${workspaceIdentifier}`);
 
-    // Check the host (domain) to determine the workspace
-    const host = req.headers.host || ''; // Get the host from the request headers
-    const subdomain = host.split('.')[0]; // Extract subdomain from the host
-    console.log('🌐 Host:', host, 'Subdomain:', subdomain);
+    // 2. Host
+    const host = req.headers.host || '';
+    console.log(`🌐 [extractWorkspace] host: ${host}`);
 
-    // If no workspaceIdentifier is passed, check if the domain matches any custom domain or subdomain
+    // 3. Subdomain (first label)
+    const domainParts = host.split('.');
+    const subdomain = domainParts[0];
+    console.log(`🔖 [extractWorkspace] subdomain: ${subdomain}`);
+
+    // 4. If no identifier yet, try host matching
     if (!workspaceIdentifier) {
-      console.log('🔎 No workspace identifier in header, searching by domain...');
-      const workspace = await Workspace.findOne({
-        $or: [
-          { subdomain: subdomain }, // For hourblock-style subdomains
-          { customDomains: host }, // For custom domains like pay.bolocreate.com
-        ],
-        isActive: true,
-      });
+      console.log('⏩ [extractWorkspace] no header, trying host as workspaceIdentifier');
+      workspaceIdentifier = host; // full host for customDomains
+      console.log(`🆔 [extractWorkspace] now identifier = full host: ${workspaceIdentifier}`);
+    }
 
-      if (!workspace) {
-        console.log('❌ No workspace found for domain');
-        throw new ApiError(404, 'Workspace not found');
+    // 5. Fallback to path
+    if (!workspaceIdentifier && req.path) {
+      const pathParts = req.path.split('/');
+      if (pathParts[1]) {
+        workspaceIdentifier = pathParts[1];
+        console.log(`↪️ [extractWorkspace] fallback to path: ${workspaceIdentifier}`);
       }
-
-      workspaceIdentifier = workspace.subdomain; // Use the subdomain of the found workspace
-      console.log('✅ Found workspace by domain:', workspaceIdentifier);
     }
 
     if (!workspaceIdentifier) {
-      console.log('❌ No workspace identifier available');
+      console.error('❌ [extractWorkspace] no workspace identifier found');
       throw new ApiError(400, 'Workspace identifier is required');
     }
 
-    // Find workspace by name, subdomain, or slug
-    console.log('🔍 Searching for workspace with identifier:', workspaceIdentifier);
+    // 6. Log search criteria
+    console.log(`🔍 [extractWorkspace] looking for workspace matching:`, {
+      name: workspaceIdentifier,
+      subdomain: workspaceIdentifier,
+      customDomains: workspaceIdentifier,
+    });
+
+    // 7. Query
     const workspace = await Workspace.findOne({
+      isActive: true,
       $or: [
         { name: workspaceIdentifier },
         { subdomain: workspaceIdentifier },
-        { slug: workspaceIdentifier },
+        { customDomains: workspaceIdentifier },
       ],
-      isActive: true,
     });
 
     if (!workspace) {
-      console.log('❌ Workspace not found');
+      console.error(
+        `❌ [extractWorkspace] no workspace found for identifier: ${workspaceIdentifier}`,
+      );
       throw new ApiError(404, 'Workspace not found');
     }
-    console.log('✅ Found workspace:', workspace.name);
+    console.log(`✅ [extractWorkspace] found workspace: ${workspace._id} (${workspace.name})`);
 
-    // Check if user exists and is authenticated
-    if (!req.user.userId) {
-      console.log('❌ User not authenticated');
+    // 8. Auth check
+    if (!req.user || !req.user.userId) {
+      console.error('❌ [extractWorkspace] user not authenticated');
       throw new ApiError(401, 'User not authenticated');
     }
 
-    // Check if user is a member of the workspace
-    const isMember = workspace.members.some(
-      (member) => member.user && member.user.toString() === req.user.userId,
-    );
+    // 9. Membership check
+    const isMember = workspace.members.some((member) => member.user.toString() === req.user.userId);
+    console.log(`👥 [extractWorkspace] isMember: ${isMember}`);
 
     if (!isMember) {
-      console.log('❌ User is not a member of the workspace');
+      console.error('❌ [extractWorkspace] user not a member');
       throw new ApiError(403, 'You do not have access to this workspace');
     }
 
-    // Attach workspace to request object
+    // 10. Attach and continue
     req.workspace = workspace;
-    console.log('✅ Successfully attached workspace to request');
+    console.log('🚀 [extractWorkspace] attached workspace, calling next()');
     next();
   } catch (error) {
-    console.log('❌ Error in extractWorkspace:', error.message);
+    console.error('💥 [extractWorkspace] error:', error);
     next(error);
   }
 };
 
-// Middleware to ensure user has specific role in workspace
-export const requireWorkspaceRole = (roles) => {
-  return (req, res, next) => {
-    try {
-      if (!req.workspace) {
-        throw new ApiError(400, 'Workspace context is required');
-      }
+export const requireWorkspaceRole = (roles) => (req, res, next) => {
+  try {
+    console.log('🔍 [requireWorkspaceRole] start, roles:', roles);
 
-      // Check if user exists and is authenticated
-      if (!req.user || !req.user._id) {
-        throw new ApiError(401, 'User not authenticated');
-      }
-
-      const member = req.workspace.members.find(
-        (m) => m.user && m.user.toString() === req.user._id.toString(),
-      );
-
-      if (!member) {
-        throw new ApiError(403, 'You are not a member of this workspace');
-      }
-
-      if (!roles.includes(member.role)) {
-        throw new ApiError(403, 'Insufficient permissions in this workspace');
-      }
-
-      next();
-    } catch (error) {
-      console.log('🚀 error:', error);
-      next(error);
+    if (!req.workspace) {
+      console.error('❌ [requireWorkspaceRole] missing workspace on req');
+      throw new ApiError(400, 'Workspace context is required');
     }
-  };
+
+    if (!req.user || !req.user._id) {
+      console.error('❌ [requireWorkspaceRole] user not authenticated');
+      throw new ApiError(401, 'User not authenticated');
+    }
+
+    const member = req.workspace.members.find((m) => m.user.toString() === req.user._id.toString());
+    console.log(`👤 [requireWorkspaceRole] found member:`, member);
+
+    if (!member) {
+      console.error('❌ [requireWorkspaceRole] user not a member');
+      throw new ApiError(403, 'You are not a member of this workspace');
+    }
+
+    if (!roles.includes(member.role)) {
+      console.error(`❌ [requireWorkspaceRole] insufficient role: ${member.role}`);
+      throw new ApiError(403, 'Insufficient permissions in this workspace');
+    }
+
+    console.log('✅ [requireWorkspaceRole] role check passed, calling next()');
+    next();
+  } catch (error) {
+    console.error('💥 [requireWorkspaceRole] error:', error);
+    next(error);
+  }
 };
