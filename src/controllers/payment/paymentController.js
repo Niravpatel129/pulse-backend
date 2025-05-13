@@ -17,7 +17,6 @@ export const createPayment = asyncHandler(async (req, res, next) => {
 // @route   GET /api/payments
 // @access  Private
 export const getPayments = asyncHandler(async (req, res, next) => {
-  const workspaceId = req.workspace._id;
   const payments = await Payment.find().populate({
     path: 'invoice',
     populate: {
@@ -37,7 +36,13 @@ export const getPayments = asyncHandler(async (req, res, next) => {
 // @route   GET /api/payments/:id
 // @access  Private
 export const getPaymentById = asyncHandler(async (req, res, next) => {
-  const payment = await Payment.findById(req.params.id).populate('invoice').populate('client');
+  const payment = await Payment.findById(req.params.id).populate({
+    path: 'invoice',
+    populate: {
+      path: 'client',
+      model: 'Client',
+    },
+  });
 
   if (!payment) {
     return next(new AppError('Payment not found', 404));
