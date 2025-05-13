@@ -17,7 +17,6 @@ const paymentSchema = new mongoose.Schema(
     },
     method: {
       type: String,
-      enum: ['credit-card', 'bank-transfer', 'cash', 'check', 'other'],
       required: true,
     },
     memo: {
