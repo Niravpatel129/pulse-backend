@@ -8,6 +8,7 @@ import StripeService from '../../services/stripeService.js';
 // @access  Public
 export const createPaymentIntent = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { amount, currency, isDeposit } = req.body;
 
   if (!id) {
     return res.status(400).json({
@@ -38,15 +39,41 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
     });
   }
 
-  // Get amount and currency from invoice
-  const amount = Math.round(invoice.total * 100); // Convert to cents for Stripe and round to integer
-  const currency = invoice.currency || 'usd';
+  // Calculate payment amount based on the request
+  let paymentAmount;
+  if (amount) {
+    // If custom amount is provided, use it
+    paymentAmount = Math.round(amount * 100); // Convert to cents
+  } else if (isDeposit && invoice.requireDeposit) {
+    // If deposit is requested and invoice requires deposit
+    paymentAmount = Math.round(invoice.total * (invoice.depositPercentage / 100) * 100);
+  } else {
+    // Default to full amount
+    paymentAmount = Math.round(invoice.total * 100);
+  }
+
+  // Validate payment amount
+  if (paymentAmount <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid payment amount',
+    });
+  }
+
+  if (paymentAmount > Math.round(invoice.total * 100)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Payment amount cannot exceed invoice total',
+    });
+  }
+
+  const paymentCurrency = currency || invoice.currency || 'usd';
 
   try {
     // Create payment intent using the service
     const paymentIntent = await StripeService.createPaymentIntent(
-      amount,
-      currency,
+      paymentAmount,
+      paymentCurrency,
       connectAccount.accountId,
     );
 

@@ -42,22 +42,35 @@ export const verifyPayment = asyncHandler(async (req, res) => {
       });
     }
 
-    // Update invoice status to paid
-    invoice.status = 'paid';
-    invoice.paidAt = new Date();
+    // Calculate payment amount in dollars
+    const paymentAmount = paymentIntentDetails.amount / 100;
+    const isFullPayment = paymentAmount >= invoice.total;
+    const isDepositPayment =
+      invoice.requireDeposit &&
+      Math.abs(paymentAmount - (invoice.total * invoice.depositPercentage) / 100) < 0.01;
+
+    // Update invoice status based on payment type
+    if (isFullPayment) {
+      invoice.status = 'paid';
+      invoice.paidAt = new Date();
+    } else if (isDepositPayment) {
+      invoice.status = 'deposit_paid';
+    } else {
+      invoice.status = 'partially_paid';
+    }
     await invoice.save();
 
     // Create a payment record
     const payment = await Payment.create({
       invoice: invoice._id,
-      amount: paymentIntentDetails.amount,
+      amount: paymentAmount,
       date: new Date(paymentIntentDetails.created * 1000),
       method: paymentIntentDetails.payment_method_types[0] || 'credit-card',
       workspace: invoice.workspace,
       createdBy: invoice.createdBy,
       paymentNumber: (await Payment.countDocuments({ invoice: invoice._id })) + 1,
-      remainingBalance: invoice.total - paymentIntentDetails.amount,
-      type: 'payment',
+      remainingBalance: invoice.total - paymentAmount,
+      type: isDepositPayment ? 'deposit' : 'payment',
       status: 'completed',
       memo: `Stripe Payment ID: ${paymentIntentDetails.id}`,
       stripePaymentDetails: {
