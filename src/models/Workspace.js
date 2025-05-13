@@ -12,6 +12,10 @@ const workspaceSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    workspaceFavicon: {
+      type: String,
+      default: '',
+    },
     subdomain: {
       type: String,
       required: true,
