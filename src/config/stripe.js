@@ -1,6 +1,9 @@
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const isDev = process.env.NODE_ENV || 'development';
+const stripe = new Stripe(
+  isDev ? process.env.STRIPE_SECRET_KEY_DEV : process.env.STRIPE_SECRET_KEY,
+);
 
 // Create a Stripe Connect account
 export const createConnectAccount = async (email, type = 'express') => {
@@ -13,6 +16,7 @@ export const createConnectAccount = async (email, type = 'express') => {
         transfers: { requested: true },
       },
     });
+    console.log('🚀 account:', account);
     return account;
   } catch (error) {
     throw new Error(`Failed to create Stripe Connect account: ${error.message}`);

@@ -20,8 +20,8 @@ export const createStripeAccount = asyncHandler(async (req, res) => {
   const workspaceName = workspace.name || workspace.subdomain;
 
   // Get workspace URL from request host
-  const refreshUrl = `https://${workspaceName}.hourblock.com/invoices/refresh`;
-  const returnUrl = `https://${workspaceName}.hourblock.com/invoices/return`;
+  const refreshUrl = `https://${workspaceName}.hourblock.com/dashboard/settings/refresh`;
+  const returnUrl = `https://${workspaceName}.hourblock.com/dashboard/settings/return`;
 
   console.log('Request Host:', req.headers.host);
   console.log('Return URL:', returnUrl);
@@ -32,6 +32,7 @@ export const createStripeAccount = asyncHandler(async (req, res) => {
     user: userId,
     workspace: workspaceId,
   });
+  console.log('🚀 existingAccount:', existingAccount);
 
   if (existingAccount) {
     // If account exists, create a new account link for onboarding

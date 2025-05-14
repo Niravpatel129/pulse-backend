@@ -1,9 +1,12 @@
 import axios from 'axios';
 
+const isDev = process.env.NODE_ENV || 'development';
 const stripeApi = axios.create({
   baseURL: 'https://api.stripe.com/v1',
   headers: {
-    Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+    Authorization: `Bearer ${
+      isDev ? process.env.STRIPE_SECRET_KEY_DEV : process.env.STRIPE_SECRET_KEY
+    }`,
     'Content-Type': 'application/x-www-form-urlencoded',
   },
 });
@@ -22,7 +25,6 @@ class StripeService {
       });
       return response.data;
     } catch (error) {
-      console.log('🚀 error:', error);
       throw new Error(
         `Failed to create Stripe Connect account: ${
           error.response?.data?.error?.message || error.message
@@ -42,7 +44,6 @@ class StripeService {
       });
       return response.data;
     } catch (error) {
-      console.log('🚀 error:', error);
       throw new Error(
         `Failed to create account link: ${error.response?.data?.error?.message || error.message}`,
       );
