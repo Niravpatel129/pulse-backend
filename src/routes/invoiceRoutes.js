@@ -4,6 +4,7 @@ import { createInvoice } from '../controllers/invoice/createInvoice.js';
 import { createPaymentIntent } from '../controllers/invoice/createPaymentIntent.js';
 import { deleteInvoice } from '../controllers/invoice/deleteInvoice.js';
 import { deletePayment } from '../controllers/invoice/deletePayment.js';
+import { downloadPayment } from '../controllers/invoice/downloadPayment.js';
 import { getInvoice } from '../controllers/invoice/getInvoice.js';
 import { getInvoiceActivities } from '../controllers/invoice/getInvoiceActivities.js';
 import { getInvoicePayments } from '../controllers/invoice/getInvoicePayments.js';
@@ -54,6 +55,8 @@ router.patch('/:id/paid', authenticate, extractWorkspace, markAsPaid);
 router.post('/:id/payments', authenticate, extractWorkspace, recordPayment);
 
 router.delete('/:id/payments/:paymentId', authenticate, extractWorkspace, deletePayment);
+
+router.get('/:id/payments/:paymentId/download', extractWorkspaceWithoutAuth, downloadPayment);
 
 router.put('/:id/payments/:paymentId', authenticate, extractWorkspace, updatePayment);
 

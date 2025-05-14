@@ -1,4 +1,5 @@
 import express from 'express';
+import { downloadPayment } from '../controllers/invoice/downloadPayment.js';
 import {
   createPayment,
   deletePayment,
@@ -16,6 +17,9 @@ const router = express.Router();
 
 // public get payment by payment id
 router.get('/:id', getPaymentById);
+
+// Download payment receipt (no auth required for public sharing)
+router.get('/:id/download', downloadPayment);
 
 // Protect all routes
 router.use(authenticate);
