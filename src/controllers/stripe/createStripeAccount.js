@@ -32,7 +32,6 @@ export const createStripeAccount = asyncHandler(async (req, res) => {
     user: userId,
     workspace: workspaceId,
   });
-  console.log('🚀 existingAccount:', existingAccount);
 
   if (existingAccount) {
     // If account exists, create a new account link for onboarding
