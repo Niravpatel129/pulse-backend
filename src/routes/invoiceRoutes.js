@@ -19,12 +19,12 @@ import { updateInvoice } from '../controllers/invoice/updateInvoice.js';
 import { updateInvoiceSettings } from '../controllers/invoice/updateInvoiceSettings.js';
 import { updatePayment } from '../controllers/invoice/updatePayment.js';
 import { authenticate } from '../middleware/auth.js';
-import { extractWorkspace } from '../middleware/workspace.js';
+import { extractWorkspace, extractWorkspaceWithoutAuth } from '../middleware/workspace.js';
 import invoiceNoteRoutes from './invoiceNoteRoutes.js';
 
 const router = express.Router();
 
-router.get('/invoice-settings', extractWorkspace, getInvoiceSettings);
+router.get('/invoice-settings', extractWorkspaceWithoutAuth, getInvoiceSettings);
 
 router.get('/activities', authenticate, extractWorkspace, getInvoiceActivities);
 
