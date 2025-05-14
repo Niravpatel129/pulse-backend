@@ -24,7 +24,7 @@ import invoiceNoteRoutes from './invoiceNoteRoutes.js';
 
 const router = express.Router();
 
-router.get('/invoice-settings', authenticate, extractWorkspace, getInvoiceSettings);
+router.get('/invoice-settings', extractWorkspace, getInvoiceSettings);
 
 router.get('/activities', authenticate, extractWorkspace, getInvoiceActivities);
 
