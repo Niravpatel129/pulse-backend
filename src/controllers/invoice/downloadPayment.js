@@ -119,52 +119,58 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
   // Table headers
   const tableTop = doc.y;
   let tableLeft = 50;
+  const pageWidth = 512; // 612 - 2 * margin(50)
+  const quantityX = tableLeft + 350;
+  const priceX = tableLeft + 420;
+  const lineEndX = priceX + 90; // Extend line to cover full width including price
 
+  // Table headers
   doc
     .fontSize(10)
     .text('Item', tableLeft, tableTop)
-    .text('Quantity', tableLeft + 250, tableTop, { width: 50, align: 'right' })
-    .text('Price', tableLeft + 300, tableTop, { width: 90, align: 'right' })
-    .text('Total', tableLeft + 390, tableTop, { width: 100, align: 'right' });
+    .text('Quantity', quantityX - 30, tableTop)
+    .text('Price', priceX - 30, tableTop);
 
+  // Header line
   doc
     .moveTo(tableLeft, tableTop + 15)
-    .lineTo(tableLeft + 490, tableTop + 15)
+    .lineTo(lineEndX, tableTop + 15)
     .stroke();
 
   let itemY = tableTop + 20;
 
   // List items
   invoice.items.forEach((item) => {
-    const itemTotal =
-      item.price * item.quantity - item.discount + item.price * item.quantity * (item.tax / 100);
+    // Item name
+    doc.fontSize(10).text(item.name, tableLeft, itemY, { width: 280 });
 
+    // Quantity and Price (right-aligned)
     doc
-      .fontSize(10)
-      .text(item.name, tableLeft, itemY)
-      .text(item.quantity.toString(), tableLeft + 250, itemY, { width: 50, align: 'right' })
-      .text(`${item.price.toFixed(2)} ${invoice.currency}`, tableLeft + 300, itemY, {
-        width: 90,
-        align: 'right',
-      })
-      .text(`${itemTotal.toFixed(2)} ${invoice.currency}`, tableLeft + 390, itemY, {
-        width: 100,
+      .text(item.quantity.toString(), quantityX, itemY, { width: 30, align: 'right' })
+      .text(`${item.price.toFixed(2)} ${invoice.currency}`, priceX, itemY, {
+        width: 70,
         align: 'right',
       });
 
+    // Description if exists
     if (item.description) {
       itemY += 15;
-      doc.fontSize(8).text(item.description, tableLeft, itemY, { width: 240 });
+      doc.fontSize(8).text(item.description, tableLeft, itemY, { width: 280 });
+    }
+
+    // Tax information
+    if (item.tax > 0) {
+      itemY += 15;
+      doc
+        .fontSize(8)
+        .text(`${item.taxName || 'Standard Rate'}: ${item.tax}%`, tableLeft, itemY, { width: 280 });
     }
 
     itemY += 20;
   });
 
-  // Add totals
-  doc
-    .moveTo(tableLeft + 300, itemY)
-    .lineTo(tableLeft + 490, itemY)
-    .stroke();
+  // Bottom line after items
+  doc.moveTo(tableLeft, itemY).lineTo(lineEndX, itemY).stroke();
 
   itemY += 10;
 
@@ -173,10 +179,13 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
     return sum + item.price * item.quantity * (item.tax / 100);
   }, 0);
 
+  // Align totals to the right
+  const totalsX = priceX - 60;
+
   doc
     .fontSize(10)
-    .text('Subtotal:', tableLeft + 300, itemY, { width: 120, align: 'right' })
-    .text(`${invoice.subtotal.toFixed(2)} ${invoice.currency}`, tableLeft + 420, itemY, {
+    .text('Subtotal:', totalsX, itemY, { width: 60, align: 'right' })
+    .text(`${invoice.subtotal.toFixed(2)} ${invoice.currency}`, priceX, itemY, {
       width: 70,
       align: 'right',
     });
@@ -185,8 +194,8 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
 
   doc
     .fontSize(10)
-    .text('Tax:', tableLeft + 300, itemY, { width: 120, align: 'right' })
-    .text(`${totalTax.toFixed(2)} ${invoice.currency}`, tableLeft + 420, itemY, {
+    .text('Tax:', totalsX, itemY, { width: 60, align: 'right' })
+    .text(`${totalTax.toFixed(2)} ${invoice.currency}`, priceX, itemY, {
       width: 70,
       align: 'right',
     });
@@ -196,8 +205,8 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
   doc
     .fontSize(12)
     .font('Helvetica-Bold')
-    .text('Total:', tableLeft + 300, itemY, { width: 120, align: 'right' })
-    .text(`${invoice.total.toFixed(2)} ${invoice.currency}`, tableLeft + 420, itemY, {
+    .text('Total:', totalsX, itemY, { width: 60, align: 'right' })
+    .text(`${invoice.total.toFixed(2)} ${invoice.currency}`, priceX, itemY, {
       width: 70,
       align: 'right',
     });
