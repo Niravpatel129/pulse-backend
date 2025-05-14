@@ -125,9 +125,8 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
     .fontSize(10)
     .text('Item', tableLeft, tableTop)
     .text('Quantity', tableLeft + 250, tableTop, { width: 50, align: 'right' })
-    .text('Price', tableLeft + 300, tableTop, { width: 70, align: 'right' })
-    .text('Tax', tableLeft + 370, tableTop, { width: 50, align: 'right' })
-    .text('Total', tableLeft + 420, tableTop, { width: 70, align: 'right' });
+    .text('Price', tableLeft + 300, tableTop, { width: 90, align: 'right' })
+    .text('Total', tableLeft + 390, tableTop, { width: 100, align: 'right' });
 
   doc
     .moveTo(tableLeft, tableTop + 15)
@@ -146,15 +145,11 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
       .text(item.name, tableLeft, itemY)
       .text(item.quantity.toString(), tableLeft + 250, itemY, { width: 50, align: 'right' })
       .text(`${item.price.toFixed(2)} ${invoice.currency}`, tableLeft + 300, itemY, {
-        width: 70,
+        width: 90,
         align: 'right',
       })
-      .text(`${item.tax}% ${item.taxName || ''}`, tableLeft + 370, itemY, {
-        width: 50,
-        align: 'right',
-      })
-      .text(`${itemTotal.toFixed(2)} ${invoice.currency}`, tableLeft + 420, itemY, {
-        width: 70,
+      .text(`${itemTotal.toFixed(2)} ${invoice.currency}`, tableLeft + 390, itemY, {
+        width: 100,
         align: 'right',
       });
 
@@ -174,10 +169,25 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
 
   itemY += 10;
 
+  // Calculate total tax
+  const totalTax = invoice.items.reduce((sum, item) => {
+    return sum + item.price * item.quantity * (item.tax / 100);
+  }, 0);
+
   doc
     .fontSize(10)
     .text('Subtotal:', tableLeft + 300, itemY, { width: 120, align: 'right' })
     .text(`${invoice.subtotal.toFixed(2)} ${invoice.currency}`, tableLeft + 420, itemY, {
+      width: 70,
+      align: 'right',
+    });
+
+  itemY += 20;
+
+  doc
+    .fontSize(10)
+    .text('Tax:', tableLeft + 300, itemY, { width: 120, align: 'right' })
+    .text(`${totalTax.toFixed(2)} ${invoice.currency}`, tableLeft + 420, itemY, {
       width: 70,
       align: 'right',
     });
