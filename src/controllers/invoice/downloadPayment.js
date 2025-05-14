@@ -49,7 +49,7 @@ export const downloadPayment = catchAsync(async (req, res, next) => {
 });
 
 function generateInvoicePDF(doc, payment, invoiceSettings) {
-  const { invoice, amount, date, method, paymentNumber, remainingBalance, status } = payment;
+  const { invoice, amount, date, method, paymentNumber, status } = payment;
 
   // Add business logo if available
   if (invoiceSettings?.logo) {
@@ -109,7 +109,6 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
     .text(`Amount: ${amount.toFixed(2)} ${invoice.currency}`)
     .text(`Method: ${method.charAt(0).toUpperCase() + method.slice(1)}`)
     .text(`Date: ${new Date(date).toLocaleDateString()}`)
-    .text(`Remaining Balance: ${remainingBalance.toFixed(2)} ${invoice.currency}`)
     .text(`Status: ${status.charAt(0).toUpperCase() + status.slice(1)}`);
 
   doc.moveDown();
