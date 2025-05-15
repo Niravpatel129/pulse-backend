@@ -42,11 +42,11 @@ export const paymentNotification = ({
         <div style="background-color: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
-              <td style="padding: 10px 0; color: #666; width: 30%;">To</td>
+              <td style="padding: 10px 0; color: #666; width: 30%;">From</td>
               <td style="padding: 10px 0; font-weight: 500; text-align: right;">${clientName}</td>
             </tr>
             <tr>
-              <td style="padding: 10px 0; color: #666; border-top: 1px solid #eee;">From</td>
+              <td style="padding: 10px 0; color: #666; border-top: 1px solid #eee;">To</td>
               <td style="padding: 10px 0; font-weight: 500; text-align: right; border-top: 1px solid #eee;">${workspaceName}</td>
             </tr>
             <tr>
