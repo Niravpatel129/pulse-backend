@@ -16,7 +16,6 @@ export const createConnectAccount = async (email, type = 'express') => {
         transfers: { requested: true },
       },
     });
-    console.log('🚀 account:', account);
     return account;
   } catch (error) {
     throw new Error(`Failed to create Stripe Connect account: ${error.message}`);

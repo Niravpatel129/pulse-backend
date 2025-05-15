@@ -1,5 +1,8 @@
+import Client from '../../models/Client.js';
 import Invoice from '../../models/invoiceModel.js';
 import Payment from '../../models/paymentModel.js';
+import Workspace from '../../models/Workspace.js';
+import { sendPaymentNotifications } from '../../services/paymentNotificationService.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 
@@ -8,7 +11,7 @@ export const recordPayment = catchAsync(async (req, res, next) => {
   const invoiceId = req.params.id;
 
   // Find the invoice
-  const invoice = await Invoice.findById(invoiceId);
+  const invoice = await Invoice.findById(invoiceId).populate('client');
 
   if (!invoice) {
     return next(new AppError('No invoice found with that ID', 404));
@@ -128,6 +131,20 @@ export const recordPayment = catchAsync(async (req, res, next) => {
   const allTransactions = await Payment.find({ invoice: invoiceId })
     .sort({ paymentNumber: 1 })
     .populate('createdBy', 'name');
+
+  // Get full workspace data with members for notifications
+  const workspace = await Workspace.findById(req.workspace._id);
+
+  // Get client details
+  const client = await Client.findById(invoice.client).populate('user');
+
+  // Send payment notifications for regular payments (not credits, refunds, etc.)
+  if (type === 'payment') {
+    // Send notifications asynchronously - don't wait for completion
+    sendPaymentNotifications(payment, invoice, client, workspace).catch((err) =>
+      console.error('Error sending payment notifications:', err),
+    );
+  }
 
   res.status(201).json({
     status: 'success',

@@ -76,7 +76,6 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
       paymentCurrency,
       connectAccount.accountId,
     );
-    console.log('🚀 paymentIntent:', paymentIntent);
 
     // Store the payment intent ID in the invoice
     invoice.paymentIntentId = paymentIntent.id;

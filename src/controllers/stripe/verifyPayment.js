@@ -1,6 +1,9 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
+import Client from '../../models/Client.js';
 import Invoice from '../../models/invoiceModel.js';
 import Payment from '../../models/paymentModel.js';
+import Workspace from '../../models/Workspace.js';
+import { sendPaymentNotifications } from '../../services/paymentNotificationService.js';
 import StripeService from '../../services/stripeService.js';
 
 // @desc    Verify a Stripe payment
@@ -33,7 +36,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     // Find the invoice associated with this payment intent
     const invoice = await Invoice.findOne({
       paymentIntentId: paymentIntent,
-    });
+    }).populate('client');
 
     if (!invoice) {
       return res.status(404).json({
@@ -87,6 +90,19 @@ export const verifyPayment = asyncHandler(async (req, res) => {
         latest_charge: paymentIntentDetails.latest_charge,
       },
     });
+
+    // Get workspace and client data for notifications
+    const workspace = await Workspace.findById(invoice.workspace);
+    const client = await Client.findById(invoice.client).populate('user');
+
+    // Send payment notifications
+    const paymentType = isDepositPayment ? 'deposit' : 'payment';
+    if (paymentType === 'payment' || paymentType === 'deposit') {
+      // Send notifications asynchronously - don't wait for completion
+      sendPaymentNotifications(payment, invoice, client, workspace).catch((err) =>
+        console.error('Error sending payment notifications:', err),
+      );
+    }
 
     res.status(200).json({
       success: true,

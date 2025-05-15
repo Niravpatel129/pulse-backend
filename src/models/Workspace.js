@@ -66,6 +66,24 @@ const workspaceSchema = new mongoose.Schema(
           enum: ['owner', 'admin', 'moderator', 'client'],
           default: 'client',
         },
+        notifications: {
+          payments: {
+            type: Boolean,
+            default: true,
+          },
+          invoices: {
+            type: Boolean,
+            default: true,
+          },
+          projects: {
+            type: Boolean,
+            default: true,
+          },
+          clients: {
+            type: Boolean,
+            default: true,
+          },
+        },
       },
     ],
     invitations: [
