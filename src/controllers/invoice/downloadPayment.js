@@ -66,7 +66,7 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
   doc.fontSize(20).text(invoiceSettings?.businessName || 'Your Business', { align: 'left' });
   doc.fontSize(10).text(invoiceSettings?.businessAddress || '', { align: 'left' });
   if (invoiceSettings?.showTaxId && invoiceSettings?.taxId) {
-    doc.text(`Tax ID: ${invoiceSettings.taxId}`, { align: 'left' });
+    doc.text(`${invoiceSettings.taxId}`, { align: 'left' });
   }
 
   // Add invoice information
@@ -88,7 +88,7 @@ function generateInvoicePDF(doc, payment, invoiceSettings) {
     .text(invoice.client.address.country);
 
   if (invoice.client.taxId) {
-    doc.text(`Tax ID: ${invoice.client.taxId}`);
+    doc.text(`${invoice.client.taxId}`);
   }
 
   if (invoice.client.user.email) {
