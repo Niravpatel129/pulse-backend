@@ -63,10 +63,6 @@ const invoiceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    paidBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    },
     discountAmount: {
       type: Number,
       default: 0,
@@ -128,6 +124,19 @@ const invoiceSchema = new mongoose.Schema(
       type: Date,
     },
     notes: String,
+    teamNotes: String,
+    teamNotesAttachments: {
+      type: [
+        {
+          id: { type: String },
+          name: { type: String },
+          url: { type: String },
+          type: { type: String },
+          size: { type: String },
+        },
+      ],
+      default: [],
+    },
     paymentTerms: String,
     currency: {
       type: String,
@@ -162,10 +171,7 @@ const invoiceSchema = new mongoose.Schema(
     },
     depositPercentage: {
       type: Number,
-      default: 0,
-    },
-    teamNotes: {
-      type: String,
+      default: 50,
     },
     starred: {
       type: Boolean,

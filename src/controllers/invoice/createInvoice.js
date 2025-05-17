@@ -12,11 +12,17 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       dueDate,
       taxRate,
       taxId,
+      showTaxId = false,
       notes,
       teamNotes,
+      teamNotesAttachments = [],
       currency = 'usd',
+      deliveryOptions = 'email',
       requireDeposit = false,
       depositPercentage = 50,
+      discount = 0,
+      discountAmount = 0,
+      status = 'open',
     } = req.body;
 
     if (!clientId) {
@@ -29,13 +35,18 @@ export const createInvoice = catchAsync(async (req, res, next) => {
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const totalDiscount = items.reduce((sum, item) => sum + (item.discount || 0), 0);
-    const totalTax = items.reduce((sum, item) => {
-      const itemSubtotal = item.price * item.quantity;
-      const itemDiscount = item.discount || 0;
-      const taxableAmount = itemSubtotal - itemDiscount;
-      return sum + taxableAmount * (taxRate / 100);
-    }, 0);
+    const totalDiscount =
+      discountAmount || items.reduce((sum, item) => sum + (item.discount || 0), 0);
+
+    // Use provided taxAmount if available, otherwise calculate
+    const totalTax =
+      req.body.taxAmount ||
+      items.reduce((sum, item) => {
+        const itemSubtotal = item.price * item.quantity;
+        const itemDiscount = item.discount || 0;
+        const taxableAmount = itemSubtotal - itemDiscount;
+        return sum + taxableAmount * (taxRate / 100);
+      }, 0);
 
     const total = subtotal - totalDiscount + totalTax;
 
@@ -48,14 +59,18 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       subtotal,
       total,
       discount: totalDiscount,
+      discountAmount,
       tax: totalTax,
       taxRate,
       taxId,
+      showTaxId,
       notes,
       teamNotes,
-      status: req.body.status || 'open',
+      teamNotesAttachments,
+      status,
       dueDate: dueDate ? new Date(dueDate) : null,
       currency: currency.toUpperCase(),
+      deliveryOptions,
       requireDeposit,
       depositPercentage,
       workspace: req.workspace._id,
@@ -74,7 +89,7 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       metadata: {
         invoiceNumber,
         total,
-        status: 'draft',
+        status,
       },
     });
 
