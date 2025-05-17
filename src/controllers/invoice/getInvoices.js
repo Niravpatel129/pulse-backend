@@ -9,6 +9,7 @@ export const getInvoices = catchAsync(async (req, res, next) => {
       .populate('project', 'name description')
       .populate('items', 'name quantity price projects modules discount')
       .populate('createdBy', 'name')
+      .populate('teamNotesAttachments')
       .select(
         'invoiceNumber total status dueDate notes createdAt project modules items currency status archived starred dateSent datePaid',
       )

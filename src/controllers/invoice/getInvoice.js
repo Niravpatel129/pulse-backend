@@ -13,6 +13,7 @@ export const getInvoice = catchAsync(async (req, res, next) => {
         path: 'client',
         select: '-__v',
       })
+      .populate('teamNotesAttachments')
       .populate('items', 'name description price discount')
       .populate('project', 'name')
       .populate('createdBy', 'name');
