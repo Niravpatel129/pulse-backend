@@ -14,6 +14,7 @@ const stripeApi = axios.create({
 class StripeService {
   // Create a Stripe Connect account
   static async createConnectAccount(email, type = 'express') {
+    console.log('🚀 process.env.STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
     try {
       const response = await stripeApi.post('/accounts', {
         type,
