@@ -3,6 +3,7 @@ import express from 'express';
 import { createInvoice } from '../controllers/invoice/createInvoice.js';
 import { createPaymentIntent } from '../controllers/invoice/createPaymentIntent.js';
 import { deleteInvoice } from '../controllers/invoice/deleteInvoice.js';
+import { deleteInvoiceAttachment } from '../controllers/invoice/deleteInvoiceAttachment.js';
 import { deletePayment } from '../controllers/invoice/deletePayment.js';
 import { downloadPayment } from '../controllers/invoice/downloadPayment.js';
 import { getInvoice } from '../controllers/invoice/getInvoice.js';
@@ -17,6 +18,7 @@ import { sendInvoice } from '../controllers/invoice/sendInvoice.js';
 import { toggleArchive } from '../controllers/invoice/toggleArchive.js';
 import { toggleStar } from '../controllers/invoice/toggleStar.js';
 import { updateInvoice } from '../controllers/invoice/updateInvoice.js';
+import { updateInvoiceAttachments } from '../controllers/invoice/updateInvoiceAttachments.js';
 import { updateInvoiceSettings } from '../controllers/invoice/updateInvoiceSettings.js';
 import { updatePayment } from '../controllers/invoice/updatePayment.js';
 import { authenticate } from '../middleware/auth.js';
@@ -62,6 +64,15 @@ router.put('/:id/payments/:paymentId', authenticate, extractWorkspace, updatePay
 
 router.put('/:id/star', authenticate, extractWorkspace, toggleStar);
 router.put('/:id/archive', authenticate, extractWorkspace, toggleArchive);
+
+// Attachments routes
+router.post('/:id/attachments', authenticate, extractWorkspace, updateInvoiceAttachments);
+router.delete(
+  '/:id/attachments/:attachmentId',
+  authenticate,
+  extractWorkspace,
+  deleteInvoiceAttachment,
+);
 
 // Invoice notes routes
 router.use('/:id/notes', invoiceNoteRoutes);
