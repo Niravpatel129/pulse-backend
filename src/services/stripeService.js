@@ -35,6 +35,8 @@ class StripeService {
 
   // Create an account link for onboarding
   static async createAccountLink(accountId, refreshUrl, returnUrl) {
+    console.log('🚀 process.env.STRIPE_SECRET_KEY:', process.env.STRIPE_SECRET_KEY);
+
     try {
       const response = await stripeApi.post('/account_links', {
         account: accountId,
