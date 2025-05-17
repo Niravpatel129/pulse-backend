@@ -14,7 +14,7 @@ export const deleteInvoiceAttachment = catchAsync(async (req, res, next) => {
 
     // Find the attachment index
     const attachmentIndex = invoice.teamNotesAttachments.findIndex(
-      (attachment) => attachment.id === attachmentId,
+      (attachment) => attachment._id.toString() === attachmentId,
     );
 
     if (attachmentIndex === -1) {
