@@ -5,6 +5,7 @@ import multer from 'multer';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
+import { initializeGmailListener } from './src/init/gmailListener.js';
 import { initializeProjectInactivityChecker } from './src/init/projectInactivityChecker.js';
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
 import requestLogger from './src/middleware/loggingMiddleware.js';
@@ -24,6 +25,7 @@ import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
 import figmaRoutes from './src/routes/figmaRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
+import gmailRoutes from './src/routes/gmailRoutes.js';
 import integrationRoutes from './src/routes/integrationRoutes.js';
 import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import invoiceTaxRateRoutes from './src/routes/invoiceTaxRateRoutes.js';
@@ -55,6 +57,9 @@ connectDB();
 
 // Initialize email listener
 initializeEmailListener();
+
+// Initialize Gmail listener
+initializeGmailListener();
 
 // Initialize project inactivity checker
 initializeProjectInactivityChecker();
@@ -162,6 +167,7 @@ app.use(`${routesPrefix}/product-catalog`, productCatalogRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
+app.use(`${routesPrefix}/gmail`, gmailRoutes);
 app.use(`${routesPrefix}/stripe`, stripeRoutes);
 
 // project invoices
