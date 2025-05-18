@@ -3,12 +3,17 @@ import asyncHandler from '../../../middleware/asyncHandler.js';
 import GmailIntegration from '../../../models/GmailIntegration.js';
 
 /**
- * @desc    Get emails from connected Gmail account
+ * @desc    Get emails from connected Gmail account with pagination and search
  * @route   GET /api/gmail/emails
  * @access  Private
  */
 const getGmailEmails = asyncHandler(async (req, res) => {
   const workspaceId = req.workspace._id;
+
+  // Get pagination parameters from query
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 10;
+  const searchQuery = req.query.query || '';
 
   // Find Gmail integration for this workspace
   const gmailIntegration = await GmailIntegration.findOne({
@@ -34,18 +39,32 @@ const getGmailEmails = asyncHandler(async (req, res) => {
     refresh_token: gmailIntegration.refreshToken,
   });
 
-  // Log the full token object to verify scopes
-  console.log('Token Object:', oauth2Client.credentials);
-
   // Create Gmail client
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
   try {
-    // Get list of emails (10 most recent)
-    const response = await gmail.users.messages.list({
+    // Calculate pagination values
+    const maxResults = pageSize;
+    const pageToken = req.query.pageToken || null;
+
+    // Build parameters for Gmail API
+    const listParams = {
       userId: 'me',
-      maxResults: 10,
-    });
+      maxResults,
+    };
+
+    // Add pageToken if available (for pagination)
+    if (pageToken) {
+      listParams.pageToken = pageToken;
+    }
+
+    // Add search query if provided
+    if (searchQuery) {
+      listParams.q = searchQuery;
+    }
+
+    // Get list of emails with pagination and search
+    const response = await gmail.users.messages.list(listParams);
 
     const messages = response.data.messages || [];
     const emails = [];
@@ -63,6 +82,11 @@ const getGmailEmails = asyncHandler(async (req, res) => {
       success: true,
       data: {
         emails,
+        nextPageToken: response.data.nextPageToken || null,
+        resultSizeEstimate: response.data.resultSizeEstimate || 0,
+        page,
+        pageSize,
+        query: searchQuery,
       },
     });
   } catch (error) {
