@@ -91,8 +91,19 @@ export async function processSmartResponse(
   userId,
   history = '',
   imageUrls = [],
+  emailContext = '',
 ) {
   const startTime = Date.now();
+
+  // Debug log for parameters
+  console.log('🚀 processSmartResponse called with:', {
+    promptLength: prompt?.length || 0,
+    workspaceId,
+    userId,
+    historyLength: history?.length || 0,
+    imageUrlsCount: imageUrls?.length || 0,
+    emailContextLength: emailContext?.length || 0,
+  });
 
   // Validate workspaceId
   if (!workspaceId || !isValidObjectId(workspaceId)) {
@@ -194,6 +205,7 @@ export async function processSmartResponse(
       }
       ${documentContext}
       ${imageDetailsContext}
+      ${emailContext}
 
       User request: "${prompt}"
 
@@ -238,6 +250,7 @@ export async function processSmartResponse(
         history,
         documentContext,
         knowledgePrompt,
+        emailContext,
       );
 
       const endTime = Date.now();
@@ -257,6 +270,7 @@ export async function processSmartResponse(
           promptLength: prompt.length,
           timestamp: new Date().toISOString(),
           imageCount: imageUrls.length,
+          emailCount: emailContext.length,
         },
       };
     }
@@ -271,6 +285,7 @@ export async function processSmartResponse(
         }
         ${documentContext}
         ${imageDetailsContext}
+        ${emailContext}
         You are an intelligent assistant helping to process client information for invoices. When the user requests placeholder or random information, generate realistic and appropriate data that makes sense in context.
 
         IMPORTANT: First, check the document context below for any existing client information that matches the request. If found, use that information. Only generate new data if no matching information is found in the context.
@@ -363,6 +378,7 @@ export async function processSmartResponse(
           promptLength: prompt.length,
           timestamp: new Date().toISOString(),
           imageCount: imageUrls.length,
+          emailCount: emailContext.length,
         },
       };
     }
@@ -376,6 +392,7 @@ export async function processSmartResponse(
       }
       ${documentContext}
       ${imageDetailsContext}
+      ${emailContext}
       Provide a conversational response to this request: "${prompt}"
 
       Your response should:
@@ -385,6 +402,7 @@ export async function processSmartResponse(
       4. Be well-structured and easy to understand
       5. Include specific examples or recommendations when appropriate
       6. If images were provided, reference them in your response when relevant
+      7. If emails were provided, use that context to inform your response when relevant
 
       Format your response as a JSON object with this structure:
       {
@@ -447,6 +465,7 @@ export async function processSmartResponse(
         promptLength: prompt.length,
         timestamp: new Date().toISOString(),
         imageCount: imageUrls.length,
+        emailCount: emailContext.length,
       },
     };
 
@@ -473,6 +492,7 @@ export async function processSmartResponse(
         promptLength: prompt.length,
         timestamp: new Date().toISOString(),
         imageCount: imageUrls.length,
+        emailCount: emailContext.length,
         error: error.message,
       },
     };

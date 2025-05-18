@@ -29,6 +29,7 @@ export async function processLineItems(
   history = '',
   documentContext = '',
   knowledgePrompt = '',
+  emailContext = '',
 ) {
   const startTime = Date.now();
 
@@ -84,6 +85,12 @@ export async function processLineItems(
      : ''
  }  
  
+ ${
+   emailContext
+     ? `\nUser has provided email correspondence that may contain relevant product or service information:\n${emailContext}\n`
+     : ''
+ }
+ 
  Categorize each item as either PRODUCT or SERVICE based on the description.
  If an item is described as a service or is called/named something without physical attributes, treat it as a SERVICE.
  Products are physical items like clothing.
@@ -106,6 +113,7 @@ export async function processLineItems(
  4. Where the quantity came from (explicit in prompt or default)
  5. Any discounts or tax information mentioned in the prompt
  6. How the conversation history influenced the item details (if applicable)
+ 7. Any product/service details found in the email correspondence (if applicable)
  
  Example correct format:
  {"lineItems":[{"name":"Red Hoodie","description":"Red cotton hoodie with front pocket","price":"19.99","type":"PRODUCT","qty":2,"discount":"15","taxName":"","taxRate":"0","reasoning":"Name derived from 'red hoodie' in prompt. Price estimated based on market value. Description generated based on standard hoodie features. Quantity of 2 extracted from prompt '2 red hoodies'. 15% discount applied as specified. No tax as mentioned in prompt."}]}

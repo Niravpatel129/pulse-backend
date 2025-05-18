@@ -12,12 +12,16 @@ import { firebaseStorage } from '../../utils/firebase.js';
 import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
 import documentRoutes from './documentRoutes.js';
 import { processSmartResponse } from './smartResponse.js';
+import testEmailContextRoutes from './testEmailContext.js';
 import { closeVectorStore, initVectorStore } from './vectorStore.js';
 
 const router = express.Router();
 
 // Register document routes
 router.use('/documents', documentRoutes);
+
+// Register test email context routes
+router.use('/test', testEmailContextRoutes);
 
 // Store chains by workspace ID instead of a single global chain
 const qaChains = new Map();
@@ -945,12 +949,107 @@ router.get('/refresh/status/:jobId', async (req, res) => {
   }
 });
 
+// Helper function to determine if traffic is low
+async function isLowTraffic() {
+  // If Redis is not available, consider it low traffic
+  if (!isRedisAvailable) {
+    return true;
+  }
+
+  // This is a simplified implementation
+  try {
+    const activeJobs = await aiQueue.getActiveCount();
+    const waitingJobs = await aiQueue.getWaitingCount();
+
+    // If there are fewer than 5 active and waiting jobs combined, consider it low traffic
+    return activeJobs + waitingJobs < 5;
+  } catch (err) {
+    console.error('Error checking traffic level:', err);
+    // Default to direct processing in case of error
+    return true;
+  }
+}
+
+// Helper function to prepare email context for AI processing
+async function prepareEmailContext(emails, workspaceId, options = {}) {
+  try {
+    // Handle case where emails is passed as a JSON string
+    let emailsArray = emails;
+    if (typeof emails === 'string') {
+      try {
+        emailsArray = JSON.parse(emails);
+        console.log(
+          'Successfully parsed emails string into array:',
+          Array.isArray(emailsArray)
+            ? `Array with ${emailsArray.length} items`
+            : typeof emailsArray,
+        );
+      } catch (parseError) {
+        console.error('Failed to parse emails string as JSON:', parseError);
+        return '\n--- ERROR: Invalid email data format ---\n';
+      }
+    }
+
+    // Ensure we're working with an array
+    if (!Array.isArray(emailsArray) || emailsArray.length === 0) {
+      console.log('No valid email array data after processing');
+      return '';
+    }
+
+    // Format emails into a structured context
+    let context = '\n--- EMAIL CONTEXT ---\n';
+
+    emailsArray.forEach((email, index) => {
+      context += `\nEmail ${index + 1}:\n`;
+      context += `From: ${email.from || 'Unknown'}\n`;
+      context += `To: ${Array.isArray(email.to) ? email.to.join(', ') : email.to || 'Unknown'}\n`;
+      context += `Subject: ${email.subject || 'No Subject'}\n`;
+      context += `Date: ${email.date || 'Unknown'}\n`;
+
+      // Add email body
+      if (email.text) {
+        context += `Body:\n${email.text}\n`;
+      } else if (email.html) {
+        // Simple HTML to text conversion
+        const plainText = email.html.replace(/<[^>]*>/g, '');
+        context += `Body:\n${plainText}\n`;
+      } else {
+        context += `Body: No content available\n`;
+      }
+
+      // Add email attachments if any
+      if (email.attachments && email.attachments.length > 0) {
+        context += `Attachments: ${email.attachments.map((a) => a.filename).join(', ')}\n`;
+      }
+
+      context += '---\n';
+    });
+
+    // Add a closing indicator
+    context += '--- END EMAIL CONTEXT ---\n';
+
+    return context;
+  } catch (error) {
+    console.error('Error formatting email context:', error);
+    return '\n--- ERROR: Failed to process email context ---\n';
+  }
+}
+
 // Smart response endpoint that intelligently handles both line items and general responses
 router.post('/smart-response', imageUpload.array('images', 5), async (req, res) => {
   try {
-    const { prompt, history } = req.body;
+    const { prompt, history, emails } = req.body;
     const workspaceId = req.workspace._id.toString();
     const userId = req.user.userId;
+
+    console.log('📬 Smart-response request with emails:', {
+      emailsPresent: !!emails,
+      emailsType: typeof emails,
+      emailsLength: emails?.length,
+      emailsData: Array.isArray(emails)
+        ? emails.map((e) => ({ id: e.id, subject: e.subject }))
+        : 'not an array',
+    });
 
     // Input validation and size checks
     if (!prompt) {
@@ -966,62 +1065,70 @@ router.post('/smart-response', imageUpload.array('images', 5), async (req, res) 
       });
     }
 
-    // Process uploaded images if any
-    let imageUrls = [];
-    let uploadedPaths = []; // Track uploaded file paths for cleanup
-    if (req.files && req.files.length > 0) {
+    // Process images if any were uploaded
+    const files = req.files || [];
+    const imageUrls = [];
+
+    if (files.length > 0) {
       try {
-        // Upload images to Firebase storage
-        const uploadPromises = req.files.map(async (file) => {
-          const storagePath = `chat-images/${workspaceId}/${Date.now()}-${file.originalname}`;
-          const { url, storagePath: path } = await firebaseStorage.uploadFile(
+        for (const file of files) {
+          const fileName = `ai-uploads/${workspaceId}/${Date.now()}-${file.originalname}`;
+          const uploadResult = await firebaseStorage.uploadFile(
             file.buffer,
-            storagePath,
+            fileName,
             file.mimetype,
           );
-          uploadedPaths.push(path); // Track the path for cleanup
-          return url;
-        });
-
-        imageUrls = await Promise.all(uploadPromises);
-
-        // Set up automatic cleanup after 1 hour
-        setTimeout(async () => {
-          try {
-            await Promise.all(
-              uploadedPaths.map(async (path) => {
-                try {
-                  await firebaseStorage.deleteFile(path);
-                } catch (error) {
-                  console.error(`Failed to clean up image ${path}:`, error);
-                }
-              }),
-            );
-          } catch (error) {
-            console.error('Error during image cleanup:', error);
-          }
-        }, 60 * 60 * 1000); // 1 hour
+          imageUrls.push(uploadResult.url);
+        }
+        console.log(`Uploaded ${imageUrls.length} images for AI processing`);
       } catch (error) {
         console.error('Error uploading images:', error);
-        // Clean up any uploaded files if there's an error
-        try {
-          await Promise.all(
-            uploadedPaths.map(async (path) => {
-              try {
-                await firebaseStorage.deleteFile(path);
-              } catch (deleteError) {
-                console.error(`Failed to clean up image ${path}:`, deleteError);
-              }
-            }),
-          );
-        } catch (cleanupError) {
-          console.error('Error during cleanup after upload failure:', cleanupError);
-        }
         return res.status(500).json({
           error: 'Failed to process images',
           message: error.message,
         });
       }
+    }
+
+    // Process emails parameter if present
+    let emailContext = '';
+    if (emails) {
+      console.log('📧 Email data received for processing:', {
+        type: typeof emails,
+        length: emails?.length,
+        sample: typeof emails === 'string' ? emails.substring(0, 50) + '...' : 'not a string',
+      });
+
+      try {
+        // Parse emails from JSON string if necessary
+        let parsedEmails = emails;
+
+        // If it's a string, try to parse it as JSON
+        if (typeof emails === 'string') {
+          try {
+            parsedEmails = JSON.parse(emails);
+            console.log('Successfully parsed emails JSON string:', {
+              resultType: typeof parsedEmails,
+              isArray: Array.isArray(parsedEmails),
+              length: parsedEmails?.length,
+            });
+          } catch (parseError) {
+            console.error('Failed to parse emails JSON:', parseError);
+            parsedEmails = [];
+          }
+        }
+
+        // Now process the emails
+        emailContext = await prepareEmailContext(parsedEmails, workspaceId, {
+          allowMockData: true,
+        });
+        console.log(`📨 Email context generated (${emailContext.length} chars)`);
+      } catch (err) {
+        console.error('❌ Error processing email context:', err);
+        emailContext = '\n--- EMAIL CONTEXT: Failed to process emails ---\n';
+      }
+    } else {
+      console.log('ℹ️ No emails provided for context');
     }
 
     // Check history length and size
@@ -1080,9 +1187,17 @@ router.post('/smart-response', imageUpload.array('images', 5), async (req, res) 
       }, 30000); // 30 second timeout
     });
 
-    // Process the smart response with timeout
+    // Process the smart response with timeout - pass emails as parameter
     const result = await Promise.race([
-      processSmartResponse(prompt, workspaceChain, workspaceId, userId, history, imageUrls),
+      processSmartResponse(
+        prompt,
+        workspaceChain,
+        workspaceId,
+        userId,
+        history,
+        imageUrls,
+        emailContext,
+      ),
       timeoutPromise,
     ]);
 
@@ -1111,27 +1226,6 @@ router.post('/smart-response', imageUpload.array('images', 5), async (req, res) 
     });
   }
 });
-
-// Helper function to determine if traffic is low
-async function isLowTraffic() {
-  // If Redis is not available, consider it low traffic
-  if (!isRedisAvailable) {
-    return true;
-  }
-
-  // This is a simplified implementation
-  try {
-    const activeJobs = await aiQueue.getActiveCount();
-    const waitingJobs = await aiQueue.getWaitingCount();
-
-    // If there are fewer than 5 active and waiting jobs combined, consider it low traffic
-    return activeJobs + waitingJobs < 5;
-  } catch (err) {
-    console.error('Error checking traffic level:', err);
-    // Default to direct processing in case of error
-    return true;
-  }
-}
 
 // Clean up when shutting down
 process.on('SIGTERM', async () => {
