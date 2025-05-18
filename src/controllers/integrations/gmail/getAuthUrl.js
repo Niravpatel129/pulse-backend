@@ -16,8 +16,6 @@ const getAuthUrl = asyncHandler(async (req, res) => {
     // Define the scopes we need for Gmail
     const scopes = [
       'https://www.googleapis.com/auth/gmail.readonly', // Read-only access to Gmail
-      'https://www.googleapis.com/auth/gmail.modify', // Modify but not delete messages
-      'https://www.googleapis.com/auth/gmail.metadata', // Read metadata but not content
       'https://www.googleapis.com/auth/userinfo.email', // User email address
     ];
 
