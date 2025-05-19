@@ -2,7 +2,6 @@ import { google } from 'googleapis';
 import asyncHandler from '../../../middleware/asyncHandler.js';
 import ChatSettings from '../../../models/ChatSettings.js';
 import GmailIntegration from '../../../models/GmailIntegration.js';
-import Workspace from '../../../models/Workspace.js';
 import gmailListenerService from '../../../services/gmailListenerService.js';
 
 // Initialize Google OAuth2 client
@@ -20,7 +19,6 @@ const connectGmail = asyncHandler(async (req, res) => {
 
   // Get workspace from request or from state parameter
   let workspaceId;
-  let workspaceSubdomain;
 
   if (req.workspace) {
     // If request has workspace context, use it
@@ -31,15 +29,6 @@ const connectGmail = asyncHandler(async (req, res) => {
       const decodedState = decodeURIComponent(state);
       const stateData = JSON.parse(decodedState);
       workspaceId = stateData.workspaceId;
-      workspaceSubdomain = stateData.subdomain;
-
-      // If we have subdomain but no workspaceId, try to find workspace by subdomain
-      if (!workspaceId && workspaceSubdomain) {
-        const workspace = await Workspace.findOne({ subdomain: workspaceSubdomain });
-        if (workspace) {
-          workspaceId = workspace._id;
-        }
-      }
     } catch (error) {
       console.error('Error parsing state:', error);
     }
