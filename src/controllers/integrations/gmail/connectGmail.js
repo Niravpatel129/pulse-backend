@@ -29,7 +29,7 @@ const connectGmail = asyncHandler(async (req, res) => {
     hasWorkspaceId: !!req.body.workspaceId,
   });
 
-  const { code, redirectUri, state, workspaceId } = req.body;
+  const { code, redirectUri, workspaceId } = req.body;
 
   if (!code) {
     console.error('❌ Missing authorization code');
