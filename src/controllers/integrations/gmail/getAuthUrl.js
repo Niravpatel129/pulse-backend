@@ -37,7 +37,7 @@ const getAuthUrl = asyncHandler(async (req, res) => {
       prompt: 'consent', // Force consent screen to get refresh token
       include_granted_scopes: true, // Include any previously granted scopes
       response_type: 'code',
-      state: state, // Include workspace info in state
+      state: encodeURIComponent(state), // Properly encode the state parameter
     });
 
     res.status(200).json({
