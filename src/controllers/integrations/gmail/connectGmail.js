@@ -55,7 +55,7 @@ const connectGmail = asyncHandler(async (req, res) => {
     // Exchange code for tokens using the redirectUri from the frontend
     const { tokens } = await oauth2Client.getToken({
       code,
-      redirect_uri: redirectUri,
+      redirect_uri: redirectUri.startsWith('http') ? redirectUri : `https://${redirectUri}`,
     });
 
     console.log('✅ Successfully obtained tokens:', {
