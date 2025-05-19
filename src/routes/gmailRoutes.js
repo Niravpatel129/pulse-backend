@@ -9,15 +9,13 @@ import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
-
-router.use(extractWorkspace);
+router.post('/connect', connectGmail);
 
 // Gmail integration routes
-router.get('/auth-url', authenticate, getAuthUrl);
-router.post('/connect', connectGmail);
-router.post('/disconnect', authenticate, disconnectGmail);
-router.get('/status', authenticate, getGmailStatus);
-router.post('/set-primary', authenticate, setPrimaryGmail);
-router.get('/emails', authenticate, getGmailEmails);
+router.get('/auth-url', authenticate, extractWorkspace, getAuthUrl);
+router.post('/disconnect', authenticate, extractWorkspace, disconnectGmail);
+router.get('/status', authenticate, extractWorkspace, getGmailStatus);
+router.post('/set-primary', authenticate, extractWorkspace, setPrimaryGmail);
+router.get('/emails', authenticate, extractWorkspace, getGmailEmails);
 
 export default router;
