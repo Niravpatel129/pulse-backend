@@ -3,6 +3,7 @@ import { acceptWorkspaceInvitation } from '../controllers/workspace/acceptInvita
 import { addParticipant } from '../controllers/workspace/addParticipant.js';
 import { deleteWorkspaceMember } from '../controllers/workspace/deleteWorkspaceMember.js';
 import { getClients } from '../controllers/workspace/getClients.js';
+import { getCurrentWorkspace } from '../controllers/workspace/getCurrentWorkspace.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getUser } from '../controllers/workspace/getUser.js';
 import { getWorkspaceLogo } from '../controllers/workspace/getWorkspaceLogo.js';
@@ -74,6 +75,8 @@ router.put('/:workspaceId', extractWorkspace, handleWorkspaceFileUpload, updateW
 
 // Add a participant to the workspace
 router.post('/participants', extractWorkspace, addParticipant);
+
+router.get('/current', extractWorkspace, getCurrentWorkspace);
 
 // Get Team Members
 

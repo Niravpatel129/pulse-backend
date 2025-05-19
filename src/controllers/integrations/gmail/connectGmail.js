@@ -28,7 +28,8 @@ const connectGmail = asyncHandler(async (req, res) => {
   } else if (state) {
     // Extract workspace info from state
     try {
-      const stateData = JSON.parse(state);
+      const decodedState = decodeURIComponent(state);
+      const stateData = JSON.parse(decodedState);
       workspaceId = stateData.workspaceId;
       workspaceSubdomain = stateData.subdomain;
 
