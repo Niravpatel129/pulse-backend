@@ -13,11 +13,22 @@ const oauth2Client = new google.auth.OAuth2(
 // @access  Private
 const getAuthUrl = asyncHandler(async (req, res) => {
   try {
+    // Get workspace ID from request
+    const workspaceId = req.workspace?._id;
+    const workspaceSubdomain = req.headers.host?.split('.')[0] || '';
+
     // Define the scopes we need for Gmail
     const scopes = [
       'https://www.googleapis.com/auth/gmail.readonly', // Read-only access to Gmail
       'https://www.googleapis.com/auth/userinfo.email', // User email address
     ];
+
+    // Create state object with workspace info
+    const state = JSON.stringify({
+      type: 'gmail_auth',
+      workspaceId: workspaceId?.toString(),
+      subdomain: workspaceSubdomain,
+    });
 
     // Generate the URL for OAuth consent flow
     const authUrl = oauth2Client.generateAuthUrl({
@@ -26,6 +37,7 @@ const getAuthUrl = asyncHandler(async (req, res) => {
       prompt: 'consent', // Force consent screen to get refresh token
       include_granted_scopes: true, // Include any previously granted scopes
       response_type: 'code',
+      state: state, // Include workspace info in state
     });
 
     res.status(200).json({

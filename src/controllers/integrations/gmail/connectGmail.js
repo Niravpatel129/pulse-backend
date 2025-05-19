@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import asyncHandler from '../../../middleware/asyncHandler.js';
 import ChatSettings from '../../../models/ChatSettings.js';
 import GmailIntegration from '../../../models/GmailIntegration.js';
+import Workspace from '../../../models/Workspace.js';
 import gmailListenerService from '../../../services/gmailListenerService.js';
 
 // Initialize Google OAuth2 client
@@ -15,12 +16,42 @@ const oauth2Client = new google.auth.OAuth2(
 // @route   POST /api/integrations/gmail/connect
 // @access  Private
 const connectGmail = asyncHandler(async (req, res) => {
-  const { code, redirectUri } = req.body;
-  const workspaceId = req.workspace._id;
+  const { code, redirectUri, state } = req.body;
+
+  // Get workspace from request or from state parameter
+  let workspaceId;
+  let workspaceSubdomain;
+
+  if (req.workspace) {
+    // If request has workspace context, use it
+    workspaceId = req.workspace._id;
+  } else if (state) {
+    // Extract workspace info from state
+    try {
+      const stateData = JSON.parse(state);
+      workspaceId = stateData.workspaceId;
+      workspaceSubdomain = stateData.subdomain;
+
+      // If we have subdomain but no workspaceId, try to find workspace by subdomain
+      if (!workspaceId && workspaceSubdomain) {
+        const workspace = await Workspace.findOne({ subdomain: workspaceSubdomain });
+        if (workspace) {
+          workspaceId = workspace._id;
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing state:', error);
+    }
+  }
 
   if (!code) {
     res.status(400);
     throw new Error('Authorization code is required');
+  }
+
+  if (!workspaceId) {
+    res.status(400);
+    throw new Error('Workspace identification is required. Please try again from your workspace.');
   }
 
   try {
