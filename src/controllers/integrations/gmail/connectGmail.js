@@ -15,24 +15,7 @@ const oauth2Client = new google.auth.OAuth2(
 // @route   POST /api/integrations/gmail/connect
 // @access  Private
 const connectGmail = asyncHandler(async (req, res) => {
-  const { code, redirectUri, state } = req.body;
-
-  // Get workspace from request or from state parameter
-  let workspaceId;
-
-  if (req.workspace) {
-    // If request has workspace context, use it
-    workspaceId = req.workspace._id;
-  } else if (state) {
-    // Extract workspace info from state
-    try {
-      const decodedState = decodeURIComponent(state);
-      const stateData = JSON.parse(decodedState);
-      workspaceId = stateData.workspaceId;
-    } catch (error) {
-      console.error('Error parsing state:', error);
-    }
-  }
+  const { code, redirectUri, state, workspaceId } = req.body;
 
   if (!code) {
     res.status(400);
