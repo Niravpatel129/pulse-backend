@@ -2,6 +2,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import multer from 'multer';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './docs/api-docs.js';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
 import { initializeEmailListener } from './src/init/emailListener.js';
@@ -13,6 +15,7 @@ import activityRoutes from './src/routes/activityRoutes.js';
 import aiRoutes2 from './src/routes/ai/aiRoutes.js';
 import aiSettingsRoutes from './src/routes/ai/aiSettingsRoutes.js';
 import alertRoutes from './src/routes/alertRoutes.js';
+import apiKeyRoutes from './src/routes/apiKeyRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
@@ -23,6 +26,7 @@ import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import deliverableRoutes from './src/routes/deliverableRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
+import externalInvoiceRoutes from './src/routes/externalInvoiceRoutes.js';
 import figmaRoutes from './src/routes/figmaRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
 import gmailRoutes from './src/routes/gmailRoutes.js';
@@ -182,6 +186,15 @@ app.use(`${routesPrefix}/payments`, paymentRoutes);
 
 // Lead Forms
 app.use(`${routesPrefix}/lead-forms`, leadFormRoutes);
+
+// API Documentation
+app.use(`${routesPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// API Key Management
+app.use(`${routesPrefix}/api-keys`, apiKeyRoutes);
+
+// External API Routes (API Key protected)
+app.use(`${routesPrefix}/external/invoices`, externalInvoiceRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {

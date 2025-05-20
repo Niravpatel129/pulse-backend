@@ -50,6 +50,8 @@
     "pdfkit": "^0.17.1",
     "redis": "^4.7.0",
     "sharp": "^0.34.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "xlsx2csv": "^1.0.12"
