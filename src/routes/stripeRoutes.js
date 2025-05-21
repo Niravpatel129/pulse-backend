@@ -5,16 +5,19 @@ import { createStripeAccount } from '../controllers/stripe/createStripeAccount.j
 import { getBalance } from '../controllers/stripe/getBalance.js';
 import { getPaymentTimeline } from '../controllers/stripe/getPaymentTimeline.js';
 import { getStripeAccountStatus } from '../controllers/stripe/getStripeAccountStatus.js';
+import { paymentFailed } from '../controllers/stripe/paymentFailed.js';
 import { verifyPayment } from '../controllers/stripe/verifyPayment.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
 
-// Apply authentication and workspace middleware to all routes
+// Public routes (no authentication required)
 router.post('/payment-intent', createPaymentIntent);
 router.post('/verify-payment', verifyPayment);
+router.post('/payment-failed', paymentFailed);
 
+// Protected routes
 router.use(authenticate);
 router.use(extractWorkspace);
 

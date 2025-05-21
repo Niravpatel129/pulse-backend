@@ -18,6 +18,7 @@ import { recordPayment } from '../controllers/invoice/recordPayment.js';
 import { sendInvoice } from '../controllers/invoice/sendInvoice.js';
 import { toggleArchive } from '../controllers/invoice/toggleArchive.js';
 import { toggleStar } from '../controllers/invoice/toggleStar.js';
+import { trackInvoiceView } from '../controllers/invoice/trackInvoiceView.js';
 import { updateInvoice } from '../controllers/invoice/updateInvoice.js';
 import { updateInvoiceAttachments } from '../controllers/invoice/updateInvoiceAttachments.js';
 import { updateInvoiceSettings } from '../controllers/invoice/updateInvoiceSettings.js';
@@ -41,6 +42,8 @@ router.get('/:id/payments', authenticate, extractWorkspace, getInvoicePayments);
 router.get('/:id/timeline', authenticate, extractWorkspace, getInvoiceTimeline);
 
 router.post('/:id/payment-intent', createPaymentIntent);
+
+router.post('/:id/track-view', extractWorkspaceWithoutAuth, trackInvoiceView);
 
 router.get('/', authenticate, extractWorkspace, getInvoices);
 

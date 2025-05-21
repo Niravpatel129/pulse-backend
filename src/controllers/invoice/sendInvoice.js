@@ -21,8 +21,39 @@ export const sendInvoice = catchAsync(async (req, res, next) => {
       return next(new AppError('Can only send draft invoices', 400));
     }
 
+    // Add timeline entry for sent invoice
+    const timelineEntry = {
+      type: 'sent',
+      timestamp: new Date(),
+      actor: req.user.userId,
+      description: `Invoice sent to client`,
+      metadata: {
+        previousStatus: invoice.status,
+        newStatus: 'sent',
+        sentBy: req.user.name || req.user.email || req.user.userId,
+        sentVia: req.body.deliveryMethod || 'email',
+      },
+    };
+
+    invoice.timeline.push(timelineEntry);
+
+    // Add status change timeline entry
+    const statusChangeEntry = {
+      type: 'status_change',
+      timestamp: new Date(),
+      actor: req.user.userId,
+      description: `Invoice status changed from ${invoice.status} to sent`,
+      metadata: {
+        previousStatus: invoice.status,
+        newStatus: 'sent',
+      },
+    };
+
+    invoice.timeline.push(statusChangeEntry);
+
     // Update invoice status
     invoice.status = 'sent';
+    invoice.dateSent = new Date();
     await invoice.save();
 
     // Record activity

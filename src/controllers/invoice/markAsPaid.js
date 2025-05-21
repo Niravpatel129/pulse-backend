@@ -17,13 +17,48 @@ export const markAsPaid = catchAsync(async (req, res, next) => {
     }
 
     // Only allow marking sent invoices as paid
-    if (invoice.status !== 'sent') {
-      return next(new AppError('Can only mark sent invoices as paid', 400));
+    if (invoice.status !== 'sent' && invoice.status !== 'overdue') {
+      return next(new AppError('Can only mark sent or overdue invoices as paid', 400));
     }
+
+    // Add payment timeline entry
+    const paymentEntry = {
+      type: 'payment_succeeded',
+      timestamp: new Date(),
+      actor: req.user.userId,
+      description: `Invoice marked as paid manually by ${
+        req.user.name || req.user.email || 'staff member'
+      }`,
+      metadata: {
+        paymentMethod: req.body.paymentMethod || 'manual',
+        amount: invoice.total,
+        currency: invoice.currency,
+        previousStatus: invoice.status,
+        newStatus: 'paid',
+        markedPaidBy: req.user.name || req.user.email || req.user.userId,
+      },
+    };
+
+    invoice.timeline.push(paymentEntry);
+
+    // Add status change timeline entry
+    const statusChangeEntry = {
+      type: 'status_change',
+      timestamp: new Date(),
+      actor: req.user.userId,
+      description: `Invoice status changed from ${invoice.status} to paid`,
+      metadata: {
+        previousStatus: invoice.status,
+        newStatus: 'paid',
+      },
+    };
+
+    invoice.timeline.push(statusChangeEntry);
 
     // Update invoice status
     invoice.status = 'paid';
     invoice.paidAt = new Date();
+    invoice.datePaid = new Date();
     invoice.paidBy = req.user.userId;
     await invoice.save();
 
