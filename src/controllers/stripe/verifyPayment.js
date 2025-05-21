@@ -52,15 +52,56 @@ export const verifyPayment = asyncHandler(async (req, res) => {
       invoice.requireDeposit &&
       Math.abs(paymentAmount - (invoice.total * invoice.depositPercentage) / 100) < 0.01;
 
-    // Update invoice status based on payment type
+    // Determine payment type and status for timeline
+    let paymentType = 'payment';
+    let newStatus = 'partially_paid';
+
     if (isFullPayment) {
-      invoice.status = 'paid';
+      newStatus = 'paid';
       invoice.paidAt = new Date();
     } else if (isDepositPayment) {
-      invoice.status = 'deposit_paid';
-    } else {
-      invoice.status = 'partially_paid';
+      paymentType = 'deposit';
+      newStatus = 'deposit_paid';
     }
+
+    // Add timeline entry for payment
+    const timelineEntry = {
+      type: 'payment_succeeded',
+      timestamp: new Date(),
+      description: isFullPayment
+        ? `Payment of ${paymentAmount} ${invoice.currency} received - Invoice paid in full`
+        : isDepositPayment
+        ? `Deposit payment of ${paymentAmount} ${invoice.currency} received`
+        : `Partial payment of ${paymentAmount} ${invoice.currency} received`,
+      metadata: {
+        paymentId: paymentIntentDetails.id,
+        amount: paymentAmount,
+        currency: invoice.currency,
+        paymentMethod: paymentIntentDetails.payment_method_types[0] || 'credit-card',
+        previousStatus: invoice.status,
+        newStatus: newStatus,
+      },
+    };
+
+    // Add status change timeline entry if status changed
+    if (invoice.status !== newStatus) {
+      const statusChangeEntry = {
+        type: 'status_change',
+        timestamp: new Date(),
+        description: `Invoice status changed from ${invoice.status} to ${newStatus}`,
+        metadata: {
+          previousStatus: invoice.status,
+          newStatus: newStatus,
+        },
+      };
+      invoice.timeline.push(statusChangeEntry);
+    }
+
+    // Add payment timeline entry
+    invoice.timeline.push(timelineEntry);
+
+    // Update invoice status
+    invoice.status = newStatus;
     await invoice.save();
 
     // Create a payment record
@@ -96,8 +137,8 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     const client = await Client.findById(invoice.client).populate('user');
 
     // Send payment notifications
-    const paymentType = isDepositPayment ? 'deposit' : 'payment';
-    if (paymentType === 'payment' || paymentType === 'deposit') {
+    const paymentTypeForNotification = isDepositPayment ? 'deposit' : 'payment';
+    if (paymentTypeForNotification === 'payment' || paymentTypeForNotification === 'deposit') {
       // Send notifications asynchronously - don't wait for completion
       sendPaymentNotifications(payment, invoice, client, workspace).catch((err) =>
         console.error('Error sending payment notifications:', err),

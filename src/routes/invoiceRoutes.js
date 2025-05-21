@@ -11,6 +11,7 @@ import { getInvoiceActivities } from '../controllers/invoice/getInvoiceActivitie
 import { getInvoicePayments } from '../controllers/invoice/getInvoicePayments.js';
 import { getInvoices } from '../controllers/invoice/getInvoices.js';
 import { getInvoiceSettings } from '../controllers/invoice/getInvoiceSettings.js';
+import { getInvoiceTimeline } from '../controllers/invoice/getInvoiceTimeline.js';
 import { getPublicInvoice } from '../controllers/invoice/getPublicInvoice.js';
 import { markAsPaid } from '../controllers/invoice/markAsPaid.js';
 import { recordPayment } from '../controllers/invoice/recordPayment.js';
@@ -36,6 +37,8 @@ router.get('/:id/public', getPublicInvoice);
 router.get('/:id', authenticate, extractWorkspace, getInvoice);
 
 router.get('/:id/payments', authenticate, extractWorkspace, getInvoicePayments);
+
+router.get('/:id/timeline', authenticate, extractWorkspace, getInvoiceTimeline);
 
 router.post('/:id/payment-intent', createPaymentIntent);
 

@@ -52,6 +52,19 @@ export const createInvoice = catchAsync(async (req, res, next) => {
 
     const invoiceNumber = await generateInvoiceNumber(req.workspace._id);
 
+    // Create initial timeline entry
+    const initialTimelineEntry = {
+      type: 'created',
+      timestamp: new Date(),
+      actor: req.user.userId,
+      description: `Invoice #${invoiceNumber} created`,
+      metadata: {
+        status,
+        total,
+        currency: currency.toUpperCase(),
+      },
+    };
+
     const invoice = await Invoice.create({
       invoiceNumber,
       client: clientId,
@@ -75,6 +88,7 @@ export const createInvoice = catchAsync(async (req, res, next) => {
       depositPercentage,
       workspace: req.workspace._id,
       createdBy: req.user.userId,
+      timeline: [initialTimelineEntry],
     });
 
     // Record activity

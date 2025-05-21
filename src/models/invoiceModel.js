@@ -177,6 +177,42 @@ const invoiceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    timeline: [
+      {
+        type: {
+          type: String,
+          enum: [
+            'created',
+            'updated',
+            'sent',
+            'viewed',
+            'payment_attempted',
+            'payment_failed',
+            'payment_succeeded',
+            'status_change',
+            'reminder_sent',
+            'note_added',
+            'custom',
+          ],
+          required: true,
+        },
+        timestamp: {
+          type: Date,
+          default: Date.now,
+        },
+        actor: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        metadata: {
+          type: Object,
+          default: {},
+        },
+        description: {
+          type: String,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -190,6 +226,7 @@ invoiceSchema.index({ project: 1 });
 invoiceSchema.index({ status: 1 });
 invoiceSchema.index({ workspace: 1 });
 // invoiceSchema.index({ paymentIntentId: 1 }); - Removed as it's already indexed with unique: true
+invoiceSchema.index({ 'timeline.timestamp': 1 });
 
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 
