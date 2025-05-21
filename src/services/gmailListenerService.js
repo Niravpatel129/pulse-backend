@@ -1,8 +1,6 @@
 import { google } from 'googleapis';
-import { nanoid } from 'nanoid';
 import Email from '../models/Email.js';
 import GmailIntegration from '../models/GmailIntegration.js';
-import User from '../models/User.js';
 
 class GmailListenerService {
   constructor() {
@@ -177,111 +175,7 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
-      // Get full message details
-      const message = await gmail.users.messages.get({
-        userId: 'me',
-        id: messageId,
-        format: 'full',
-      });
-
-      // Extract email data
-      const headers = message.data.payload.headers;
-      const getHeader = (name) => {
-        const header = headers.find((h) => h.name.toLowerCase() === name.toLowerCase());
-        return header ? header.value : null;
-      };
-
-      const from = getHeader('From');
-      const to = getHeader('To');
-      const subject = getHeader('Subject');
-      const date = new Date(getHeader('Date'));
-      const threadId = message.data.threadId;
-
-      // Extract email body
-      let body = '';
-      let bodyText = '';
-
-      if (message.data.payload.parts) {
-        for (const part of message.data.payload.parts) {
-          if (part.mimeType === 'text/html' && part.body.data) {
-            body = Buffer.from(part.body.data, 'base64').toString('utf-8');
-          } else if (part.mimeType === 'text/plain' && part.body.data) {
-            bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
-          }
-        }
-      } else if (message.data.payload.body.data) {
-        // Single part message
-        if (message.data.payload.mimeType === 'text/html') {
-          body = Buffer.from(message.data.payload.body.data, 'base64').toString('utf-8');
-        } else {
-          bodyText = Buffer.from(message.data.payload.body.data, 'base64').toString('utf-8');
-        }
-      }
-
-      // If no HTML body, use text body
-      if (!body && bodyText) {
-        body = bodyText.replace(/\n/g, '<br>');
-      }
-
-      // Check for existing project and email thread
-      // This is simplified - you would need to implement logic to associate emails with projects
-      const projectId = await this.getProjectIdForEmail({
-        from,
-        to,
-        subject,
-        threadId,
-        workspace: integration.workspace._id,
-      });
-
-      if (!projectId) {
-        console.log(`No project found for email: ${subject}`);
-        return;
-      }
-
-      // Find the sender (from) in the User collection
-      const fromEmail = this.extractEmailAddress(from);
-      let user = await User.findOne({ email: fromEmail });
-
-      // If user doesn't exist, create one
-      if (!user && fromEmail) {
-        const displayName = this.extractDisplayName(from) || fromEmail.split('@')[0];
-        user = await User.create({
-          email: fromEmail,
-          name: displayName,
-          password: nanoid(),
-          isActivated: false,
-        });
-      }
-
-      // Create the email record
-      const emailData = {
-        from: fromEmail,
-        projectId,
-        to: integration.email, // The workspace Gmail account
-        subject,
-        sentBy: user?._id,
-        body,
-        bodyText,
-        sentAt: date,
-        status: 'received',
-        direction: 'inbound',
-        workspace: integration.workspace._id,
-        messageId,
-        threadId,
-      };
-
-      // Check if this email already exists (by messageId) to avoid duplicates
-      const existingEmail = await Email.findOne({ messageId });
-      if (existingEmail) {
-        console.log(`Email already processed: ${subject}`);
-        return;
-      }
-
-      // Create the email
-      const email = await Email.create(emailData);
-      console.log(`Processed new email: ${subject}`);
-
-      return email;
+      console.log('123');
     } catch (error) {
       console.error(`Error processing email ${messageId}:`, error);
     }
