@@ -27,6 +27,11 @@ const processEmailParts = async (parts, gmail, messageId) => {
 
   const processPart = async (part) => {
     console.log(`[DEBUG] Processing part with MIME type: ${part.mimeType}`);
+    console.log(`[DEBUG] Part details:`, {
+      filename: part.filename,
+      attachmentId: part.body?.attachmentId,
+      headers: part.headers?.map((h) => `${h.name}: ${h.value}`),
+    });
 
     if (part.filename && part.filename.length > 0) {
       try {
@@ -56,6 +61,12 @@ const processEmailParts = async (parts, gmail, messageId) => {
             ?.find((h) => h.name.toLowerCase() === 'content-id')
             ?.value?.replace(/[<>]/g, '');
 
+          console.log(`[DEBUG] Processing inline image:`, {
+            contentId,
+            attachmentId: part.body.attachmentId,
+            filename: part.filename,
+          });
+
           inlineImages.push({
             id: part.body.attachmentId,
             contentId,
@@ -68,6 +79,11 @@ const processEmailParts = async (parts, gmail, messageId) => {
           });
         } else {
           // Handle regular attachment
+          console.log(`[DEBUG] Processing regular attachment:`, {
+            attachmentId: part.body.attachmentId,
+            filename: part.filename,
+          });
+
           attachments.push({
             id: part.body.attachmentId,
             filename: part.filename,

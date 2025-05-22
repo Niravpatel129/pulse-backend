@@ -59,6 +59,77 @@ const determineContentType = (part, defaultType = 'application/octet-stream') =>
   return defaultType;
 };
 
+// Helper function to find attachment part
+const findAttachmentPart = (parts, attachmentId) => {
+  if (!parts) return null;
+
+  console.log('[DEBUG] Searching for attachment ID:', attachmentId);
+  console.log(
+    '[DEBUG] Available parts:',
+    JSON.stringify(
+      parts.map((p) => ({
+        partId: p.partId,
+        mimeType: p.mimeType,
+        filename: p.filename,
+        attachmentId: p.body?.attachmentId,
+        hasParts: !!p.parts,
+      })),
+      null,
+      2,
+    ),
+  );
+
+  // First, try to find an exact match
+  for (const part of parts) {
+    // Debug log for each part
+    console.log('[DEBUG] Checking part:', {
+      partId: part.partId,
+      mimeType: part.mimeType,
+      filename: part.filename,
+      attachmentId: part.body?.attachmentId,
+      headers: part.headers?.map((h) => `${h.name}: ${h.value}`),
+    });
+
+    // Check if this part is the attachment we're looking for
+    if (part.body?.attachmentId === attachmentId) {
+      console.log('[DEBUG] Found exact matching attachment part:', {
+        partId: part.partId,
+        mimeType: part.mimeType,
+        filename: part.filename,
+        attachmentId: part.body.attachmentId,
+      });
+      return part;
+    }
+
+    // Check nested parts
+    if (part.parts) {
+      console.log('[DEBUG] Checking nested parts for part:', part.partId);
+      const found = findAttachmentPart(part.parts, attachmentId);
+      if (found) return found;
+    }
+  }
+
+  // If no exact match found, try to find any attachment
+  console.log('[DEBUG] No exact match found, looking for any attachment...');
+  for (const part of parts) {
+    if (part.body?.attachmentId) {
+      console.log('[DEBUG] Found alternative attachment:', {
+        partId: part.partId,
+        mimeType: part.mimeType,
+        filename: part.filename,
+        attachmentId: part.body.attachmentId,
+      });
+      return part;
+    }
+    if (part.parts) {
+      const found = findAttachmentPart(part.parts, attachmentId);
+      if (found) return found;
+    }
+  }
+
+  return null;
+};
+
 /**
  * @desc    Get a Gmail attachment by message ID and attachment ID
  * @route   GET /api/gmail/messages/:messageId/attachments/:attachmentId
@@ -71,6 +142,7 @@ const getGmailAttachment = asyncHandler(async (req, res) => {
   console.log(
     `[DEBUG] Fetching attachment - Message ID: ${messageId}, Attachment ID: ${attachmentId}`,
   );
+  console.log('[DEBUG] Attachment ID length:', attachmentId.length);
 
   // Find Gmail integration for this workspace
   const gmailIntegration = await GmailIntegration.findOne({
@@ -109,39 +181,34 @@ const getGmailAttachment = asyncHandler(async (req, res) => {
     });
     console.log('[DEBUG] Successfully fetched message data');
 
-    // Find the attachment part in the message
-    const findAttachmentPart = (parts) => {
-      if (!parts) return null;
-
-      for (const part of parts) {
-        // Check if this part is the attachment we're looking for
-        if (part.body?.attachmentId === attachmentId) {
-          return part;
-        }
-
-        // Check nested parts
-        if (part.parts) {
-          const found = findAttachmentPart(part.parts);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
     // Start search from the message payload
-    const attachmentPart = findAttachmentPart([message.data.payload]);
+    const attachmentPart = findAttachmentPart([message.data.payload], attachmentId);
     if (!attachmentPart) {
-      console.log('[DEBUG] Attachment part not found in message payload');
+      console.log('[DEBUG] No attachment found in message payload');
+      console.log('[DEBUG] Available parts:', JSON.stringify(message.data.payload?.parts, null, 2));
+      console.log('[DEBUG] Looking for attachment ID:', attachmentId);
+      console.log(
+        '[DEBUG] Available attachment IDs:',
+        message.data.payload?.parts?.map((p) => ({
+          filename: p.filename,
+          attachmentId: p.body?.attachmentId,
+          matches: p.body?.attachmentId === attachmentId,
+        })),
+      );
       res.status(404);
       throw new Error('Attachment not found in message');
     }
+
+    // Get the attachment data using the found attachment ID
+    const actualAttachmentId = attachmentPart.body.attachmentId;
+    console.log('[DEBUG] Using attachment ID:', actualAttachmentId);
 
     // Get the attachment data
     console.log('[DEBUG] Fetching attachment data from Gmail API...');
     const attachment = await gmail.users.messages.attachments.get({
       userId: 'me',
       messageId,
-      id: attachmentId,
+      id: actualAttachmentId,
     });
     console.log('[DEBUG] Successfully fetched attachment data');
 
