@@ -23,6 +23,7 @@ const processEmailParts = async (parts, gmail, messageId) => {
   const attachments = [];
   const inlineImages = [];
   let body = '';
+  let bodyText = '';
 
   const processPart = async (part) => {
     console.log(`[DEBUG] Processing part with MIME type: ${part.mimeType}`);
@@ -85,12 +86,11 @@ const processEmailParts = async (parts, gmail, messageId) => {
       // Decode the body content
       const content = part.body.data ? decodeBase64Url(part.body.data) : '';
       console.log(`[DEBUG] Decoded ${part.mimeType} content length: ${content.length}`);
-      console.log(`[DEBUG] First 100 chars of content: ${content.substring(0, 100)}`);
 
       if (part.mimeType === 'text/plain') {
         // For plain text, preserve line breaks
-        body = content;
-      } else {
+        bodyText = content;
+      } else if (part.mimeType === 'text/html') {
         // For HTML, we'll keep it as is for the frontend to render
         body = content;
       }
@@ -115,6 +115,12 @@ const processEmailParts = async (parts, gmail, messageId) => {
   for (const part of parts) {
     await processPart(part);
   }
+
+  // If no HTML body was found, use plain text
+  if (!body && bodyText) {
+    body = bodyText;
+  }
+
   return { body, attachments, inlineImages };
 };
 

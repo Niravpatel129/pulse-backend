@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import mime from 'mime-types';
 import asyncHandler from '../../../middleware/asyncHandler.js';
 import GmailIntegration from '../../../models/GmailIntegration.js';
 
@@ -8,6 +9,54 @@ const decodeBase64Url = (str) => {
   str = str.replace(/-/g, '+').replace(/_/g, '/');
   while (str.length % 4) str += '=';
   return Buffer.from(str, 'base64');
+};
+
+// Helper function to extract filename from content disposition
+const extractFilename = (contentDisposition) => {
+  if (!contentDisposition) return null;
+
+  // Try to extract filename from content-disposition header
+  const matches = contentDisposition.match(/filename="([^"]+)"/);
+  if (matches && matches[1]) {
+    return matches[1];
+  }
+
+  // Try to extract filename from filename* parameter (RFC 5987)
+  const filenameStar = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+  if (filenameStar && filenameStar[1]) {
+    try {
+      return decodeURIComponent(filenameStar[1]);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+// Helper function to determine content type
+const determineContentType = (part, defaultType = 'application/octet-stream') => {
+  // First try to get from content-type header
+  const contentTypeHeader = part.headers?.find(
+    (h) => h.name.toLowerCase() === 'content-type',
+  )?.value;
+
+  if (contentTypeHeader) {
+    // Extract mime type from content-type header (remove charset and other parameters)
+    const mimeType = contentTypeHeader.split(';')[0].trim();
+    if (mimeType) return mimeType;
+  }
+
+  // Then try to get from mimeType property
+  if (part.mimeType) return part.mimeType;
+
+  // If filename exists, try to determine from extension
+  if (part.filename) {
+    const mimeType = mime.lookup(part.filename);
+    if (mimeType) return mimeType;
+  }
+
+  return defaultType;
 };
 
 /**
@@ -99,21 +148,21 @@ const getGmailAttachment = asyncHandler(async (req, res) => {
     // Decode the attachment data
     const attachmentData = decodeBase64Url(attachment.data.data);
 
-    // Get content type and filename from headers
-    const contentType =
-      attachmentPart.headers?.find((h) => h.name.toLowerCase() === 'content-type')?.value ||
-      attachmentPart.mimeType;
-
+    // Get content type and filename
+    const contentType = determineContentType(attachmentPart);
     const contentDisposition = attachmentPart.headers?.find(
       (h) => h.name.toLowerCase() === 'content-disposition',
     )?.value;
 
     let filename = attachmentPart.filename;
-    if (!filename && contentDisposition) {
-      const matches = contentDisposition.match(/filename="([^"]+)"/);
-      if (matches) {
-        filename = matches[1];
-      }
+    if (!filename) {
+      filename = extractFilename(contentDisposition);
+    }
+
+    // If still no filename, generate one based on content type
+    if (!filename) {
+      const extension = mime.extension(contentType) || 'bin';
+      filename = `attachment_${Date.now()}.${extension}`;
     }
 
     // Set appropriate headers
