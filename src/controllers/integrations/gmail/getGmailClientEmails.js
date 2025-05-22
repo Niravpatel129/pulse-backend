@@ -5,35 +5,88 @@ import GmailIntegration from '../../../models/GmailIntegration.js';
 
 // Helper function to decode base64url encoded strings
 const decodeBase64Url = (str) => {
+  if (!str) return '';
   str = str.replace(/-/g, '+').replace(/_/g, '/');
   while (str.length % 4) str += '=';
   return Buffer.from(str, 'base64').toString('utf8');
 };
 
+// Helper function to get image data URL
+const getImageDataUrl = (mimeType, data) => {
+  return `data:${mimeType};base64,${data}`;
+};
+
 // Helper function to recursively find attachments and body in MIME parts
-const processEmailParts = (parts) => {
-  if (!parts) return { body: '', attachments: [] };
+const processEmailParts = async (parts, gmail, messageId) => {
+  if (!parts) return { body: '', attachments: [], inlineImages: [] };
 
   const attachments = [];
+  const inlineImages = [];
   let body = '';
 
-  const processPart = (part) => {
+  const processPart = async (part) => {
+    console.log(`[DEBUG] Processing part with MIME type: ${part.mimeType}`);
+
     if (part.filename && part.filename.length > 0) {
-      attachments.push({
-        id: part.body.attachmentId,
-        filename: part.filename,
-        mimeType: part.mimeType,
-        size: part.body.size,
-        isInline:
+      try {
+        // Get attachment data
+        const attachment = await gmail.users.messages.attachments.get({
+          userId: 'me',
+          messageId: messageId,
+          id: part.body.attachmentId,
+        });
+
+        const attachmentData = attachment.data.data;
+        const decodedData = decodeBase64Url(attachmentData);
+
+        // Check if this is an inline image
+        const isInline =
           part.headers?.some(
             (h) =>
               h.name.toLowerCase() === 'content-disposition' &&
               h.value.toLowerCase().includes('inline'),
-          ) || false,
-      });
+          ) || false;
+
+        const isImage = part.mimeType.startsWith('image/');
+
+        if (isInline && isImage) {
+          // Handle inline image
+          const contentId = part.headers
+            ?.find((h) => h.name.toLowerCase() === 'content-id')
+            ?.value?.replace(/[<>]/g, '');
+
+          inlineImages.push({
+            id: part.body.attachmentId,
+            contentId,
+            filename: part.filename,
+            mimeType: part.mimeType,
+            size: part.body.size,
+            data: decodedData,
+            dataUrl: getImageDataUrl(part.mimeType, attachmentData),
+            downloadUrl: `/api/gmail/messages/${messageId}/attachments/${part.body.attachmentId}`,
+          });
+        } else {
+          // Handle regular attachment
+          attachments.push({
+            id: part.body.attachmentId,
+            filename: part.filename,
+            mimeType: part.mimeType,
+            size: part.body.size,
+            data: decodedData,
+            isInline,
+            contentType: part.mimeType,
+            downloadUrl: `/api/gmail/messages/${messageId}/attachments/${part.body.attachmentId}`,
+          });
+        }
+      } catch (error) {
+        console.error(`[DEBUG] Error fetching attachment ${part.filename}:`, error);
+      }
     } else if (part.mimeType === 'text/plain' || part.mimeType === 'text/html') {
       // Decode the body content
       const content = part.body.data ? decodeBase64Url(part.body.data) : '';
+      console.log(`[DEBUG] Decoded ${part.mimeType} content length: ${content.length}`);
+      console.log(`[DEBUG] First 100 chars of content: ${content.substring(0, 100)}`);
+
       if (part.mimeType === 'text/plain') {
         // For plain text, preserve line breaks
         body = content;
@@ -41,16 +94,28 @@ const processEmailParts = (parts) => {
         // For HTML, we'll keep it as is for the frontend to render
         body = content;
       }
+    } else if (part.mimeType === 'multipart/alternative' || part.mimeType === 'multipart/mixed') {
+      // Process nested parts for multipart messages
+      if (part.parts) {
+        console.log(`[DEBUG] Processing ${part.parts.length} nested parts`);
+        for (const nestedPart of part.parts) {
+          await processPart(nestedPart);
+        }
+      }
     }
 
     // Recursively process nested parts
     if (part.parts) {
-      part.parts.forEach(processPart);
+      for (const nestedPart of part.parts) {
+        await processPart(nestedPart);
+      }
     }
   };
 
-  parts.forEach(processPart);
-  return { body, attachments };
+  for (const part of parts) {
+    await processPart(part);
+  }
+  return { body, attachments, inlineImages };
 };
 
 /**
@@ -160,7 +225,11 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
           headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
         // Process email body and attachments
-        const { body, attachments } = processEmailParts([email.data.payload]);
+        const { body, attachments, inlineImages } = await processEmailParts(
+          [email.data.payload],
+          gmail,
+          message.id,
+        );
 
         // Create streamlined email object
         const streamlinedEmail = {
@@ -179,10 +248,24 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
           references: getHeader('References'),
           body,
           bodyType: email.data.payload.mimeType,
-          attachments,
+          attachments: attachments.map((att) => ({
+            ...att,
+            // Remove the actual data from the response to keep it small
+            data: undefined,
+            // Add a download endpoint that the frontend can use
+            downloadUrl: `/api/gmail/messages/${message.id}/attachments/${att.id}`,
+          })),
+          inlineImages: inlineImages.map((img) => ({
+            ...img,
+            // Remove the actual data from the response to keep it small
+            data: undefined,
+            // Keep the dataUrl for direct rendering
+            dataUrl: img.dataUrl,
+          })),
           hasAttachment: attachments.length > 0,
           hasInlineAttachment: attachments.some((att) => att.isInline),
           hasRegularAttachment: attachments.some((att) => !att.isInline),
+          hasInlineImages: inlineImages.length > 0,
         };
 
         // Add to thread map
