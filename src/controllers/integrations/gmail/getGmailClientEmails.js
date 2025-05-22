@@ -179,7 +179,7 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
 
   try {
     // Build search query to find emails related to this client
-    const searchQuery = `from:${clientEmail}`;
+    const searchQuery = `from:${clientEmail} OR to:${clientEmail}`;
     console.log(`[DEBUG] Using search query: "${searchQuery}"`);
 
     // Build parameters for Gmail API
