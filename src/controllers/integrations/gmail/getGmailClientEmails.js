@@ -26,13 +26,6 @@ const processEmailParts = async (parts, gmail, messageId) => {
   let bodyText = '';
 
   const processPart = async (part) => {
-    console.log(`[DEBUG] Processing part with MIME type: ${part.mimeType}`);
-    console.log(`[DEBUG] Part details:`, {
-      filename: part.filename,
-      attachmentId: part.body?.attachmentId,
-      headers: part.headers?.map((h) => `${h.name}: ${h.value}`),
-    });
-
     if (part.filename && part.filename.length > 0) {
       try {
         // Get attachment data
@@ -61,12 +54,6 @@ const processEmailParts = async (parts, gmail, messageId) => {
             ?.find((h) => h.name.toLowerCase() === 'content-id')
             ?.value?.replace(/[<>]/g, '');
 
-          console.log(`[DEBUG] Processing inline image:`, {
-            contentId,
-            attachmentId: part.body.attachmentId,
-            filename: part.filename,
-          });
-
           inlineImages.push({
             id: part.body.attachmentId,
             contentId,
@@ -79,11 +66,6 @@ const processEmailParts = async (parts, gmail, messageId) => {
           });
         } else {
           // Handle regular attachment
-          console.log(`[DEBUG] Processing regular attachment:`, {
-            attachmentId: part.body.attachmentId,
-            filename: part.filename,
-          });
-
           attachments.push({
             id: part.body.attachmentId,
             filename: part.filename,
@@ -96,12 +78,11 @@ const processEmailParts = async (parts, gmail, messageId) => {
           });
         }
       } catch (error) {
-        console.error(`[DEBUG] Error fetching attachment ${part.filename}:`, error);
+        console.error(`Error fetching attachment ${part.filename}:`, error);
       }
     } else if (part.mimeType === 'text/plain' || part.mimeType === 'text/html') {
       // Decode the body content
       const content = part.body.data ? decodeBase64Url(part.body.data) : '';
-      console.log(`[DEBUG] Decoded ${part.mimeType} content length: ${content.length}`);
 
       if (part.mimeType === 'text/plain') {
         // For plain text, preserve line breaks
@@ -113,7 +94,6 @@ const processEmailParts = async (parts, gmail, messageId) => {
     } else if (part.mimeType === 'multipart/alternative' || part.mimeType === 'multipart/mixed') {
       // Process nested parts for multipart messages
       if (part.parts) {
-        console.log(`[DEBUG] Processing ${part.parts.length} nested parts`);
         for (const nestedPart of part.parts) {
           await processPart(nestedPart);
         }
@@ -149,8 +129,6 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
   const workspaceId = req.workspace._id;
   const { clientId } = req.params;
 
-  console.log(`[DEBUG] Getting emails for client: ${clientId} in workspace: ${workspaceId}`);
-
   // Get pagination parameters from query
   const page = parseInt(req.query.page) || 1;
   const pageSize = parseInt(req.query.pageSize) || 10;
@@ -158,7 +136,6 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
   // Verify client exists and belongs to the workspace
   const client = await Client.findById(clientId).select('+email');
   const clientEmail = client.user.email;
-  console.log('🚀 client:', client);
 
   if (!client) {
     res.status(404);
@@ -169,8 +146,6 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('Client does not have an email address');
   }
-
-  console.log(`[DEBUG] Found client email: ${clientEmail}`);
 
   // Find Gmail integration for this workspace
   const gmailIntegration = await GmailIntegration.findOne({
@@ -202,43 +177,35 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
   try {
     // Build search query to find emails related to this client
     const searchQuery = `from:${clientEmail} OR to:${clientEmail}`;
-    console.log(`[DEBUG] Using search query: "${searchQuery}"`);
 
     // Build parameters for Gmail API
     const listParams = {
       userId: 'me',
-      maxResults: 50, // Increased to get more results
+      maxResults: 50,
       q: searchQuery,
     };
 
     // Get list of emails with pagination
-    console.log(`[DEBUG] Calling Gmail API with params:`, listParams);
     const response = await gmail.users.messages.list(listParams);
-    console.log(`[DEBUG] Gmail API response:`, JSON.stringify(response.data, null, 2));
-
     const messages = response.data.messages || [];
-    console.log(`[DEBUG] Found ${messages.length} messages matching query`);
 
     // If no messages found, try a test query to verify API access
     if (messages.length === 0) {
-      console.log(`[DEBUG] Testing with a simple search to verify API works`);
       const testResponse = await gmail.users.messages.list({
         userId: 'me',
         maxResults: 1,
       });
-      console.log(`[DEBUG] Test response:`, JSON.stringify(testResponse.data, null, 2));
     }
 
     // Group messages by thread
     const threadMap = new Map();
 
     for (const message of messages) {
-      console.log(`[DEBUG] Fetching details for message ID: ${message.id}`);
       try {
         const email = await gmail.users.messages.get({
           userId: 'me',
           id: message.id,
-          format: 'full', // Get full message details including body
+          format: 'full',
         });
 
         // Extract headers
@@ -272,16 +239,12 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
           bodyType: email.data.payload.mimeType,
           attachments: attachments.map((att) => ({
             ...att,
-            // Remove the actual data from the response to keep it small
             data: undefined,
-            // Add a download endpoint that the frontend can use
             downloadUrl: `/api/gmail/messages/${message.id}/attachments/${att.id}`,
           })),
           inlineImages: inlineImages.map((img) => ({
             ...img,
-            // Remove the actual data from the response to keep it small
             data: undefined,
-            // Keep the dataUrl for direct rendering
             dataUrl: img.dataUrl,
           })),
           hasAttachment: attachments.length > 0,
@@ -336,8 +299,7 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
         }
         thread.participants.add(streamlinedEmail.from);
       } catch (msgError) {
-        console.error(`[DEBUG] Error fetching message ${message.id}:`, msgError);
-        // Continue with other messages
+        console.error(`Error fetching message ${message.id}:`, msgError);
       }
     }
 
@@ -347,12 +309,9 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
         ...thread,
         participants: Array.from(thread.participants).filter(Boolean),
         messageCount: thread.messages.length,
-        // Sort messages within thread by date
         messages: thread.messages.sort((a, b) => new Date(b.date) - new Date(a.date)),
       }))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    console.log(`[DEBUG] Successfully processed ${threads.length} threads`);
 
     res.status(200).json({
       success: true,
@@ -367,9 +326,9 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('[DEBUG] Gmail API Error:', error);
+    console.error('Gmail API Error:', error);
     if (error.response) {
-      console.error('[DEBUG] Error response:', error.response.data);
+      console.error('Error response:', error.response.data);
     }
     res.status(500).json({ success: false, message: error.message });
   }
