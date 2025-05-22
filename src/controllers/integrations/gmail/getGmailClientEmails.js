@@ -224,6 +224,7 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
         const streamlinedEmail = {
           id: message.id,
           threadId: message.threadId,
+          key: `${message.threadId}-${message.id}`,
           snippet: email.data.snippet,
           labelIds: email.data.labelIds,
           from: getHeader('From'),
@@ -257,6 +258,7 @@ const getGmailClientEmails = asyncHandler(async (req, res) => {
         if (!threadMap.has(message.threadId)) {
           threadMap.set(message.threadId, {
             threadId: message.threadId,
+            key: message.threadId,
             messages: [],
             subject: streamlinedEmail.subject,
             snippet: streamlinedEmail.snippet,
