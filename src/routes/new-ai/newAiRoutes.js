@@ -1,6 +1,11 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { clearChatHistory, streamChat } from '../../controllers/newAi/aiController.js';
+import {
+  clearChatHistory,
+  getConversationHistory,
+  listConversations,
+  streamChat,
+} from '../../controllers/newAi/aiController.js';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 
@@ -22,6 +27,12 @@ router.use(extractWorkspace);
 
 // Streaming chat endpoint
 router.post('/chat/stream', streamChat);
+
+// List conversations
+router.get('/chat/conversations', listConversations);
+
+// Get conversation history
+router.get('/chat/history/:sessionId', getConversationHistory);
 
 // Clear conversation history
 router.delete('/chat/history/:sessionId', clearChatHistory);

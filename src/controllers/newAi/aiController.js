@@ -63,11 +63,26 @@ export const streamChat = async (req, res) => {
     }
 
     if (!conversation) {
-      // Create new conversation with a new MongoDB ObjectId
+      // Generate a meaningful title from the first message
+      let title = message.trim();
+
+      // If the message is a question, use it directly
+      if (title.endsWith('?')) {
+        title = title.substring(0, 50);
+      } else {
+        // For non-questions, try to extract a meaningful title
+        const words = title.split(' ');
+        if (words.length > 5) {
+          // Take first 5 words and add ellipsis
+          title = words.slice(0, 5).join(' ') + '...';
+        }
+      }
+
+      // Create new conversation with the generated title
       conversation = await AIConversation.create({
         workspace: workspaceId,
         messages: [],
-        title: 'New Conversation', // You can update this later based on the first message
+        title: title,
       });
     }
 
@@ -173,6 +188,56 @@ export const clearChatHistory = async (req, res) => {
     });
   } catch (error) {
     console.error('Error clearing conversation history:', error);
+    return res.status(500).json({
+      error: error.message,
+    });
+  }
+};
+
+export const listConversations = async (req, res) => {
+  try {
+    const workspaceId = req.workspace._id;
+
+    const conversations = await AIConversation.find({ workspace: workspaceId })
+      .select('title lastActive createdAt')
+      .sort({ lastActive: -1 });
+
+    return res.json({
+      status: 'success',
+      conversations,
+    });
+  } catch (error) {
+    console.error('Error listing conversations:', error);
+    return res.status(500).json({
+      error: error.message,
+    });
+  }
+};
+
+export const getConversationHistory = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const workspaceId = req.workspace._id;
+
+    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+      return res.status(400).json({ error: 'Invalid session ID' });
+    }
+
+    const conversation = await AIConversation.findOne({
+      _id: sessionId,
+      workspace: workspaceId,
+    }).select('title messages lastActive createdAt');
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    return res.json({
+      status: 'success',
+      conversation,
+    });
+  } catch (error) {
+    console.error('Error getting conversation history:', error);
     return res.status(500).json({
       error: error.message,
     });
