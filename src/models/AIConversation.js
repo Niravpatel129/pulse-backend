@@ -31,11 +31,6 @@ const aiConversationSchema = new mongoose.Schema(
       ref: 'Workspace',
       required: true,
     },
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
     title: {
       type: String,
       default: 'New Conversation',
@@ -52,7 +47,7 @@ const aiConversationSchema = new mongoose.Schema(
 );
 
 // Index for more efficient queries
-aiConversationSchema.index({ workspace: 1, user: 1, createdAt: -1 });
+aiConversationSchema.index({ workspace: 1, createdAt: -1 });
 aiConversationSchema.index({ lastActive: -1 });
 
 const AIConversation = mongoose.model('AIConversation', aiConversationSchema);

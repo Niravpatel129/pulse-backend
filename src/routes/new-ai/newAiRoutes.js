@@ -1,6 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { basicChat, clearChatHistory, streamChat } from '../../controllers/aiController.js';
+import { clearChatHistory, streamChat } from '../../controllers/newAi/aiController.js';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 
@@ -22,9 +22,6 @@ router.use(extractWorkspace);
 
 // Streaming chat endpoint
 router.post('/chat/stream', streamChat);
-
-// Basic chat endpoint
-router.post('/chat', basicChat);
 
 // Clear conversation history
 router.delete('/chat/history/:sessionId', clearChatHistory);

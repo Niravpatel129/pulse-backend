@@ -2,12 +2,14 @@ import { Queue, Worker } from 'bullmq';
 import chalk from 'chalk';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
 import multer from 'multer';
 import NodeCache from 'node-cache';
 import Redis from 'redis';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
+import AIConversation from '../../models/AIConversation.js';
 import { firebaseStorage } from '../../utils/firebase.js';
 import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
 import documentRoutes from './documentRoutes.js';
@@ -31,7 +33,6 @@ export { qaChains };
 
 // Create caches with TTL
 const vectorStoreCache = new NodeCache({ stdTTL: 3600 }); // 1 hour
-const conversationHistory = new NodeCache({ stdTTL: 1800 }); // 30 minutes
 
 // Variables for message queue
 let aiQueue;
@@ -113,8 +114,7 @@ function estimateQueryCost(query, response) {
       'ai-processing',
       async (job) => {
         try {
-          const { message, jobId, sessionId, workspaceId, workspaceSessionId, history, userId } =
-            job.data;
+          const { message, jobId, sessionId, workspaceId, history, userId } = job.data;
 
           // Initialize QA chain if not already done for this workspace
           if (!qaChains.has(workspaceId)) {
@@ -137,34 +137,34 @@ function estimateQueryCost(query, response) {
           // Get the chain for this workspace
           const workspaceChain = qaChains.get(workspaceId);
 
-          // Get current conversation history
-          let sessionHistory = history || conversationHistory.get(workspaceSessionId) || [];
-
           // Process query with conversation context
           const startTime = Date.now();
           const result = await workspaceChain.invoke({
             query: message,
-            history: sessionHistory
-              .map((h) => `Human: ${h.question}\nAI: ${h.answer}`)
-              .join('\n\n'),
-            workspaceId, // Pass workspaceId for context
-            userId, // Pass userId for personalization
+            messages: history,
+            workspaceId,
+            userId,
           });
           const endTime = Date.now();
 
           // Extract and prepare answer
           const answer = extractAnswer(result);
 
-          // Update conversation history
-          sessionHistory.push({ question: message, answer });
+          // Update conversation in MongoDB
+          const conversation = await AIConversation.findOne({
+            _id: sessionId,
+            workspace: workspaceId,
+          });
 
-          // Limit history size to prevent token overflow
-          if (sessionHistory.length > 10) {
-            sessionHistory = sessionHistory.slice(sessionHistory.length - 10);
+          if (conversation) {
+            const aiMessage = {
+              role: 'assistant',
+              content: answer,
+            };
+            conversation.messages.push(aiMessage);
+            conversation.lastActive = new Date();
+            await conversation.save();
           }
-
-          // Save updated history
-          conversationHistory.set(workspaceSessionId, sessionHistory);
 
           // Estimate cost
           const costEstimate = estimateQueryCost(message, answer);
@@ -290,103 +290,46 @@ router.post('/chat', async (req, res) => {
   try {
     const { message, sessionId: providedSessionId } = req.body;
     const workspaceId = req.workspace._id.toString();
-    const userId = req.user.userId; // Get the authenticated user ID
+    const userId = req.user.userId;
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
-    // Make sessionId workspace-specific
-    const workspaceSessionId = `${workspaceId}:${sessionId}`;
 
     if (!message) {
       return res.status(400).json({ error: 'Missing `message` in request body.' });
     }
 
-    // Retrieve conversation history for this session
-    let history = conversationHistory.get(workspaceSessionId) || [];
-
-    // For new conversations or if cache was cleared, initialize history array
-    if (!Array.isArray(history)) {
-      history = [];
-    }
-
-    // If Redis is unavailable, or traffic is low, process directly
-    if (!isRedisAvailable || (await isLowTraffic())) {
-      // Initialize QA chain if needed for this workspace
-      if (!qaChains.has(workspaceId)) {
-        console.log(`Initializing vector store and QA chain for workspace ${workspaceId}...`);
-
-        // Check if vector store is cached
-        let vs;
-        if (vectorStoreCache.get(`vectorStore:${workspaceId}`)) {
-          console.log('Using cached vector store for workspace');
-          vs = vectorStoreCache.get(`vectorStore:${workspaceId}`);
-        } else {
-          console.log('Initializing new vector store for workspace...');
-          vs = await initVectorStore(workspaceId);
-          // Cache the vector store
-          vectorStoreCache.set(`vectorStore:${workspaceId}`, vs);
-        }
-
-        console.log('Creating QA chain...');
-        const workspaceChain = await createQAChain(vs, workspaceId);
-        // Store chain by workspace ID
-        qaChains.set(workspaceId, workspaceChain);
-        console.log(`QA chain initialized for workspace ${workspaceId}`);
-      }
-
-      // Get the chain for this workspace
-      const workspaceChain = qaChains.get(workspaceId);
-
-      // Process query directly with conversation history
-      console.log(`Processing query directly: "${message}" with sessionId: ${workspaceSessionId}`);
-      const startTime = Date.now();
-
-      // Add history to the query context
-      const result = await workspaceChain.invoke({
-        query: message,
-        history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
-        workspaceId, // Pass workspaceId for context
-        userId, // Pass userId for personalization
-      });
-
-      const endTime = Date.now();
-      console.log('Successfully generated answer');
-
-      // Extract answer
-      const answer = extractAnswer(result);
-
-      // Update conversation history
-      history.push({ question: message, answer });
-
-      // Limit history size to prevent token overflow (keep last 10 exchanges)
-      if (history.length > 10) {
-        history = history.slice(history.length - 10);
-      }
-
-      // Save updated history
-      conversationHistory.set(workspaceSessionId, history);
-
-      // Estimate cost
-      const costEstimate = estimateQueryCost(message, answer);
-      console.log(
-        chalk.green(`💰 AI Query Cost Estimate: $${costEstimate.totalCost.toFixed(6)}`) +
-          chalk.yellow(
-            ` (Input: ~${costEstimate.inputTokens} tokens, Output: ~${
-              costEstimate.outputTokens
-            } tokens, Time: ${(endTime - startTime) / 1000}s)`,
-          ),
-      );
-
-      return res.json({
-        answer,
-        sessionId, // Return sessionId for client to use in follow-up questions
+    // Get or create conversation from MongoDB
+    let conversation;
+    if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+      conversation = await AIConversation.findOne({
+        _id: sessionId,
+        workspace: workspaceId,
       });
     }
+
+    if (!conversation) {
+      conversation = await AIConversation.create({
+        workspace: workspaceId,
+        messages: [],
+        title: 'New Conversation',
+      });
+    }
+
+    // Add user message
+    const userMessage = {
+      role: 'user',
+      content: message,
+    };
+    conversation.messages.push(userMessage);
+
+    // Get conversation history for context - use the messages array directly
+    const history = conversation.messages;
 
     // For complex requests or high traffic, use queue if available
     const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     console.log(
-      `Adding job ${jobId} to queue for message: "${message}" with workspaceSessionId: ${workspaceSessionId}`,
+      `Adding job ${jobId} to queue for message: "${message}" with sessionId: ${sessionId}`,
     );
 
     // Add job to queue with session info
@@ -395,9 +338,8 @@ router.post('/chat', async (req, res) => {
       jobId,
       sessionId,
       workspaceId,
-      workspaceSessionId,
       history,
-      userId, // Add userId to job data
+      userId,
     });
 
     // Return job ID for status checking
@@ -422,13 +364,11 @@ router.post('/chat/stream', async (req, res) => {
     console.log('Received streaming chat request');
     const { message, sessionId: providedSessionId, pageContext } = req.body;
     const workspaceId = req.workspace._id.toString();
-    const userId = req.user.userId; // Get the authenticated user ID
+    const userId = req.user.userId;
     const currentPath = pageContext?.path;
 
     // Generate a new session ID if none provided
     const sessionId = providedSessionId || uuidv4();
-    // Make sessionId workspace-specific
-    const workspaceSessionId = `${workspaceId}:${sessionId}`;
 
     if (!message) {
       return res.status(400).json({ error: 'Missing `message` in request body.' });
@@ -438,15 +378,34 @@ router.post('/chat/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Prevents Nginx from buffering the response
+    res.setHeader('X-Accel-Buffering', 'no');
 
-    // Retrieve conversation history for this session
-    let history = conversationHistory.get(workspaceSessionId) || [];
-
-    // For new conversations or if cache was cleared, initialize history array
-    if (!Array.isArray(history)) {
-      history = [];
+    // Get or create conversation from MongoDB
+    let conversation;
+    if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+      conversation = await AIConversation.findOne({
+        _id: sessionId,
+        workspace: workspaceId,
+      });
     }
+
+    if (!conversation) {
+      conversation = await AIConversation.create({
+        workspace: workspaceId,
+        messages: [],
+        title: 'New Conversation',
+      });
+    }
+
+    // Add user message
+    const userMessage = {
+      role: 'user',
+      content: message,
+    };
+    conversation.messages.push(userMessage);
+
+    // Get conversation history for context
+    const history = conversation.messages;
 
     // Initialize QA chain if needed for this workspace
     if (!qaChains.has(workspaceId)) {
@@ -474,26 +433,17 @@ router.post('/chat/stream', async (req, res) => {
     // Get the chain for this workspace
     const workspaceChain = qaChains.get(workspaceId);
 
-    // Send initial event
-    res.write(`data: ${JSON.stringify({ type: 'start', sessionId })}\n\n`);
-
-    // Process query with streaming
-    console.log(
-      `Processing streaming query: "${message}" with workspaceSessionId: ${workspaceSessionId}`,
-    );
-    const startTime = Date.now();
-
-    let fullAnswer = '';
     let streamStarted = false;
+    let fullAnswer = '';
 
     try {
       // Use stream instead of invoke
       const stream = await workspaceChain.stream({
         query: message,
         history: history.map((h) => `Human: ${h.question}\nAI: ${h.answer}`).join('\n\n'),
-        workspaceId, // Pass workspaceId for context
-        userId, // Pass userId for personalization
-        currentPath, // Pass current page path for context
+        workspaceId,
+        userId,
+        currentPath,
       });
 
       // Stream each chunk to the client
@@ -513,16 +463,14 @@ router.post('/chat/stream', async (req, res) => {
         }
       }
 
-      // Update conversation history with the complete answer
-      history.push({ question: message, answer: fullAnswer });
-
-      // Limit history size to prevent token overflow (keep last 10 exchanges)
-      if (history.length > 10) {
-        history = history.slice(history.length - 10);
-      }
-
-      // Save updated history
-      conversationHistory.set(workspaceSessionId, history);
+      // Add AI response to conversation
+      const aiMessage = {
+        role: 'assistant',
+        content: fullAnswer,
+      };
+      conversation.messages.push(aiMessage);
+      conversation.lastActive = new Date();
+      await conversation.save();
 
       const endTime = Date.now();
 
@@ -549,10 +497,15 @@ router.post('/chat/stream', async (req, res) => {
       // End response
       res.end();
     } catch (error) {
-      console.error('Error in streaming:', error);
-      // Send error event
-      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
-      res.end();
+      console.error('Error in streaming chat:', error);
+      if (!res.headersSent) {
+        return res.status(500).json({
+          error: error.message,
+        });
+      } else {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+        res.end();
+      }
     }
   } catch (err) {
     console.error('Error in /chat/stream endpoint:', err);
@@ -807,14 +760,16 @@ router.delete('/chat/history/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
     const workspaceId = req.workspace._id.toString();
-    const workspaceSessionId = `${workspaceId}:${sessionId}`;
 
     if (!sessionId) {
       return res.status(400).json({ error: 'Missing sessionId parameter' });
     }
 
-    // Delete the conversation history for this session
-    conversationHistory.del(workspaceSessionId);
+    // Delete the conversation from MongoDB
+    await AIConversation.findOneAndDelete({
+      _id: sessionId,
+      workspace: workspaceId,
+    });
 
     return res.json({
       status: 'success',
