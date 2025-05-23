@@ -12,8 +12,10 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.0-alpha.4",
     "@langchain/mongodb": "^0.1.0",
     "@langchain/openai": "^0.5.10",
+    "ai": "^5.0.0-alpha.4",
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",

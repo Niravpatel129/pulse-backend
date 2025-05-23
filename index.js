@@ -12,6 +12,7 @@ import { initializeProjectInactivityChecker } from './src/init/projectInactivity
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
 import requestLogger from './src/middleware/loggingMiddleware.js';
 import activityRoutes from './src/routes/activityRoutes.js';
+import aiRoutes from './src/routes/ai/ai2Routes.js';
 import aiRoutes2 from './src/routes/ai/aiRoutes.js';
 import aiSettingsRoutes from './src/routes/ai/aiSettingsRoutes.js';
 import alertRoutes from './src/routes/alertRoutes.js';
@@ -128,6 +129,7 @@ app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
 
 // AI routes
 app.use(`${routesPrefix}/ai`, aiRoutes2);
+app.use(`${routesPrefix}/ai-2`, aiRoutes);
 app.use(`${routesPrefix}/chat-settings`, chatSettingsRoutes);
 app.use(`${routesPrefix}/clients`, clientRoutes);
 
