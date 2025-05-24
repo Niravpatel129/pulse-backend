@@ -1,6 +1,7 @@
 import express from 'express';
 import { createInvoice } from '../controllers/invoice2/createInvoice.js';
 import { deleteInvoice } from '../controllers/invoice2/deleteInvoice.js';
+import { downloadInvoice } from '../controllers/invoice2/downloadInvoice.js';
 import { getAllInvoices } from '../controllers/invoice2/getAllInvoices.js';
 import { getInvoice } from '../controllers/invoice2/getInvoice.js';
 import { getLastInvoiceSettings } from '../controllers/invoice2/getLastInvoiceSettings.js';
@@ -24,5 +25,7 @@ router.route('/:id/status').patch(updateInvoiceStatus);
 router.route('/settings/last').get(getLastInvoiceSettings);
 
 router.route('/validate-number/:invoiceNumber').get(validateInvoiceNumber);
+
+router.route('/:id/download').get(downloadInvoice);
 
 export default router;
