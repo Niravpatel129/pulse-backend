@@ -31,6 +31,7 @@ import figmaRoutes from './src/routes/figmaRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
 import gmailRoutes from './src/routes/gmailRoutes.js';
 import integrationRoutes from './src/routes/integrationRoutes.js';
+import invoice2Routes from './src/routes/invoice2Routes.js';
 import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import invoiceTaxRateRoutes from './src/routes/invoiceTaxRateRoutes.js';
 import kanbanRoutes from './src/routes/kanbanRoutes.js';
@@ -182,6 +183,9 @@ app.use(`${routesPrefix}/project-invoices`, projectInvoiceRoutes);
 // Invoices
 app.use(`${routesPrefix}/invoices`, invoiceRoutes);
 app.use(`${routesPrefix}/invoice-taxes`, invoiceTaxRateRoutes);
+
+// Invoices 2
+app.use(`${routesPrefix}/invoices2`, invoice2Routes);
 
 // Payments
 app.use(`${routesPrefix}/payments`, paymentRoutes);
