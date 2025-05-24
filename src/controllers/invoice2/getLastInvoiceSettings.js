@@ -13,21 +13,36 @@ export const getLastInvoiceSettings = catchAsync(async (req, res, next) => {
     // Find the most recent invoice for this workspace
     const lastInvoice = await Invoice2.findOne({ workspace: workspaceId })
       .sort({ createdAt: -1 })
-      .select('currency taxRate taxId showTaxId deliveryOptions notes paymentTerms');
+      .select('settings notes logo from');
 
     if (!lastInvoice) {
       return next(new AppError('No invoices found for this workspace', 404));
     }
 
+    // Count total invoices for this workspace
+    const totalInvoices = await Invoice2.countDocuments({ workspace: workspaceId });
+
     // Extract relevant settings from the last invoice
     const invoiceSettings = {
-      currency: lastInvoice.currency,
-      taxRate: lastInvoice.taxRate,
-      taxId: lastInvoice.taxId,
-      showTaxId: lastInvoice.showTaxId,
-      deliveryOptions: lastInvoice.deliveryOptions,
+      currency: lastInvoice.settings.currency,
+      dateFormat: lastInvoice.settings.dateFormat,
+      salesTax: {
+        enabled: lastInvoice.settings.salesTax.enabled,
+        rate: lastInvoice.settings.salesTax.rate,
+      },
+      vat: {
+        enabled: lastInvoice.settings.vat.enabled,
+        rate: lastInvoice.settings.vat.rate,
+      },
+      discount: {
+        enabled: lastInvoice.settings.discount.enabled,
+        amount: lastInvoice.settings.discount.amount,
+      },
+      decimals: lastInvoice.settings.decimals,
       notes: lastInvoice.notes,
-      paymentTerms: lastInvoice.paymentTerms,
+      logo: lastInvoice.logo,
+      from: lastInvoice.from,
+      newInvoiceNumber: `INV-${String(totalInvoices + 1).padStart(3, '0')}`,
     };
 
     res.status(200).json({

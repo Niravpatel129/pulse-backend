@@ -50,6 +50,51 @@ const invoiceTotalsSchema = new mongoose.Schema({
   },
 });
 
+const invoiceSettingsSchema = new mongoose.Schema({
+  currency: {
+    type: String,
+    required: true,
+  },
+  dateFormat: {
+    type: String,
+    required: true,
+  },
+  salesTax: {
+    enabled: {
+      type: Boolean,
+      required: true,
+    },
+    rate: {
+      type: Number,
+      required: true,
+    },
+  },
+  vat: {
+    enabled: {
+      type: Boolean,
+      required: true,
+    },
+    rate: {
+      type: Number,
+      required: true,
+    },
+  },
+  discount: {
+    enabled: {
+      type: Boolean,
+      required: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+    },
+  },
+  decimals: {
+    type: String,
+    required: true,
+  },
+});
+
 const invoice2Schema = new mongoose.Schema(
   {
     workspace: {
@@ -81,7 +126,7 @@ const invoice2Schema = new mongoose.Schema(
       },
       email: {
         type: String,
-        required: true,
+        required: false,
       },
     },
     from: {
@@ -105,6 +150,10 @@ const invoice2Schema = new mongoose.Schema(
     notes: {
       type: String,
     },
+    logo: {
+      type: String,
+    },
+    settings: invoiceSettingsSchema,
     status: {
       type: String,
       enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
