@@ -9,6 +9,10 @@ export const updateInternalNote = catchAsync(async (req, res, next) => {
     return next(new AppError('internalNote is required', 400));
   }
 
+  if (!req.params.id) {
+    return next(new AppError('Invoice ID is required', 400));
+  }
+
   const invoice = await Invoice2.findOneAndUpdate(
     { _id: req.params.id, workspace: req.workspace._id },
     { internalNote: internalNote },

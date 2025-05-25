@@ -147,9 +147,6 @@ const invoice2Schema = new mongoose.Schema(
     },
     items: [invoiceItemSchema],
     totals: invoiceTotalsSchema,
-    notes: {
-      type: String,
-    },
     internalNote: {
       type: String,
       default: '',
