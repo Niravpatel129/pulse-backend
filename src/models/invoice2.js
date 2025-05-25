@@ -159,6 +159,45 @@ const invoice2Schema = new mongoose.Schema(
       enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
       default: 'draft',
     },
+    statusHistory: [
+      {
+        status: {
+          type: String,
+          enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
+          required: true,
+        },
+        changedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        changedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        reason: {
+          type: String,
+        },
+      },
+    ],
+    statusChangedAt: {
+      type: Date,
+    },
+    statusChangedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    paymentDate: {
+      type: Date,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['bank_transfer', 'credit_card', 'cash', 'check', 'other'],
+      default: 'bank_transfer',
+    },
+    paidAt: {
+      type: Date,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
