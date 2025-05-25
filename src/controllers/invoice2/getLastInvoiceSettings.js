@@ -1,6 +1,7 @@
 import Invoice2 from '../../models/invoice2.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
+import { generateInvoice2Number } from '../../utils/generateInvoice2Number.js';
 
 export const getLastInvoiceSettings = catchAsync(async (req, res, next) => {
   try {
@@ -19,8 +20,8 @@ export const getLastInvoiceSettings = catchAsync(async (req, res, next) => {
       return next(new AppError('No invoices found for this workspace', 404));
     }
 
-    // Count total invoices for this workspace
-    const totalInvoices = await Invoice2.countDocuments({ workspace: workspaceId });
+    // Generate the next invoice number
+    const newInvoiceNumber = await generateInvoice2Number(workspaceId);
 
     // Extract relevant settings from the last invoice
     const invoiceSettings = {
@@ -42,7 +43,7 @@ export const getLastInvoiceSettings = catchAsync(async (req, res, next) => {
       notes: lastInvoice.notes,
       logo: lastInvoice.logo,
       from: lastInvoice.from,
-      newInvoiceNumber: `INV-${String(totalInvoices + 1).padStart(3, '0')}`,
+      newInvoiceNumber,
     };
 
     res.status(200).json({
