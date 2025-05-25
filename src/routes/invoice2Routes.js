@@ -18,7 +18,7 @@ router.use(extractWorkspace);
 
 router.route('/').get(getAllInvoices).post(createInvoice);
 
-router.route('/:id').get(getInvoice).patch(updateInvoice).delete(deleteInvoice);
+router.route('/:id').get(getInvoice).patch(updateInvoice).put(updateInvoice).delete(deleteInvoice);
 
 router.route('/:id/status').patch(updateInvoiceStatus);
 
