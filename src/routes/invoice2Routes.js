@@ -1,5 +1,7 @@
 import express from 'express';
+import { addAttachment } from '../controllers/invoice2/addAttachment.js';
 import { createInvoice } from '../controllers/invoice2/createInvoice.js';
+import { deleteAttachment } from '../controllers/invoice2/deleteAttachment.js';
 import { deleteInvoice } from '../controllers/invoice2/deleteInvoice.js';
 import { downloadInvoice } from '../controllers/invoice2/downloadInvoice.js';
 import { getAllInvoices } from '../controllers/invoice2/getAllInvoices.js';
@@ -33,5 +35,8 @@ router.route('/validate-number/:invoiceNumber').get(validateInvoiceNumber);
 router.route('/:id/download').get(downloadInvoice);
 
 router.route('/:id/internal-note').patch(updateInternalNote);
+
+router.route('/:id/attachments').post(addAttachment);
+router.route('/:id/attachments/:fileId').delete(deleteAttachment);
 
 export default router;

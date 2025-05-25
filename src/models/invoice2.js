@@ -115,6 +115,13 @@ const invoice2Schema = new mongoose.Schema(
     invoiceTitle: {
       type: String,
     },
+    attachments: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'File',
+        required: false,
+      },
+    ],
     customer: {
       id: {
         type: mongoose.Schema.Types.ObjectId,
