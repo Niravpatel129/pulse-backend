@@ -6,6 +6,7 @@ import { getAllInvoices } from '../controllers/invoice2/getAllInvoices.js';
 import { getInvoice } from '../controllers/invoice2/getInvoice.js';
 import { getLastInvoiceSettings } from '../controllers/invoice2/getLastInvoiceSettings.js';
 import { markInvoiceAsPaid } from '../controllers/invoice2/markInvoiceAsPaid.js';
+import { updateInternalNote } from '../controllers/invoice2/updateInternalNote.js';
 import { updateInvoice } from '../controllers/invoice2/updateInvoice.js';
 import { updateInvoiceStatus } from '../controllers/invoice2/updateInvoiceStatus.js';
 import { validateInvoiceNumber } from '../controllers/invoice2/validateInvoiceNumber.js';
@@ -30,5 +31,7 @@ router.route('/settings/last').get(getLastInvoiceSettings);
 router.route('/validate-number/:invoiceNumber').get(validateInvoiceNumber);
 
 router.route('/:id/download').get(downloadInvoice);
+
+router.route('/:id/internal-note').patch(updateInternalNote);
 
 export default router;

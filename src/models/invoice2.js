@@ -150,6 +150,10 @@ const invoice2Schema = new mongoose.Schema(
     notes: {
       type: String,
     },
+    internalNote: {
+      type: String,
+      default: '',
+    },
     logo: {
       type: String,
     },
