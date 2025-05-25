@@ -75,18 +75,12 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
     doc.moveDown(2);
 
     // 4. ───── From / To ────────────────────────────────────────────────
-    doc.font('Helvetica-Bold').text('From:', 40, doc.y);
-    doc.font('Helvetica').text(invoice.from, 40, doc.y + 15);
+    const fromToY = doc.y;
+    doc.font('Helvetica-Bold').text('From:', 40, fromToY);
+    doc.font('Helvetica').text(invoice.from, 40, fromToY + 15);
 
-    doc.font('Helvetica-Bold').text('To:', 300, doc.y - 15);
-    doc.font('Helvetica').text(invoice.customer.name, 300, doc.y + 15);
-    if (invoice.customer.email) {
-      doc
-        .fillColor('blue')
-        .text(invoice.customer.email, 300, doc.y, { link: `mailto:${invoice.customer.email}` })
-        .fillColor('black');
-    }
-
+    doc.font('Helvetica-Bold').text('To:', 300, fromToY);
+    doc.font('Helvetica').text(invoice.to, 300, fromToY + 15);
     doc.moveDown(2);
 
     // 5. ───── Items table header ───────────────────────────────────────
