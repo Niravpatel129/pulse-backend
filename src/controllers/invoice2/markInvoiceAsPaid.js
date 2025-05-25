@@ -44,6 +44,16 @@ export const markInvoiceAsPaid = async (req, res, next) => {
   invoice.paymentDate = paymentDate;
   invoice.paymentMethod = paymentMethod || 'bank_transfer';
   invoice.paidAt = new Date();
+  invoice.statusChangedAt = new Date();
+  invoice.statusChangedBy = req.user.userId;
+
+  // Add to status history
+  invoice.statusHistory.push({
+    status: 'paid',
+    changedAt: new Date(),
+    changedBy: req.user.userId,
+    reason: 'Invoice marked as paid',
+  });
 
   await invoice.save();
 
