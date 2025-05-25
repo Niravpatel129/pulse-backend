@@ -206,6 +206,19 @@ const invoice2Schema = new mongoose.Schema(
     paidAt: {
       type: Date,
     },
+    paymentIntentId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    requireDeposit: {
+      type: Boolean,
+      default: false,
+    },
+    depositPercentage: {
+      type: Number,
+      default: 50,
+    },
     createdAt: {
       type: Date,
       default: Date.now,

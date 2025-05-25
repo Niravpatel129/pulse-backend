@@ -1,12 +1,14 @@
 import express from 'express';
 import { addAttachment } from '../controllers/invoice2/addAttachment.js';
 import { createInvoice } from '../controllers/invoice2/createInvoice.js';
+import { createPaymentIntent } from '../controllers/invoice2/createPaymentIntent.js';
 import { deleteAttachment } from '../controllers/invoice2/deleteAttachment.js';
 import { deleteInvoice } from '../controllers/invoice2/deleteInvoice.js';
 import { downloadInvoice } from '../controllers/invoice2/downloadInvoice.js';
 import { getAllInvoices } from '../controllers/invoice2/getAllInvoices.js';
 import { getInvoice } from '../controllers/invoice2/getInvoice.js';
 import { getLastInvoiceSettings } from '../controllers/invoice2/getLastInvoiceSettings.js';
+import { handlePaymentSuccess } from '../controllers/invoice2/handlePaymentSuccess.js';
 import { markInvoiceAsPaid } from '../controllers/invoice2/markInvoiceAsPaid.js';
 import { updateInternalNote } from '../controllers/invoice2/updateInternalNote.js';
 import { updateInvoice } from '../controllers/invoice2/updateInvoice.js';
@@ -37,6 +39,11 @@ router.route('/:id/download').get(downloadInvoice);
 router.route('/:id/internal-note').patch(updateInternalNote);
 
 router.route('/:id/attachments').post(addAttachment);
+
 router.route('/:id/attachments/:fileId').delete(deleteAttachment);
+
+router.route('/:id/payment-intent').post(createPaymentIntent);
+
+router.route('/:id/payment-success').post(handlePaymentSuccess);
 
 export default router;
