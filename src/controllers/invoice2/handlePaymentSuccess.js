@@ -57,13 +57,7 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     Math.abs(paymentAmount - (invoice.totals.total * invoice.depositPercentage) / 100) < 0.01;
 
   // Determine new status
-  let newStatus = 'partially_paid';
-  if (isFullPayment) {
-    newStatus = 'paid';
-  } else if (isDepositPayment) {
-    newStatus = 'deposit_paid';
-  }
-
+  const newStatus = 'paid';
   // Add status change to history
   const statusChangeEntry = {
     status: newStatus,
