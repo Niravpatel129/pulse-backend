@@ -85,12 +85,12 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
 
     // 5. ───── Items table header ───────────────────────────────────────
     const tableTopY = doc.y;
-    doc.rect(40, tableTopY - 5, 515, 20).fill('#f2f2f2');
+    doc.rect(40, tableTopY - 5, 515, 20).fill('#fff');
     doc.fillColor('#000').font('Helvetica-Bold').fontSize(11);
     doc.text('Description', 45, tableTopY);
     doc.text('Qty', 230, tableTopY);
     doc.text('Price', 310, tableTopY);
-    doc.text('Total', 410, tableTopY);
+    doc.text('Total', 455, tableTopY, { align: 'right', width: 100 });
 
     // 6. ───── Items table rows ─────────────────────────────────────────
     doc.font('Helvetica').fontSize(11).fillColor('#000');
@@ -102,8 +102,9 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
       doc.text(`${invoice.settings.currency}${item.price.toLocaleString()}`, 310, rowY);
       doc.text(
         `${invoice.settings.currency}${(item.quantity * item.price).toLocaleString()}`,
-        410,
+        455,
         rowY,
+        { align: 'right', width: 100 },
       );
       rowY += 20;
     });
@@ -117,13 +118,16 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
     const boxX = doc.page.width - 40 - boxWidth; // right margin alignment
     const labelX = boxX + boxPadding;
     const valueWidth = boxWidth - boxPadding * 2;
-    let summaryY = rowY;
+
+    // Position totals box 80 points from bottom of page
+    const totalsBoxHeight = 110;
+    let summaryY = doc.page.height - totalsBoxHeight - 80;
 
     // Draw box background
     doc
-      .rect(boxX, summaryY - 10, boxWidth, 110)
+      .rect(boxX, summaryY - 10, boxWidth, totalsBoxHeight)
       .fillOpacity(0.07)
-      .fill('#F6F6F3')
+      .fill('#FFF')
       .fillOpacity(1);
 
     // Write each line
