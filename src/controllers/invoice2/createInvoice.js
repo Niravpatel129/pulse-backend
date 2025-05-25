@@ -23,6 +23,7 @@ export const createInvoice = catchAsync(async (req, res, next) => {
 
     const invoice = await Invoice2.create({
       ...req.body,
+      status: 'open',
       workspace: req.workspace._id,
       createdBy: req.user.userId,
     });

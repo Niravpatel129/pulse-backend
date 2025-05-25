@@ -156,14 +156,14 @@ const invoice2Schema = new mongoose.Schema(
     settings: invoiceSettingsSchema,
     status: {
       type: String,
-      enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
+      enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled'],
       default: 'draft',
     },
     statusHistory: [
       {
         status: {
           type: String,
-          enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
+          enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled'],
           required: true,
         },
         changedAt: {
