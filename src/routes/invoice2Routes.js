@@ -20,33 +20,31 @@ import { extractWorkspace, extractWorkspaceWithoutAuth } from '../middleware/wor
 
 const router = express.Router();
 
+router.route('/summary').get(extractWorkspaceWithoutAuth, getInvoiceSummary);
+
+// Public routes (no auth required)
 router.route('/:id').get(extractWorkspaceWithoutAuth, getInvoice);
 router.route('/:id/payment-intent').post(extractWorkspaceWithoutAuth, createPaymentIntent);
 router.route('/:id/payment-success').post(extractWorkspaceWithoutAuth, handlePaymentSuccess);
 
+// Apply auth and workspace middleware
 router.use(authenticate);
 router.use(extractWorkspace);
 
-router.route('/').get(getAllInvoices).post(createInvoice);
-
-router.route('/summary').get(getInvoiceSummary);
-
-router.route('/:id').patch(updateInvoice).put(updateInvoice).delete(deleteInvoice);
-
-router.route('/:id/status').patch(updateInvoiceStatus).put(updateInvoiceStatus);
-
-router.route('/:id/paid').post(markInvoiceAsPaid);
-
+// Specific routes (must come before parameterized routes)
 router.route('/settings/last').get(getLastInvoiceSettings);
-
 router.route('/validate-number/:invoiceNumber').get(validateInvoiceNumber);
 
+// Base routes
+router.route('/').get(getAllInvoices).post(createInvoice);
+
+// Parameterized routes
+router.route('/:id').patch(updateInvoice).put(updateInvoice).delete(deleteInvoice);
+router.route('/:id/status').patch(updateInvoiceStatus).put(updateInvoiceStatus);
+router.route('/:id/paid').post(markInvoiceAsPaid);
 router.route('/:id/download').get(downloadInvoice);
-
 router.route('/:id/internal-note').patch(updateInternalNote);
-
 router.route('/:id/attachments').post(addAttachment);
-
 router.route('/:id/attachments/:fileId').delete(deleteAttachment);
 
 export default router;
