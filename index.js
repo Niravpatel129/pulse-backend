@@ -12,6 +12,7 @@ import { initializeProjectInactivityChecker } from './src/init/projectInactivity
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
 import requestLogger from './src/middleware/loggingMiddleware.js';
 import activityRoutes from './src/routes/activityRoutes.js';
+import agentRoutes from './src/routes/agentRoutes.js';
 import aiRoutes2 from './src/routes/ai/aiRoutes.js';
 import aiSettingsRoutes from './src/routes/ai/aiSettingsRoutes.js';
 import alertRoutes from './src/routes/alertRoutes.js';
@@ -133,6 +134,7 @@ app.use(`${routesPrefix}/ai`, aiRoutes2);
 app.use(`${routesPrefix}/new-ai`, newAiRoutes);
 app.use(`${routesPrefix}/chat-settings`, chatSettingsRoutes);
 app.use(`${routesPrefix}/clients`, clientRoutes);
+app.use(`${routesPrefix}/agents`, agentRoutes);
 
 // Project management
 // Apply inactivity resolver middleware to project routes
