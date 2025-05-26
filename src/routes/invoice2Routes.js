@@ -7,6 +7,7 @@ import { deleteInvoice } from '../controllers/invoice2/deleteInvoice.js';
 import { downloadInvoice } from '../controllers/invoice2/downloadInvoice.js';
 import { getAllInvoices } from '../controllers/invoice2/getAllInvoices.js';
 import { getInvoice } from '../controllers/invoice2/getInvoice.js';
+import { getInvoiceSummary } from '../controllers/invoice2/getInvoiceSummary.js';
 import { getLastInvoiceSettings } from '../controllers/invoice2/getLastInvoiceSettings.js';
 import { handlePaymentSuccess } from '../controllers/invoice2/handlePaymentSuccess.js';
 import { markInvoiceAsPaid } from '../controllers/invoice2/markInvoiceAsPaid.js';
@@ -23,6 +24,8 @@ router.use(authenticate);
 router.use(extractWorkspace);
 
 router.route('/').get(getAllInvoices).post(createInvoice);
+
+router.route('/summary').get(getInvoiceSummary);
 
 router.route('/:id').get(getInvoice).patch(updateInvoice).put(updateInvoice).delete(deleteInvoice);
 
