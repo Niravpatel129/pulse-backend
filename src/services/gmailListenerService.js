@@ -150,8 +150,6 @@ class GmailListenerService {
       integration.lastSynced = new Date();
       await integration.save();
     } catch (error) {
-      console.error(`Error checking new emails for ${integration.email}:`, error);
-
       // If token expired or invalid, deactivate the integration
       if (error.code === 401) {
         console.log(
