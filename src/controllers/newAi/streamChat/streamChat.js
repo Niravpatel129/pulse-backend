@@ -269,10 +269,8 @@ export const streamChat = async (req, res) => {
         (lastResponses.has(currentAgent._id.toString()) &&
           lastResponses.get(currentAgent._id.toString()) === trimmedResponse)
       ) {
-        // Only mark agent as inactive if it's not the first turn
-        if (currentTurn > 0) {
-          activeAgents.delete(currentAgent._id.toString());
-        }
+        // Mark agent as inactive if they have nothing to add
+        activeAgents.delete(currentAgent._id.toString());
       } else if (trimmedResponse.startsWith('CONVERSATION_END:')) {
         // Extract the ending message
         const endMessage = trimmedResponse.substring('CONVERSATION_END:'.length).trim();
