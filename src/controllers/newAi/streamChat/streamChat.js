@@ -106,6 +106,11 @@ export const streamChat = async (req, res) => {
       // Get current agent
       const currentAgent = selectedAgents[currentAgentIndex];
 
+      // If there's only one agent, stop after first response
+      if (selectedAgents.length === 1 && currentTurn > 0) {
+        break;
+      }
+
       if (!activeAgents.has(currentAgent._id.toString())) {
         // Move to next agent if current one is inactive
         currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
@@ -133,6 +138,27 @@ export const streamChat = async (req, res) => {
       let fullResponse = '';
       let finishReason = null;
 
+      // Define available tools
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'search_web',
+            description: 'Search the web for current information about a topic',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'The search query to look up on the web',
+                },
+              },
+              required: ['query'],
+            },
+          },
+        },
+      ];
+
       // Create the chat completion stream for this agent
       const stream = await openai.chat.completions.create({
         model,
@@ -144,11 +170,14 @@ export const streamChat = async (req, res) => {
         presence_penalty,
         stop,
         stream: true,
+        tools: tools,
+        tool_choice: 'auto',
       });
 
       // Stream each chunk for this agent
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
+        const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
         finishReason = chunk.choices[0]?.finish_reason;
 
         if (content) {
@@ -174,6 +203,60 @@ export const streamChat = async (req, res) => {
               ],
             })}\n\n`,
           );
+        }
+
+        // Handle tool calls
+        if (toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
+            // Stream tool call information
+            res.write(
+              `data: ${JSON.stringify({
+                id: chunk.id,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: chunk.model,
+                agent: {
+                  id: currentAgent._id,
+                  name: currentAgent.name,
+                  icon: currentAgent.icon,
+                },
+                turn: currentTurn,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      tool_calls: [toolCall],
+                    },
+                    finish_reason: null,
+                  },
+                ],
+              })}\n\n`,
+            );
+
+            // If this is a complete tool call, execute it
+            if (toolCall.function) {
+              const { name, arguments: args } = toolCall.function;
+
+              if (name === 'search_web') {
+                try {
+                  const searchQuery = JSON.parse(args).query;
+                  // Here you would implement the actual web search
+                  // For now, we'll just simulate a response
+                  const searchResult = `Search results for: ${searchQuery}`;
+
+                  // Add the tool response to the conversation
+                  messagesToSend.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id,
+                    name: 'search_web',
+                    content: searchResult,
+                  });
+                } catch (error) {
+                  console.error('Error executing tool:', error);
+                }
+              }
+            }
+          }
         }
       }
 
