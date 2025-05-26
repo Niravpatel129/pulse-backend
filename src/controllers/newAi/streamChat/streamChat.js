@@ -126,91 +126,96 @@ export const streamChat = async (req, res) => {
     let activeAgents = new Set(selectedAgents.map((agent) => agent._id.toString()));
     let lastResponses = new Map();
     let currentAgentIndex = 0;
+    let agentChain = [];
+
+    // Create a chain of agents based on their roles and capabilities
+    if (selectedAgents.length > 0) {
+      agentChain = selectedAgents.sort((a, b) => {
+        const roleOrder = { primary: 0, secondary: 1, specialist: 2 };
+        return (roleOrder[a.role] || 0) - (roleOrder[b.role] || 0);
+      });
+    }
+
+    // Check for direct agent request in the message
+    const directAgentRequest = message.toLowerCase().match(/^(clara|leo)\s+(.+)$/i);
+    if (directAgentRequest) {
+      const [_, requestedAgent, actualMessage] = directAgentRequest;
+      const targetAgent = selectedAgents.find(
+        (a) => a.name.toLowerCase() === requestedAgent.toLowerCase(),
+      );
+
+      if (targetAgent) {
+        // Only activate the requested agent
+        activeAgents.clear();
+        activeAgents.add(targetAgent._id.toString());
+        currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
+
+        // Update the message to remove the agent name
+        message = actualMessage.trim();
+        userMessage.content = message;
+      }
+    }
 
     // Continue conversation until no more responses or max turns reached
     while (currentTurn < MAX_AGENT_TURNS && activeAgents.size > 0) {
-      // Get current agent
-      const currentAgent = selectedAgents[currentAgentIndex];
-
-      // If there's only one agent, stop after first response
-      if (selectedAgents.length === 1 && currentTurn > 0) {
-        break;
-      }
+      // Get current agent from the chain
+      const currentAgent = agentChain[currentAgentIndex];
 
       if (!activeAgents.has(currentAgent._id.toString())) {
         // Move to next agent if current one is inactive
-        currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
+        currentAgentIndex = (currentAgentIndex + 1) % agentChain.length;
         continue;
       }
 
-      // Create prompt manager for current agent
+      // Create prompt manager for current agent with chain context
       const promptManager = new PromptManager(currentAgent, currentTurn, MAX_AGENT_TURNS);
 
-      // Prepare messages for the API call
-      let messagesToSend = [];
+      // Add chain context to the system message
+      const chainContext = {
+        role: 'system',
+        content: `You are part of a collaborative AI chain. ${
+          agentChain.length > 1
+            ? `Other agents in the chain are: ${agentChain
+                .filter((a) => a._id.toString() !== currentAgent._id.toString())
+                .map((a) => `${a.name} (${a.role || 'general'})`)
+                .join(', ')}. `
+            : ''
+        } 
+          Based on the conversation context and your role, decide if you should respond and how to collaborate with other agents.
+          If you need input from another agent, use AGENT_QUERY or AGENT_COLLABORATE.
+          If you think another agent would be better suited to respond, use AGENT_TRANSFER.
+          If you think the conversation is complete, use CONVERSATION_END.`,
+      };
 
-      // Add system message first
+      // Prepare messages for the API call
+      let messagesToSend = [chainContext];
+
+      // Add system message
       const systemMessage = {
         role: 'system',
         content: promptManager.getFullPrompt(),
       };
       messagesToSend.push(systemMessage);
 
-      console.log('\n=== DEBUG: Conversation State ===');
-      console.log('Current Turn:', currentTurn);
-      console.log('Current Agent:', currentAgent.name);
-      console.log('Active Agents:', Array.from(activeAgents));
-
-      // Add conversation history, properly formatted
-      const recentMessages = conversation.messages.slice(-10); // Keep last 10 messages for context
-      console.log('\n=== DEBUG: Recent Messages ===');
-      console.log('Number of messages:', recentMessages.length);
-      recentMessages.forEach((msg, idx) => {
-        console.log(`\nMessage ${idx + 1}:`);
-        console.log('Role:', msg.role);
-        console.log('Content:', msg.content);
-        if (msg.agent) {
-          console.log('Agent:', msg.agent.name);
-        }
-      });
-
+      // Add conversation history
+      const recentMessages = conversation.messages.slice(-10);
       messagesToSend.push(...recentMessages);
-
-      console.log('\n=== DEBUG: Final Prompt ===');
-      console.log('Total messages to send:', messagesToSend.length);
-      messagesToSend.forEach((msg, idx) => {
-        console.log(`\nMessage ${idx + 1}:`);
-        console.log('Role:', msg.role);
-        console.log('Content:', msg.content);
-        if (msg.agent) {
-          console.log('Agent:', msg.agent.name);
-        }
-      });
 
       // Check token count and manage context window
       let totalTokens = countTokens(messagesToSend);
-      console.log('\n=== DEBUG: Token Count ===');
-      console.log('Total tokens:', totalTokens);
-      console.log('Max context tokens:', MAX_CONTEXT_TOKENS);
-
       if (totalTokens > MAX_CONTEXT_TOKENS) {
-        // Keep system message and last 2 messages
-        const systemMessage = messagesToSend[0];
+        const systemMessages = messagesToSend.slice(0, 2); // Keep chain context and system message
         const lastMessages = messagesToSend.slice(-2);
-
-        // Summarize the rest
-        const messagesToSummarize = messagesToSend.slice(1, -2);
+        const messagesToSummarize = messagesToSend.slice(2, -2);
         const summary = await summarizeMessages(messagesToSummarize);
-
-        // Reconstruct messages array with summary
         messagesToSend = [
-          systemMessage,
+          ...systemMessages,
           { role: 'system', content: `Previous conversation summary: ${summary}` },
           ...lastMessages,
         ];
       }
 
-      // Create the chat completion stream for this agent
+      // Create the chat completion stream
       const stream = await openai.chat.completions.create({
         model,
         messages: messagesToSend,
@@ -224,7 +229,7 @@ export const streamChat = async (req, res) => {
         tools: toolsManager.getTools(),
       });
 
-      // Stream each chunk for this agent
+      // Process stream and handle responses
       let fullResponse = '';
       let toolCall = null;
       let toolCallArgs = '';
@@ -237,7 +242,6 @@ export const streamChat = async (req, res) => {
         const finishReason = chunk.choices[0]?.finish_reason;
         lastFinishReason = finishReason || lastFinishReason;
 
-        // Handle content
         if (content) {
           fullResponse += content;
           res.write(
@@ -264,69 +268,84 @@ export const streamChat = async (req, res) => {
           );
         }
 
-        // Handle tool calls
-        if (toolCalls.length > 0) {
-          const currentToolCall = toolCalls[0];
-
-          if (currentToolCall.function?.name) {
-            toolCall = {
-              id: currentToolCall.id,
-              type: 'function',
-              function: {
-                name: currentToolCall.function.name,
-                arguments: '',
-              },
-            };
-          }
-
-          if (currentToolCall.function?.arguments) {
-            toolCallArgs += currentToolCall.function.arguments;
-          }
-        }
-
-        // Process tool call when finished
-        if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
-          try {
-            const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
-
-            // Add the tool response to the conversation
-            messagesToSend.push(toolsManager.createToolCallMessage(toolCall));
-            messagesToSend.push(toolsManager.createToolResponse(toolCall, searchResult));
-
-            // Stream the tool response
-            res.write(
-              `data: ${JSON.stringify({
-                id: chunk.id,
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: chunk.model,
-                sessionId: conversation._id,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
+        // Handle tool calls and agent coordination
+        if (
+          toolCalls.length > 0 ||
+          fullResponse.includes('AGENT_QUERY:') ||
+          fullResponse.includes('AGENT_COLLABORATE:') ||
+          fullResponse.includes('AGENT_TRANSFER:') ||
+          fullResponse.includes('CONVERSATION_END:')
+        ) {
+          // Process tool calls
+          if (toolCalls.length > 0) {
+            const currentToolCall = toolCalls[0];
+            if (currentToolCall.function?.name) {
+              toolCall = {
+                id: currentToolCall.id,
+                type: 'function',
+                function: {
+                  name: currentToolCall.function.name,
+                  arguments: '',
                 },
-                turn: currentTurn,
-                choices: [
-                  {
-                    index: 0,
-                    message: {
-                      role: 'assistant',
-                      content: null,
-                      tool_calls: [toolCall],
-                    },
-                    finish_reason: 'tool_calls',
-                  },
-                ],
-              })}\n\n`,
+              };
+            }
+            if (currentToolCall.function?.arguments) {
+              toolCallArgs += currentToolCall.function.arguments;
+            }
+          }
+
+          // Process agent coordination
+          const agentTransferMatch = fullResponse.match(/AGENT_TRANSFER:\s*(\w+):\s*(.*)/i);
+          const collaborationMatch = fullResponse.match(
+            /(?:AGENT_QUERY|AGENT_COLLABORATE):\s*(\w+):\s*(.*)/i,
+          );
+          const conversationEndMatch = fullResponse.match(/CONVERSATION_END:\s*(.*)/i);
+
+          if (agentTransferMatch) {
+            const [_, targetAgentName, reason] = agentTransferMatch;
+            const targetAgent = agentChain.find(
+              (a) => a.name.toLowerCase() === targetAgentName.toLowerCase(),
             );
 
-            hasProcessedToolCall = true;
-          } catch (error) {
-            console.error('Error executing tool:', error);
-            messagesToSend.push(
-              toolsManager.createToolResponse(toolCall, `Error executing search: ${error.message}`),
+            if (targetAgent && activeAgents.has(targetAgent._id.toString())) {
+              // Transfer to the target agent
+              currentAgentIndex = agentChain.findIndex((a) => a._id.equals(targetAgent._id));
+
+              // Add the transfer context
+              const transferMessage = {
+                role: 'system',
+                content: `Previous agent transferred to ${targetAgentName} because: ${reason}`,
+              };
+              messagesToSend = [transferMessage, ...messagesToSend];
+            }
+          } else if (collaborationMatch) {
+            const [_, targetAgentName, query] = collaborationMatch;
+            const targetAgent = agentChain.find(
+              (a) => a.name.toLowerCase() === targetAgentName.toLowerCase(),
             );
+
+            if (targetAgent && activeAgents.has(targetAgent._id.toString())) {
+              // Move to the target agent in the next turn
+              currentAgentIndex = agentChain.findIndex((a) => a._id.equals(targetAgent._id));
+
+              // Add the collaboration request to the conversation context
+              const collaborationMessage = {
+                role: 'system',
+                content: `Previous agent requested ${
+                  fullResponse.includes('AGENT_QUERY:') ? 'input' : 'collaboration'
+                } from ${targetAgentName}: ${query}`,
+              };
+              messagesToSend = [collaborationMessage, ...messagesToSend];
+            }
+          } else if (conversationEndMatch) {
+            const [_, endMessage] = conversationEndMatch;
+            // End the conversation
+            activeAgents.clear();
+            const endSystemMessage = {
+              role: 'system',
+              content: `Conversation ended by ${currentAgent.name}: ${endMessage}`,
+            };
+            messagesToSend = [endSystemMessage, ...messagesToSend];
           }
         }
       }
@@ -343,73 +362,10 @@ export const streamChat = async (req, res) => {
         continue;
       }
 
-      // Mark agent as inactive after providing their response
-      activeAgents.delete(currentAgent._id.toString());
-
-      if (
-        trimmedResponse.toUpperCase() === 'NO_RESPONSE_NEEDED' ||
-        trimmedResponse.toUpperCase() === 'TASK_COMPLETE' ||
-        (lastResponses.has(currentAgent._id.toString()) &&
-          lastResponses.get(currentAgent._id.toString()) === trimmedResponse)
-      ) {
-        // Agent already marked as inactive above
-        continue;
-      } else if (trimmedResponse.startsWith('CONVERSATION_END:')) {
-        // Extract the ending message
-        const endMessage = trimmedResponse.substring('CONVERSATION_END:'.length).trim();
-        // Mark all agents as inactive to end the conversation
-        activeAgents.clear();
-        // Add the ending message to the conversation
-        const endSystemMessage = {
-          role: 'system',
-          content: `Conversation ended by ${currentAgent.name}: ${endMessage}`,
-        };
-        messagesToSend = [endSystemMessage, ...messagesToSend];
-      } else if (currentTurn === MAX_AGENT_TURNS - 1) {
-        // Force conversation end on the last turn if not already ended
-        const forcedEndMessage = `${currentAgent.name} has reached the maximum number of turns (${MAX_AGENT_TURNS}). Ending conversation.`;
-        const endSystemMessage = {
-          role: 'system',
-          content: forcedEndMessage,
-        };
-        messagesToSend = [endSystemMessage, ...messagesToSend];
-        activeAgents.clear();
-      } else if (
-        trimmedResponse.startsWith('AGENT_QUERY:') ||
-        trimmedResponse.startsWith('AGENT_COLLABORATE:')
-      ) {
-        // Extract the query and target agent
-        const queryMatch = trimmedResponse.match(
-          /(?:AGENT_QUERY|AGENT_COLLABORATE):\s*(\w+):\s*(.*)/i,
-        );
-        if (queryMatch) {
-          const [_, targetAgentName, query] = queryMatch;
-          const targetAgent = selectedAgents.find(
-            (a) => a.name.toLowerCase() === targetAgentName.toLowerCase(),
-          );
-
-          if (targetAgent && activeAgents.has(targetAgent._id.toString())) {
-            // Move to the target agent in the next turn
-            currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
-
-            // Add the query/collaboration request to the conversation context
-            const collaborationMessage = {
-              role: 'system',
-              content: `Previous agent requested ${
-                trimmedResponse.startsWith('AGENT_QUERY:') ? 'input' : 'collaboration'
-              } from ${targetAgentName}: ${query}`,
-            };
-            messagesToSend = [collaborationMessage, ...messagesToSend];
-          }
-        }
-      }
-
       // Add AI response to conversation
       const aiMessage = {
         role: 'assistant',
-        content: hasProcessedToolCall
-          ? 'Processing your request...'
-          : fullResponse || 'No response generated',
+        content: hasProcessedToolCall ? 'Processing your request...' : fullResponse,
         agent: {
           id: currentAgent._id,
           name: currentAgent.name,
@@ -420,122 +376,9 @@ export const streamChat = async (req, res) => {
 
       // Save after adding agent response
       await conversation.save();
-      console.log('\n=== DEBUG: After Adding Agent Response ===');
-      console.log('Agent:', currentAgent.name);
-      console.log('Total messages after save:', conversation.messages.length);
-      console.log('Last message:', conversation.messages[conversation.messages.length - 1]);
 
-      lastResponses.set(currentAgent._id.toString(), trimmedResponse);
-
-      // If we processed a tool call, continue the conversation
-      if (hasProcessedToolCall) {
-        // Create a new stream for the follow-up response
-        const followUpStream = await openai.chat.completions.create({
-          model,
-          messages: messagesToSend,
-          temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
-          max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
-          top_p,
-          frequency_penalty,
-          presence_penalty,
-          stop,
-          stream: true,
-        });
-
-        // Reset state for follow-up response
-        fullResponse = '';
-        toolCall = null;
-        toolCallArgs = '';
-        hasProcessedToolCall = false;
-        lastFinishReason = null;
-
-        // Process follow-up response
-        for await (const chunk of followUpStream) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          const finishReason = chunk.choices[0]?.finish_reason;
-          lastFinishReason = finishReason || lastFinishReason;
-
-          if (content) {
-            fullResponse += content;
-            res.write(
-              `data: ${JSON.stringify({
-                id: chunk.id,
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: chunk.model,
-                sessionId: conversation._id,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
-                turn: currentTurn,
-                choices: [
-                  {
-                    index: 0,
-                    delta: { content },
-                    finish_reason: null,
-                  },
-                ],
-              })}\n\n`,
-            );
-          }
-        }
-
-        // Add follow-up response to conversation
-        if (fullResponse.trim()) {
-          const followUpMessage = {
-            role: 'assistant',
-            content: fullResponse,
-            agent: {
-              id: currentAgent._id,
-              name: currentAgent.name,
-              icon: currentAgent.icon,
-            },
-          };
-          conversation.messages.push(followUpMessage);
-        }
-      }
-
-      // Send completion event
-      res.write(
-        `data: ${JSON.stringify({
-          id: conversation._id,
-          object: 'chat.completion',
-          created: Math.floor(Date.now() / 1000),
-          model,
-          sessionId: conversation._id,
-          agent: {
-            id: currentAgent._id,
-            name: currentAgent.name,
-            icon: currentAgent.icon,
-          },
-          turn: currentTurn,
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: fullResponse,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
-              },
-              finish_reason: lastFinishReason,
-            },
-          ],
-          usage: {
-            prompt_tokens: totalTokens,
-            completion_tokens: Math.ceil(fullResponse.length / 4),
-            total_tokens: totalTokens + Math.ceil(fullResponse.length / 4),
-          },
-        })}\n\n`,
-      );
-
-      // Move to next agent
-      currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
+      // Move to next agent in chain
+      currentAgentIndex = (currentAgentIndex + 1) % agentChain.length;
       currentTurn++;
     }
 

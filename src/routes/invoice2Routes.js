@@ -16,9 +16,11 @@ import { updateInvoice } from '../controllers/invoice2/updateInvoice.js';
 import { updateInvoiceStatus } from '../controllers/invoice2/updateInvoiceStatus.js';
 import { validateInvoiceNumber } from '../controllers/invoice2/validateInvoiceNumber.js';
 import { authenticate } from '../middleware/auth.js';
-import { extractWorkspace } from '../middleware/workspace.js';
+import { extractWorkspace, extractWorkspaceWithoutAuth } from '../middleware/workspace.js';
 
 const router = express.Router();
+
+router.route('/:id').get(extractWorkspaceWithoutAuth, getInvoice);
 
 router.use(authenticate);
 router.use(extractWorkspace);
@@ -27,7 +29,7 @@ router.route('/').get(getAllInvoices).post(createInvoice);
 
 router.route('/summary').get(getInvoiceSummary);
 
-router.route('/:id').get(getInvoice).patch(updateInvoice).put(updateInvoice).delete(deleteInvoice);
+router.route('/:id').patch(updateInvoice).put(updateInvoice).delete(deleteInvoice);
 
 router.route('/:id/status').patch(updateInvoiceStatus).put(updateInvoiceStatus);
 
