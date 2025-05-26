@@ -111,10 +111,41 @@ export const streamChat = async (req, res) => {
         continue;
       }
 
-      // Get agent's system prompt
-      const systemPrompt =
-        currentAgent.sections.find((s) => s.type === 'system_prompt')?.content ||
+      // Get agent's system prompt and other sections
+      const systemPromptSection = currentAgent.sections.find((s) => s.type === 'system_prompt');
+      const instructionsSection = currentAgent.sections.find((s) => s.type === 'instructions');
+      const outputStructureSection = currentAgent.sections.find(
+        (s) => s.type === 'output_structure',
+      );
+      const examplesSection = currentAgent.sections.find((s) => s.type === 'examples');
+      const toolsSection = currentAgent.sections.find((s) => s.type === 'tools');
+
+      // Construct the full system prompt
+      let fullSystemPrompt =
+        systemPromptSection?.content ||
         'You are a helpful AI assistant. Keep responses concise and relevant.';
+
+      // Add instructions if available
+      if (instructionsSection?.content) {
+        fullSystemPrompt += `\n\nInstructions:\n${instructionsSection.content}`;
+      }
+
+      // Add output structure if available
+      if (outputStructureSection?.content) {
+        fullSystemPrompt += `\n\nExpected Output Structure:\n${outputStructureSection.content}`;
+      }
+
+      // Add examples if available
+      if (examplesSection?.examples) {
+        fullSystemPrompt += `\n\nExamples:\n${examplesSection.examples}`;
+      }
+
+      // Add available tools if any
+      if (toolsSection?.tools?.length > 0) {
+        fullSystemPrompt += `\n\nAvailable Tools:\n${toolsSection.tools
+          .map((tool) => `- ${tool.name} (${tool.id})`)
+          .join('\n')}`;
+      }
 
       // Add conversation context
       const conversationContext = `You are participating in a conversation with other AI agents. 
@@ -155,7 +186,7 @@ export const streamChat = async (req, res) => {
 
       const systemMessage = {
         role: 'system',
-        content: `${systemPrompt}\n\n${conversationContext}`,
+        content: `${fullSystemPrompt}\n\n${conversationContext}`,
       };
 
       let fullResponse = '';
