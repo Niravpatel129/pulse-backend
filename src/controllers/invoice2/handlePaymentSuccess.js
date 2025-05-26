@@ -59,18 +59,20 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
   // Determine new status
   const newStatus = 'paid';
   // Add status change to history
-  const statusChangeEntry = {
-    status: newStatus,
-    changedAt: new Date(),
-    changedBy: req.user?.userId || 'system',
-    reason: isFullPayment
-      ? `Payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received - Invoice paid in full`
-      : isDepositPayment
-      ? `Deposit payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`
-      : `Partial payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`,
-  };
+  if (req.user?.userId) {
+    const statusChangeEntry = {
+      status: newStatus,
+      changedAt: new Date(),
+      changedBy: req.user.userId,
+      reason: isFullPayment
+        ? `Payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received - Invoice paid in full`
+        : isDepositPayment
+        ? `Deposit payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`
+        : `Partial payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`,
+    };
 
-  invoice.statusHistory.push(statusChangeEntry);
+    invoice.statusHistory.push(statusChangeEntry);
+  }
 
   // Update invoice status
   invoice.status = newStatus;

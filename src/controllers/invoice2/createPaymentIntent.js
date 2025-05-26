@@ -85,11 +85,11 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
     const isInternalRequest =
       req.user && String(req.user.workspaceId) === String(invoice.workspace);
 
-    if (!isInternalRequest) {
+    if (!isInternalRequest && req.user?.userId) {
       const paymentAttemptEntry = {
         status: invoice.status,
         changedAt: new Date(),
-        changedBy: req.user?.userId || 'system',
+        changedBy: req.user.userId,
         reason: isDeposit
           ? `Client initiated a deposit payment of ${
               paymentAmount / 100
