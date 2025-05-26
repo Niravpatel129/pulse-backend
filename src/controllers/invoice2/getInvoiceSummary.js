@@ -1,14 +1,23 @@
+import mongoose from 'mongoose';
 import Invoice2 from '../../models/invoice2.js';
 import catchAsync from '../../utils/catchAsync.js';
 
 export const getInvoiceSummary = catchAsync(async (req, res, next) => {
   const workspace = req.workspace._id;
 
+  // Validate workspace ID
+  if (!workspace || !mongoose.Types.ObjectId.isValid(workspace)) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Invalid workspace ID',
+    });
+  }
+
   // Get summary for each status
   const summary = await Invoice2.aggregate([
     {
       $match: {
-        workspace,
+        workspace: new mongoose.Types.ObjectId(workspace),
         status: { $in: ['open', 'overdue', 'paid'] },
       },
     },
