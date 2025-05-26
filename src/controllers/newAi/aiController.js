@@ -41,9 +41,9 @@ export const streamChat = async (req, res) => {
     const {
       message,
       sessionId,
-      model = 'gpt-3.5-turbo',
+      model = 'gpt-4o',
       temperature = 0.7,
-      max_tokens = 1000,
+      max_tokens = 8000,
       top_p = 1,
       frequency_penalty = 0,
       presence_penalty = 0,
