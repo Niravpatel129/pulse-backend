@@ -10,10 +10,6 @@ const toolSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  description: {
-    type: String,
-    required: true,
-  },
 });
 
 const sectionSchema = new mongoose.Schema({
@@ -42,11 +38,7 @@ const agentSchema = new mongoose.Schema(
       required: [true, 'Agent name is required'],
       trim: true,
     },
-    description: {
-      type: String,
-      required: [true, 'Agent description is required'],
-      trim: true,
-    },
+
     icon: String,
     sections: [sectionSchema],
     workspace: {
