@@ -34,41 +34,46 @@ class PromptManager {
         .join('\n')}`;
     }
 
+    console.log('\n=== DEBUG: System Prompt ===');
+    console.log('Agent:', this.agent.name);
+    console.log('System Prompt:', fullSystemPrompt);
+
     return fullSystemPrompt;
   }
 
   getConversationContext() {
     return `You are participating in a conversation with other AI agents. 
       Current turn: ${this.currentTurn + 1} of ${this.maxTurns}
-      ${
-        this.currentTurn === 0
-          ? 'This is the initial user message.'
-          : 'Other agents have responded to the conversation.'
-      }
-      ${
-        this.currentTurn > 0
-          ? 'Consider the previous responses and decide if you want to add to the conversation.'
-          : ''
-      }
   
       IMPORTANT: 
-      1. If you don't have anything new or meaningful to add, respond with "NO_RESPONSE_NEEDED"
-      2. For natural turn-based conversations (like telling jokes), just respond naturally without special prefixes
-      3. Only use special prefixes in these specific cases:
+      1. Each agent should provide exactly ONE response and then stop
+      2. If you don't have anything meaningful to add, respond with "NO_RESPONSE_NEEDED"
+      3. For natural turn-based conversations, just respond naturally without special prefixes
+      4. Only use special prefixes in these specific cases:
          - Use "AGENT_QUERY:" when you need specific information from another agent
          - Use "AGENT_COLLABORATE:" when you need to work together on a complex task
-      4. Your response should be unique and add value to the conversation
-      5. Keep your responses concise and focused
-      6. If you have completed your initial task, respond with "TASK_COMPLETE" instead of continuing the conversation
-      7. You are limited to ${
-        this.maxTurns
-      } turns total. When approaching this limit, you should wrap up the conversation gracefully
-      9. Always acknowledge the other agent's response before providing your own
-      10. Track the turn count - you are on turn ${this.currentTurn + 1} of ${this.maxTurns}`;
+      5. Your response should be unique and add value to the conversation
+      6. Keep your responses concise and focused
+      7. Always acknowledge the other agent's response before providing your own
+      8. After providing your single response, do not continue the conversation
+      9. Track the turn count - you are on turn ${this.currentTurn + 1} of ${this.maxTurns}
+      10. For joke-telling scenarios:
+          - Tell exactly ONE joke
+          - Do not add commentary or ask questions
+          - Do not try to continue the conversation
+          - After telling your joke, the conversation will automatically move to the next agent
+          - Maintain awareness of the conversation context and previous jokes
+          - Do not repeat jokes that have already been told`;
   }
 
   getFullPrompt() {
-    return `${this.getSystemPrompt()}\n\n${this.getConversationContext()}`;
+    const fullPrompt = `${this.getSystemPrompt()}\n\n${this.getConversationContext()}`;
+
+    console.log('\n=== DEBUG: Full Prompt ===');
+    console.log('Agent:', this.agent.name);
+    console.log('Full Prompt:', fullPrompt);
+
+    return fullPrompt;
   }
 }
 

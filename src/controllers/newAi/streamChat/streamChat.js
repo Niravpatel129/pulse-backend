@@ -64,6 +64,22 @@ export const streamChat = async (req, res) => {
         _id: sessionId,
         workspace: workspaceId,
       });
+
+      console.log('\n=== DEBUG: MongoDB Conversation ===');
+      console.log('Session ID:', sessionId);
+      console.log('Found conversation:', conversation ? 'Yes' : 'No');
+      if (conversation) {
+        console.log('Total messages in DB:', conversation.messages.length);
+        console.log('Messages in DB:');
+        conversation.messages.forEach((msg, idx) => {
+          console.log(`\nDB Message ${idx + 1}:`);
+          console.log('Role:', msg.role);
+          console.log('Content:', msg.content);
+          if (msg.agent) {
+            console.log('Agent:', msg.agent.name);
+          }
+        });
+      }
     }
 
     if (!conversation) {
@@ -82,6 +98,8 @@ export const streamChat = async (req, res) => {
         messages: [],
         title: title,
       });
+      console.log('\n=== DEBUG: Created New Conversation ===');
+      console.log('Title:', title);
     }
 
     // Add user message
@@ -90,6 +108,12 @@ export const streamChat = async (req, res) => {
       content: message,
     };
     conversation.messages.push(userMessage);
+
+    // Save after adding user message
+    await conversation.save();
+    console.log('\n=== DEBUG: After Adding User Message ===');
+    console.log('Total messages after save:', conversation.messages.length);
+    console.log('Last message:', conversation.messages[conversation.messages.length - 1]);
 
     // Set up streaming response
     res.setHeader('Content-Type', 'text/event-stream');
@@ -122,25 +146,74 @@ export const streamChat = async (req, res) => {
       // Create prompt manager for current agent
       const promptManager = new PromptManager(currentAgent, currentTurn, MAX_AGENT_TURNS);
 
-      // Check token count and manage context window
-      let messagesToSend = [...conversation.messages];
-      let totalTokens = countTokens(messagesToSend);
+      // Prepare messages for the API call
+      let messagesToSend = [];
 
-      if (totalTokens > MAX_CONTEXT_TOKENS) {
-        const messagesToSummarize = messagesToSend.slice(0, -5); // Keep last 5 messages
-        const summary = await summarizeMessages(messagesToSummarize);
-        messagesToSend = [{ role: 'system', content: summary }, ...messagesToSend.slice(-5)];
-      }
-
+      // Add system message first
       const systemMessage = {
         role: 'system',
         content: promptManager.getFullPrompt(),
       };
+      messagesToSend.push(systemMessage);
+
+      console.log('\n=== DEBUG: Conversation State ===');
+      console.log('Current Turn:', currentTurn);
+      console.log('Current Agent:', currentAgent.name);
+      console.log('Active Agents:', Array.from(activeAgents));
+
+      // Add conversation history, properly formatted
+      const recentMessages = conversation.messages.slice(-10); // Keep last 10 messages for context
+      console.log('\n=== DEBUG: Recent Messages ===');
+      console.log('Number of messages:', recentMessages.length);
+      recentMessages.forEach((msg, idx) => {
+        console.log(`\nMessage ${idx + 1}:`);
+        console.log('Role:', msg.role);
+        console.log('Content:', msg.content);
+        if (msg.agent) {
+          console.log('Agent:', msg.agent.name);
+        }
+      });
+
+      messagesToSend.push(...recentMessages);
+
+      console.log('\n=== DEBUG: Final Prompt ===');
+      console.log('Total messages to send:', messagesToSend.length);
+      messagesToSend.forEach((msg, idx) => {
+        console.log(`\nMessage ${idx + 1}:`);
+        console.log('Role:', msg.role);
+        console.log('Content:', msg.content);
+        if (msg.agent) {
+          console.log('Agent:', msg.agent.name);
+        }
+      });
+
+      // Check token count and manage context window
+      let totalTokens = countTokens(messagesToSend);
+      console.log('\n=== DEBUG: Token Count ===');
+      console.log('Total tokens:', totalTokens);
+      console.log('Max context tokens:', MAX_CONTEXT_TOKENS);
+
+      if (totalTokens > MAX_CONTEXT_TOKENS) {
+        // Keep system message and last 2 messages
+        const systemMessage = messagesToSend[0];
+        const lastMessages = messagesToSend.slice(-2);
+
+        // Summarize the rest
+        const messagesToSummarize = messagesToSend.slice(1, -2);
+        const summary = await summarizeMessages(messagesToSummarize);
+
+        // Reconstruct messages array with summary
+        messagesToSend = [
+          systemMessage,
+          { role: 'system', content: `Previous conversation summary: ${summary}` },
+          ...lastMessages,
+        ];
+      }
 
       // Create the chat completion stream for this agent
       const stream = await openai.chat.completions.create({
         model,
-        messages: [systemMessage, ...messagesToSend],
+        messages: messagesToSend,
         temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
         max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
         top_p,
@@ -158,22 +231,11 @@ export const streamChat = async (req, res) => {
       let hasProcessedToolCall = false;
       let lastFinishReason = null;
 
-      console.log('Starting stream for agent:', currentAgent.name);
-
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
         const finishReason = chunk.choices[0]?.finish_reason;
         lastFinishReason = finishReason || lastFinishReason;
-
-        console.log('Received chunk:', {
-          content,
-          toolCalls,
-          finishReason,
-          hasToolCall: !!toolCall,
-          toolCallArgs,
-          hasProcessedToolCall,
-        });
 
         // Handle content
         if (content) {
@@ -184,6 +246,7 @@ export const streamChat = async (req, res) => {
               object: 'chat.completion.chunk',
               created: Math.floor(Date.now() / 1000),
               model: chunk.model,
+              sessionId: conversation._id,
               agent: {
                 id: currentAgent._id,
                 name: currentAgent.name,
@@ -204,7 +267,6 @@ export const streamChat = async (req, res) => {
         // Handle tool calls
         if (toolCalls.length > 0) {
           const currentToolCall = toolCalls[0];
-          console.log('Processing tool call:', currentToolCall);
 
           if (currentToolCall.function?.name) {
             toolCall = {
@@ -215,23 +277,15 @@ export const streamChat = async (req, res) => {
                 arguments: '',
               },
             };
-            console.log('Initialized tool call:', toolCall);
           }
 
           if (currentToolCall.function?.arguments) {
             toolCallArgs += currentToolCall.function.arguments;
-            console.log('Accumulated tool call args:', toolCallArgs);
           }
         }
 
         // Process tool call when finished
         if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
-          console.log('Processing complete tool call:', {
-            toolCall,
-            toolCallArgs,
-            finishReason,
-          });
-
           try {
             const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
 
@@ -246,6 +300,7 @@ export const streamChat = async (req, res) => {
                 object: 'chat.completion.chunk',
                 created: Math.floor(Date.now() / 1000),
                 model: chunk.model,
+                sessionId: conversation._id,
                 agent: {
                   id: currentAgent._id,
                   name: currentAgent.name,
@@ -278,12 +333,6 @@ export const streamChat = async (req, res) => {
 
       // Process the response
       const trimmedResponse = fullResponse.trim();
-      console.log('Final response state:', {
-        trimmedResponse,
-        hasToolCall: !!toolCall,
-        toolCallArgs,
-        hasProcessedToolCall,
-      });
 
       if (!trimmedResponse && !hasProcessedToolCall) {
         console.warn('Empty response received from agent:', {
@@ -294,14 +343,17 @@ export const streamChat = async (req, res) => {
         continue;
       }
 
+      // Mark agent as inactive after providing their response
+      activeAgents.delete(currentAgent._id.toString());
+
       if (
         trimmedResponse.toUpperCase() === 'NO_RESPONSE_NEEDED' ||
         trimmedResponse.toUpperCase() === 'TASK_COMPLETE' ||
         (lastResponses.has(currentAgent._id.toString()) &&
           lastResponses.get(currentAgent._id.toString()) === trimmedResponse)
       ) {
-        // Mark agent as inactive if they have nothing to add
-        activeAgents.delete(currentAgent._id.toString());
+        // Agent already marked as inactive above
+        continue;
       } else if (trimmedResponse.startsWith('CONVERSATION_END:')) {
         // Extract the ending message
         const endMessage = trimmedResponse.substring('CONVERSATION_END:'.length).trim();
@@ -365,6 +417,14 @@ export const streamChat = async (req, res) => {
         },
       };
       conversation.messages.push(aiMessage);
+
+      // Save after adding agent response
+      await conversation.save();
+      console.log('\n=== DEBUG: After Adding Agent Response ===');
+      console.log('Agent:', currentAgent.name);
+      console.log('Total messages after save:', conversation.messages.length);
+      console.log('Last message:', conversation.messages[conversation.messages.length - 1]);
+
       lastResponses.set(currentAgent._id.toString(), trimmedResponse);
 
       // If we processed a tool call, continue the conversation
@@ -403,6 +463,7 @@ export const streamChat = async (req, res) => {
                 object: 'chat.completion.chunk',
                 created: Math.floor(Date.now() / 1000),
                 model: chunk.model,
+                sessionId: conversation._id,
                 agent: {
                   id: currentAgent._id,
                   name: currentAgent.name,
@@ -443,6 +504,7 @@ export const streamChat = async (req, res) => {
           object: 'chat.completion',
           created: Math.floor(Date.now() / 1000),
           model,
+          sessionId: conversation._id,
           agent: {
             id: currentAgent._id,
             name: currentAgent.name,

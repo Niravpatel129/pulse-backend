@@ -20,6 +20,14 @@ const messageSchema = new mongoose.Schema(
       name: String,
       arguments: String,
     },
+    agent: {
+      id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Agent',
+      },
+      name: String,
+      icon: String,
+    },
   },
   { _id: false },
 );
@@ -49,6 +57,7 @@ const aiConversationSchema = new mongoose.Schema(
 // Index for more efficient queries
 aiConversationSchema.index({ workspace: 1, createdAt: -1 });
 aiConversationSchema.index({ lastActive: -1 });
+aiConversationSchema.index({ 'messages.agent.id': 1 });
 
 const AIConversation = mongoose.model('AIConversation', aiConversationSchema);
 
