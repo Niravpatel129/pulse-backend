@@ -4,7 +4,7 @@ import {
   getConversationHistory,
   listConversations,
   streamChat,
-} from '../../controllers/newAi/aiController.js';
+} from '../../controllers/newAi/index.js';
 import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 

@@ -1,40 +1,8 @@
 import mongoose from 'mongoose';
-import OpenAI from 'openai';
-import AIConversation from '../../models/AIConversation.js';
-import ChatSettings from '../../models/ChatSettings.js';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const countTokens = (messages) => {
-  return messages.reduce((count, msg) => count + Math.ceil(msg.content.length / 4), 0);
-};
-
-// Utility function to summarize messages
-const summarizeMessages = async (messages) => {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Summarize the following conversation in a concise way that preserves key information and context.',
-        },
-        ...messages,
-      ],
-      temperature: 0.3,
-      max_tokens: 150,
-    });
-    return response.choices[0].message.content;
-  } catch (error) {
-    console.error('Error summarizing messages:', error);
-    return 'Previous conversation context';
-  }
-};
-
-const MAX_CONTEXT_TOKENS = 4000;
+import openai from '../../../config/openai.js';
+import AIConversation from '../../../models/AIConversation.js';
+import ChatSettings from '../../../models/ChatSettings.js';
+import { countTokens, MAX_CONTEXT_TOKENS, summarizeMessages } from '../../../utils/aiUtils.js';
 
 export const streamChat = async (req, res) => {
   try {
@@ -217,77 +185,5 @@ export const streamChat = async (req, res) => {
       );
       res.end();
     }
-  }
-};
-
-export const clearChatHistory = async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const workspaceId = req.workspace._id;
-
-    await AIConversation.findOneAndDelete({
-      _id: sessionId,
-      workspace: workspaceId,
-    });
-
-    return res.json({
-      status: 'success',
-      message: 'Conversation history cleared',
-    });
-  } catch (error) {
-    console.error('Error clearing conversation history:', error);
-    return res.status(500).json({
-      error: error.message,
-    });
-  }
-};
-
-export const listConversations = async (req, res) => {
-  try {
-    const workspaceId = req.workspace._id;
-
-    const conversations = await AIConversation.find({ workspace: workspaceId })
-      .select('title lastActive createdAt')
-      .sort({ lastActive: -1 });
-
-    return res.json({
-      status: 'success',
-      conversations,
-    });
-  } catch (error) {
-    console.error('Error listing conversations:', error);
-    return res.status(500).json({
-      error: error.message,
-    });
-  }
-};
-
-export const getConversationHistory = async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const workspaceId = req.workspace._id;
-
-    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
-      return res.status(400).json({ error: 'Invalid session ID' });
-    }
-
-    const conversation = await AIConversation.findOne({
-      _id: sessionId,
-      workspace: workspaceId,
-    }).select('title messages lastActive createdAt');
-
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-
-    return res.json({
-      status: 'success',
-      conversation,
-    });
-  } catch (error) {
-    console.error('Error getting conversation history:', error);
-    return res.status(500).json({
-      error: error.message,
-    });
   }
 };
