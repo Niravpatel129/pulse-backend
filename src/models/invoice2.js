@@ -171,7 +171,7 @@ const invoice2Schema = new mongoose.Schema(
       {
         status: {
           type: String,
-          enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled'],
+          enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled', 'seen'],
           required: true,
         },
         changedAt: {
@@ -181,7 +181,7 @@ const invoice2Schema = new mongoose.Schema(
         changedBy: {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'User',
-          required: true,
+          required: false,
         },
         reason: {
           type: String,

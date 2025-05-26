@@ -82,23 +82,18 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
     // Add a timeline entry for the payment intent creation
     // Don't add timeline entry if request comes from workspace user (for testing)
-    const isInternalRequest =
-      req.user && String(req.user.workspaceId) === String(invoice.workspace);
 
-    if (!isInternalRequest && req.user?.userId) {
-      const paymentAttemptEntry = {
-        status: invoice.status,
-        changedAt: new Date(),
-        changedBy: req.user.userId,
-        reason: isDeposit
-          ? `Client initiated a deposit payment of ${
-              paymentAmount / 100
-            } ${paymentCurrency.toUpperCase()}`
-          : `Client initiated a payment of ${paymentAmount / 100} ${paymentCurrency.toUpperCase()}`,
-      };
+    const paymentAttemptEntry = {
+      status: 'seen',
+      changedAt: new Date(),
+      reason: isDeposit
+        ? `Client initiated a deposit payment of ${
+            paymentAmount / 100
+          } ${paymentCurrency.toUpperCase()}`
+        : `Client initiated a payment of ${paymentAmount / 100} ${paymentCurrency.toUpperCase()}`,
+    };
 
-      invoice.statusHistory.push(paymentAttemptEntry);
-    }
+    invoice.statusHistory.push(paymentAttemptEntry);
 
     await invoice.save();
 
