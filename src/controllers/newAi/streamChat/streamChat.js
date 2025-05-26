@@ -1,9 +1,10 @@
 import mongoose from 'mongoose';
 import openai from '../../../config/openai.js';
+import Agent from '../../../models/agentModel.js';
 import AIConversation from '../../../models/AIConversation.js';
 import ChatSettings from '../../../models/ChatSettings.js';
-import Agent from '../../../models/agentModel.js';
 import { countTokens, MAX_CONTEXT_TOKENS, summarizeMessages } from '../../../utils/aiUtils.js';
+import PromptManager from '../../../utils/PromptManager.js';
 
 const MAX_AGENT_TURNS = 5; // Maximum number of turns in the agent conversation
 const MAX_COMPLETION_TOKENS = 2000; // Maximum tokens for completion
@@ -111,68 +112,8 @@ export const streamChat = async (req, res) => {
         continue;
       }
 
-      // Get agent's system prompt and other sections
-      const systemPromptSection = currentAgent.sections.find((s) => s.type === 'system_prompt');
-      const instructionsSection = currentAgent.sections.find((s) => s.type === 'instructions');
-      const outputStructureSection = currentAgent.sections.find(
-        (s) => s.type === 'output_structure',
-      );
-      const examplesSection = currentAgent.sections.find((s) => s.type === 'examples');
-      const toolsSection = currentAgent.sections.find((s) => s.type === 'tools');
-
-      // Construct the full system prompt
-      let fullSystemPrompt =
-        systemPromptSection?.content ||
-        'You are a helpful AI assistant. Keep responses concise and relevant.';
-
-      // Add instructions if available
-      if (instructionsSection?.content) {
-        fullSystemPrompt += `\n\nInstructions:\n${instructionsSection.content}`;
-      }
-
-      // Add output structure if available
-      if (outputStructureSection?.content) {
-        fullSystemPrompt += `\n\nExpected Output Structure:\n${outputStructureSection.content}`;
-      }
-
-      // Add examples if available
-      if (examplesSection?.examples) {
-        fullSystemPrompt += `\n\nExamples:\n${examplesSection.examples}`;
-      }
-
-      // Add available tools if any
-      if (toolsSection?.tools?.length > 0) {
-        fullSystemPrompt += `\n\nAvailable Tools:\n${toolsSection.tools
-          .map((tool) => `- ${tool.name} (${tool.id})`)
-          .join('\n')}`;
-      }
-
-      // Add conversation context
-      const conversationContext = `You are participating in a conversation with other AI agents. 
-        Current turn: ${currentTurn + 1} of ${MAX_AGENT_TURNS}
-        ${
-          currentTurn === 0
-            ? 'This is the initial user message.'
-            : 'Other agents have responded to the conversation.'
-        }
-        ${
-          currentTurn > 0
-            ? 'Consider the previous responses and decide if you want to add to the conversation.'
-            : ''
-        }
-    
-        IMPORTANT: 
-        1. If you don't have anything new or meaningful to add, respond with "NO_RESPONSE_NEEDED"
-        2. For natural turn-based conversations (like telling jokes), just respond naturally without special prefixes
-        3. Only use special prefixes in these specific cases:
-           - Use "AGENT_QUERY:" when you need specific information from another agent
-           - Use "AGENT_COLLABORATE:" when you need to work together on a complex task
-        4. Your response should be unique and add value to the conversation
-        5. Keep your responses concise and focused
-        6. If you have completed your initial task, respond with "TASK_COMPLETE" instead of continuing the conversation
-        7. You are limited to ${MAX_AGENT_TURNS} turns total. When approaching this limit, you should wrap up the conversation gracefully
-        9. Always acknowledge the other agent's response before providing your own
-        10. Track the turn count - you are on turn ${currentTurn + 1} of ${MAX_AGENT_TURNS}`;
+      // Create prompt manager for current agent
+      const promptManager = new PromptManager(currentAgent, currentTurn, MAX_AGENT_TURNS);
 
       // Check token count and manage context window
       let messagesToSend = [...conversation.messages];
@@ -186,7 +127,7 @@ export const streamChat = async (req, res) => {
 
       const systemMessage = {
         role: 'system',
-        content: `${fullSystemPrompt}\n\n${conversationContext}`,
+        content: promptManager.getFullPrompt(),
       };
 
       let fullResponse = '';
