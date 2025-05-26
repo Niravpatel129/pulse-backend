@@ -6,6 +6,7 @@ import Agent from '../../../models/agentModel.js';
 import { countTokens, MAX_CONTEXT_TOKENS, summarizeMessages } from '../../../utils/aiUtils.js';
 
 const MAX_AGENT_TURNS = 5; // Maximum number of turns in the agent conversation
+const MAX_COMPLETION_TOKENS = 2000; // Maximum tokens for completion
 
 export const streamChat = async (req, res) => {
   try {
@@ -14,7 +15,7 @@ export const streamChat = async (req, res) => {
       sessionId,
       model = 'gpt-4',
       temperature = 0.7,
-      max_tokens = 8000,
+      max_tokens = MAX_COMPLETION_TOKENS,
       top_p = 1,
       frequency_penalty = 0,
       presence_penalty = 0,
@@ -97,168 +98,227 @@ export const streamChat = async (req, res) => {
     let currentTurn = 0;
     let activeAgents = new Set(selectedAgents.map((agent) => agent._id.toString()));
     let lastResponses = new Map();
+    let currentAgentIndex = 0;
 
     // Continue conversation until no more responses or max turns reached
     while (currentTurn < MAX_AGENT_TURNS && activeAgents.size > 0) {
-      const turnResponses = await Promise.all(
-        selectedAgents
-          .filter((agent) => activeAgents.has(agent._id.toString()))
-          .map(async (agent) => {
-            // Get agent's system prompt
-            const systemPrompt =
-              agent.sections.find((s) => s.type === 'system_prompt')?.content ||
-              'You are a helpful AI assistant. Keep responses concise and relevant.';
+      // Get current agent
+      const currentAgent = selectedAgents[currentAgentIndex];
 
-            // Add conversation context
-            const conversationContext = `You are participating in a conversation with other AI agents. 
-              ${
-                currentTurn === 0
-                  ? 'This is the initial user message.'
-                  : 'Other agents have responded to the conversation.'
-              }
-              ${
-                currentTurn > 0
-                  ? 'Consider the previous responses and decide if you want to add to the conversation.'
-                  : ''
-              }
-              IMPORTANT: If you don't have anything new or meaningful to add, or if you would just repeat what you or others have already said, respond with "NO_RESPONSE_NEEDED".
-              Your response should be unique and add value to the conversation.`;
+      if (!activeAgents.has(currentAgent._id.toString())) {
+        // Move to next agent if current one is inactive
+        currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
+        continue;
+      }
 
-            // Check token count and manage context window
-            let messagesToSend = [...conversation.messages];
-            let totalTokens = countTokens(messagesToSend);
+      // Get agent's system prompt
+      const systemPrompt =
+        currentAgent.sections.find((s) => s.type === 'system_prompt')?.content ||
+        'You are a helpful AI assistant. Keep responses concise and relevant.';
 
-            if (totalTokens > MAX_CONTEXT_TOKENS) {
-              const messagesToSummarize = messagesToSend.slice(0, -10);
-              const summary = await summarizeMessages(messagesToSummarize);
-              messagesToSend = [{ role: 'system', content: summary }, ...messagesToSend.slice(-10)];
-            }
+      // Add conversation context
+      const conversationContext = `You are participating in a conversation with other AI agents. 
+        Current turn: ${currentTurn + 1} of ${MAX_AGENT_TURNS}
+        ${
+          currentTurn === 0
+            ? 'This is the initial user message.'
+            : 'Other agents have responded to the conversation.'
+        }
+        ${
+          currentTurn > 0
+            ? 'Consider the previous responses and decide if you want to add to the conversation.'
+            : ''
+        }
+    
+        IMPORTANT: 
+        1. If you don't have anything new or meaningful to add, respond with "NO_RESPONSE_NEEDED"
+        2. For natural turn-based conversations (like telling jokes), just respond naturally without special prefixes
+        3. Only use special prefixes in these specific cases:
+           - Use "AGENT_QUERY:" when you need specific information from another agent
+           - Use "AGENT_COLLABORATE:" when you need to work together on a complex task
+        4. Your response should be unique and add value to the conversation
+        5. Keep your responses concise and focused
+        6. If you have completed your initial task, respond with "TASK_COMPLETE" instead of continuing the conversation
+        7. You are limited to ${MAX_AGENT_TURNS} turns total. When approaching this limit, you should wrap up the conversation gracefully
+        9. Always acknowledge the other agent's response before providing your own
+        10. Track the turn count - you are on turn ${currentTurn + 1} of ${MAX_AGENT_TURNS}`;
 
-            const systemMessage = {
-              role: 'system',
-              content: `${systemPrompt}\n\n${conversationContext}`,
-            };
+      // Check token count and manage context window
+      let messagesToSend = [...conversation.messages];
+      let totalTokens = countTokens(messagesToSend);
 
-            let fullResponse = '';
-            let finishReason = null;
+      if (totalTokens > MAX_CONTEXT_TOKENS) {
+        const messagesToSummarize = messagesToSend.slice(0, -5); // Keep last 5 messages
+        const summary = await summarizeMessages(messagesToSummarize);
+        messagesToSend = [{ role: 'system', content: summary }, ...messagesToSend.slice(-5)];
+      }
 
-            // Create the chat completion stream for this agent
-            const stream = await openai.chat.completions.create({
-              model,
-              messages: [systemMessage, ...messagesToSend],
-              temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature, // Increase creativity in follow-up responses
-              max_tokens,
-              top_p,
-              frequency_penalty,
-              presence_penalty,
-              stop,
-              stream: true,
-            });
+      const systemMessage = {
+        role: 'system',
+        content: `${systemPrompt}\n\n${conversationContext}`,
+      };
 
-            // Stream each chunk for this agent
-            for await (const chunk of stream) {
-              const content = chunk.choices[0]?.delta?.content || '';
-              finishReason = chunk.choices[0]?.finish_reason;
+      let fullResponse = '';
+      let finishReason = null;
 
-              if (content) {
-                fullResponse += content;
-                res.write(
-                  `data: ${JSON.stringify({
-                    id: chunk.id,
-                    object: 'chat.completion.chunk',
-                    created: Math.floor(Date.now() / 1000),
-                    model: chunk.model,
-                    agent: {
-                      id: agent._id,
-                      name: agent.name,
-                      icon: agent.icon,
-                    },
-                    turn: currentTurn,
-                    choices: [
-                      {
-                        index: 0,
-                        delta: { content },
-                        finish_reason: null,
-                      },
-                    ],
-                  })}\n\n`,
-                );
-              }
-            }
-
-            // Check if agent wants to continue the conversation
-            if (
-              fullResponse.trim().toUpperCase() === 'NO_RESPONSE_NEEDED' ||
-              (lastResponses.has(agent._id.toString()) &&
-                lastResponses.get(agent._id.toString()) === fullResponse.trim())
-            ) {
-              activeAgents.delete(agent._id.toString());
-              return null;
-            }
-
-            // Add AI response to conversation
-            const aiMessage = {
-              role: 'assistant',
-              content: fullResponse,
-              agent: {
-                id: agent._id,
-                name: agent.name,
-                icon: agent.icon,
-              },
-            };
-            conversation.messages.push(aiMessage);
-            lastResponses.set(agent._id.toString(), fullResponse);
-
-            return {
-              agent,
-              response: fullResponse,
-              finishReason,
-              totalTokens,
-            };
-          }),
-      );
-
-      // Filter out null responses (agents that chose not to respond)
-      const validResponses = turnResponses.filter((response) => response !== null);
-
-      // Send completion events for this turn
-      validResponses.forEach(({ agent, response, finishReason, totalTokens }) => {
-        res.write(
-          `data: ${JSON.stringify({
-            id: conversation._id,
-            object: 'chat.completion',
-            created: Math.floor(Date.now() / 1000),
-            model,
-            agent: {
-              id: agent._id,
-              name: agent.name,
-              icon: agent.icon,
-            },
-            turn: currentTurn,
-            choices: [
-              {
-                index: 0,
-                message: {
-                  role: 'assistant',
-                  content: response,
-                  agent: {
-                    id: agent._id,
-                    name: agent.name,
-                    icon: agent.icon,
-                  },
-                },
-                finish_reason: finishReason,
-              },
-            ],
-            usage: {
-              prompt_tokens: totalTokens,
-              completion_tokens: Math.ceil(response.length / 4),
-              total_tokens: totalTokens + Math.ceil(response.length / 4),
-            },
-          })}\n\n`,
-        );
+      // Create the chat completion stream for this agent
+      const stream = await openai.chat.completions.create({
+        model,
+        messages: [systemMessage, ...messagesToSend],
+        temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
+        max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+        top_p,
+        frequency_penalty,
+        presence_penalty,
+        stop,
+        stream: true,
       });
 
+      // Stream each chunk for this agent
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        finishReason = chunk.choices[0]?.finish_reason;
+
+        if (content) {
+          fullResponse += content;
+          res.write(
+            `data: ${JSON.stringify({
+              id: chunk.id,
+              object: 'chat.completion.chunk',
+              created: Math.floor(Date.now() / 1000),
+              model: chunk.model,
+              agent: {
+                id: currentAgent._id,
+                name: currentAgent.name,
+                icon: currentAgent.icon,
+              },
+              turn: currentTurn,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content },
+                  finish_reason: null,
+                },
+              ],
+            })}\n\n`,
+          );
+        }
+      }
+
+      // Process the response
+      const trimmedResponse = fullResponse.trim();
+
+      if (
+        trimmedResponse.toUpperCase() === 'NO_RESPONSE_NEEDED' ||
+        trimmedResponse.toUpperCase() === 'TASK_COMPLETE' ||
+        (lastResponses.has(currentAgent._id.toString()) &&
+          lastResponses.get(currentAgent._id.toString()) === trimmedResponse)
+      ) {
+        // Only mark agent as inactive if it's not the first turn
+        if (currentTurn > 0) {
+          activeAgents.delete(currentAgent._id.toString());
+        }
+      } else if (trimmedResponse.startsWith('CONVERSATION_END:')) {
+        // Extract the ending message
+        const endMessage = trimmedResponse.substring('CONVERSATION_END:'.length).trim();
+        // Mark all agents as inactive to end the conversation
+        activeAgents.clear();
+        // Add the ending message to the conversation
+        const endSystemMessage = {
+          role: 'system',
+          content: `Conversation ended by ${currentAgent.name}: ${endMessage}`,
+        };
+        messagesToSend = [endSystemMessage, ...messagesToSend];
+      } else if (currentTurn === MAX_AGENT_TURNS - 1) {
+        // Force conversation end on the last turn if not already ended
+        const forcedEndMessage = `${currentAgent.name} has reached the maximum number of turns (${MAX_AGENT_TURNS}). Ending conversation.`;
+        const endSystemMessage = {
+          role: 'system',
+          content: forcedEndMessage,
+        };
+        messagesToSend = [endSystemMessage, ...messagesToSend];
+        activeAgents.clear();
+      } else if (
+        trimmedResponse.startsWith('AGENT_QUERY:') ||
+        trimmedResponse.startsWith('AGENT_COLLABORATE:')
+      ) {
+        // Extract the query and target agent
+        const queryMatch = trimmedResponse.match(
+          /(?:AGENT_QUERY|AGENT_COLLABORATE):\s*(\w+):\s*(.*)/i,
+        );
+        if (queryMatch) {
+          const [_, targetAgentName, query] = queryMatch;
+          const targetAgent = selectedAgents.find(
+            (a) => a.name.toLowerCase() === targetAgentName.toLowerCase(),
+          );
+
+          if (targetAgent && activeAgents.has(targetAgent._id.toString())) {
+            // Move to the target agent in the next turn
+            currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
+
+            // Add the query/collaboration request to the conversation context
+            const collaborationMessage = {
+              role: 'system',
+              content: `Previous agent requested ${
+                trimmedResponse.startsWith('AGENT_QUERY:') ? 'input' : 'collaboration'
+              } from ${targetAgentName}: ${query}`,
+            };
+            messagesToSend = [collaborationMessage, ...messagesToSend];
+          }
+        }
+      }
+
+      // Add AI response to conversation
+      const aiMessage = {
+        role: 'assistant',
+        content: fullResponse,
+        agent: {
+          id: currentAgent._id,
+          name: currentAgent.name,
+          icon: currentAgent.icon,
+        },
+      };
+      conversation.messages.push(aiMessage);
+      lastResponses.set(currentAgent._id.toString(), trimmedResponse);
+
+      // Send completion event
+      res.write(
+        `data: ${JSON.stringify({
+          id: conversation._id,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model,
+          agent: {
+            id: currentAgent._id,
+            name: currentAgent.name,
+            icon: currentAgent.icon,
+          },
+          turn: currentTurn,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: fullResponse,
+                agent: {
+                  id: currentAgent._id,
+                  name: currentAgent.name,
+                  icon: currentAgent.icon,
+                },
+              },
+              finish_reason: finishReason,
+            },
+          ],
+          usage: {
+            prompt_tokens: totalTokens,
+            completion_tokens: Math.ceil(fullResponse.length / 4),
+            total_tokens: totalTokens + Math.ceil(fullResponse.length / 4),
+          },
+        })}\n\n`,
+      );
+
+      // Move to next agent
+      currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
       currentTurn++;
     }
 
