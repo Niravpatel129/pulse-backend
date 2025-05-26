@@ -135,30 +135,6 @@ export const streamChat = async (req, res) => {
         content: promptManager.getFullPrompt(),
       };
 
-      let fullResponse = '';
-      let finishReason = null;
-
-      // Define available tools
-      const tools = [
-        {
-          type: 'function',
-          function: {
-            name: 'search_web',
-            description: 'Search the web for current information about a topic',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description: 'The search query to look up on the web',
-                },
-              },
-              required: ['query'],
-            },
-          },
-        },
-      ];
-
       // Create the chat completion stream for this agent
       const stream = await openai.chat.completions.create({
         model,
@@ -170,16 +146,52 @@ export const streamChat = async (req, res) => {
         presence_penalty,
         stop,
         stream: true,
-        tools: tools,
-        tool_choice: 'auto',
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'search_web',
+              description: 'Search the web for current information about a topic',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: {
+                    type: 'string',
+                    description: 'The search query to look up on the web',
+                  },
+                },
+                required: ['query'],
+              },
+            },
+          },
+        ],
       });
 
       // Stream each chunk for this agent
+      let fullResponse = '';
+      let toolCall = null;
+      let toolCallArgs = '';
+      let hasProcessedToolCall = false;
+      let lastFinishReason = null;
+
+      console.log('Starting stream for agent:', currentAgent.name);
+
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
-        finishReason = chunk.choices[0]?.finish_reason;
+        const finishReason = chunk.choices[0]?.finish_reason;
+        lastFinishReason = finishReason || lastFinishReason;
 
+        console.log('Received chunk:', {
+          content,
+          toolCalls,
+          finishReason,
+          hasToolCall: !!toolCall,
+          toolCallArgs,
+          hasProcessedToolCall,
+        });
+
+        // Handle content
         if (content) {
           fullResponse += content;
           res.write(
@@ -207,8 +219,64 @@ export const streamChat = async (req, res) => {
 
         // Handle tool calls
         if (toolCalls.length > 0) {
-          for (const toolCall of toolCalls) {
-            // Stream tool call information
+          const currentToolCall = toolCalls[0];
+          console.log('Processing tool call:', currentToolCall);
+
+          if (currentToolCall.function?.name) {
+            toolCall = {
+              id: currentToolCall.id,
+              type: 'function',
+              function: {
+                name: currentToolCall.function.name,
+                arguments: '',
+              },
+            };
+            console.log('Initialized tool call:', toolCall);
+          }
+
+          if (currentToolCall.function?.arguments) {
+            toolCallArgs += currentToolCall.function.arguments;
+            console.log('Accumulated tool call args:', toolCallArgs);
+          }
+        }
+
+        // Process tool call when finished
+        if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
+          console.log('Processing complete tool call:', {
+            toolCall,
+            toolCallArgs,
+            finishReason,
+          });
+
+          try {
+            const args = JSON.parse(toolCallArgs);
+            const searchQuery = args.query;
+
+            if (!searchQuery || typeof searchQuery !== 'string') {
+              throw new Error(
+                `Invalid search query format. Received: ${JSON.stringify(searchQuery)}`,
+              );
+            }
+
+            // Here you would implement the actual web search
+            const searchResult = `Search results for: ${searchQuery}`;
+            console.log('Generated search result:', searchResult);
+
+            // Add the tool response to the conversation
+            messagesToSend.push({
+              role: 'assistant',
+              content: null,
+              tool_calls: [toolCall],
+            });
+
+            messagesToSend.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+              content: searchResult,
+            });
+
+            // Stream the tool response
             res.write(
               `data: ${JSON.stringify({
                 id: chunk.id,
@@ -224,44 +292,47 @@ export const streamChat = async (req, res) => {
                 choices: [
                   {
                     index: 0,
-                    delta: {
+                    message: {
+                      role: 'assistant',
+                      content: null,
                       tool_calls: [toolCall],
                     },
-                    finish_reason: null,
+                    finish_reason: 'tool_calls',
                   },
                 ],
               })}\n\n`,
             );
 
-            // If this is a complete tool call, execute it
-            if (toolCall.function) {
-              const { name, arguments: args } = toolCall.function;
-
-              if (name === 'search_web') {
-                try {
-                  const searchQuery = JSON.parse(args).query;
-                  // Here you would implement the actual web search
-                  // For now, we'll just simulate a response
-                  const searchResult = `Search results for: ${searchQuery}`;
-
-                  // Add the tool response to the conversation
-                  messagesToSend.push({
-                    role: 'tool',
-                    tool_call_id: toolCall.id,
-                    name: 'search_web',
-                    content: searchResult,
-                  });
-                } catch (error) {
-                  console.error('Error executing tool:', error);
-                }
-              }
-            }
+            hasProcessedToolCall = true;
+          } catch (error) {
+            console.error('Error executing tool:', error);
+            messagesToSend.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+              content: `Error executing search: ${error.message}`,
+            });
           }
         }
       }
 
       // Process the response
       const trimmedResponse = fullResponse.trim();
+      console.log('Final response state:', {
+        trimmedResponse,
+        hasToolCall: !!toolCall,
+        toolCallArgs,
+        hasProcessedToolCall,
+      });
+
+      if (!trimmedResponse && !hasProcessedToolCall) {
+        console.warn('Empty response received from agent:', {
+          agent: currentAgent.name,
+          turn: currentTurn,
+        });
+        activeAgents.delete(currentAgent._id.toString());
+        continue;
+      }
 
       if (
         trimmedResponse.toUpperCase() === 'NO_RESPONSE_NEEDED' ||
@@ -324,7 +395,9 @@ export const streamChat = async (req, res) => {
       // Add AI response to conversation
       const aiMessage = {
         role: 'assistant',
-        content: fullResponse,
+        content: hasProcessedToolCall
+          ? 'Processing your request...'
+          : fullResponse || 'No response generated',
         agent: {
           id: currentAgent._id,
           name: currentAgent.name,
@@ -333,6 +406,75 @@ export const streamChat = async (req, res) => {
       };
       conversation.messages.push(aiMessage);
       lastResponses.set(currentAgent._id.toString(), trimmedResponse);
+
+      // If we processed a tool call, continue the conversation
+      if (hasProcessedToolCall) {
+        // Create a new stream for the follow-up response
+        const followUpStream = await openai.chat.completions.create({
+          model,
+          messages: messagesToSend,
+          temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
+          max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+          top_p,
+          frequency_penalty,
+          presence_penalty,
+          stop,
+          stream: true,
+        });
+
+        // Reset state for follow-up response
+        fullResponse = '';
+        toolCall = null;
+        toolCallArgs = '';
+        hasProcessedToolCall = false;
+        lastFinishReason = null;
+
+        // Process follow-up response
+        for await (const chunk of followUpStream) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          const finishReason = chunk.choices[0]?.finish_reason;
+          lastFinishReason = finishReason || lastFinishReason;
+
+          if (content) {
+            fullResponse += content;
+            res.write(
+              `data: ${JSON.stringify({
+                id: chunk.id,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: chunk.model,
+                agent: {
+                  id: currentAgent._id,
+                  name: currentAgent.name,
+                  icon: currentAgent.icon,
+                },
+                turn: currentTurn,
+                choices: [
+                  {
+                    index: 0,
+                    delta: { content },
+                    finish_reason: null,
+                  },
+                ],
+              })}\n\n`,
+            );
+          }
+        }
+
+        // Add follow-up response to conversation
+        if (fullResponse.trim()) {
+          const followUpMessage = {
+            role: 'assistant',
+            content: fullResponse,
+            agent: {
+              id: currentAgent._id,
+              name: currentAgent.name,
+              icon: currentAgent.icon,
+            },
+          };
+          conversation.messages.push(followUpMessage);
+        }
+      }
 
       // Send completion event
       res.write(
@@ -359,7 +501,7 @@ export const streamChat = async (req, res) => {
                   icon: currentAgent.icon,
                 },
               },
-              finish_reason: finishReason,
+              finish_reason: lastFinishReason,
             },
           ],
           usage: {
