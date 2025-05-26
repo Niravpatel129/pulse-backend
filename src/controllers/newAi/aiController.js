@@ -38,24 +38,42 @@ const MAX_CONTEXT_TOKENS = 4000;
 
 export const streamChat = async (req, res) => {
   try {
-    const { message, sessionId } = req.body;
-    console.log('🚀 sessionId:', sessionId);
+    const {
+      message,
+      sessionId,
+      model = 'gpt-3.5-turbo',
+      temperature = 0.7,
+      max_tokens = 1000,
+      top_p = 1,
+      frequency_penalty = 0,
+      presence_penalty = 0,
+      stop = null,
+    } = req.body;
+
     const workspaceId = req.workspace._id;
 
     if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+      return res.status(400).json({
+        error: {
+          message: 'Message is required',
+          type: 'invalid_request_error',
+          code: 'missing_message',
+        },
+      });
     }
 
     // Get workspace chat settings
     const chatSettings = await ChatSettings.findOne({ workspace: workspaceId });
-    const systemMessage =
-      chatSettings?.contextSettings ||
-      'You are a helpful AI assistant. Keep responses concise and relevant.';
+    const systemMessage = {
+      role: 'system',
+      content:
+        chatSettings?.contextSettings ||
+        'You are a helpful AI assistant. Keep responses concise and relevant.',
+    };
 
     // Get or create conversation
     let conversation;
     if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
-      console.log('🚀 sessionId11:', sessionId);
       conversation = await AIConversation.findOne({
         _id: sessionId,
         workspace: workspaceId,
@@ -63,22 +81,16 @@ export const streamChat = async (req, res) => {
     }
 
     if (!conversation) {
-      // Generate a meaningful title from the first message
       let title = message.trim();
-
-      // If the message is a question, use it directly
       if (title.endsWith('?')) {
         title = title.substring(0, 50);
       } else {
-        // For non-questions, try to extract a meaningful title
         const words = title.split(' ');
         if (words.length > 5) {
-          // Take first 5 words and add ellipsis
           title = words.slice(0, 5).join(' ') + '...';
         }
       }
 
-      // Create new conversation with the generated title
       conversation = await AIConversation.create({
         workspace: workspaceId,
         messages: [],
@@ -96,14 +108,10 @@ export const streamChat = async (req, res) => {
     // Check token count and manage context window
     let messagesToSend = [...conversation.messages];
     let totalTokens = countTokens(messagesToSend);
-    console.log('🚀 conversation:', conversation);
 
-    // If we exceed the token limit, summarize older messages
     if (totalTokens > MAX_CONTEXT_TOKENS) {
       const messagesToSummarize = messagesToSend.slice(0, -10);
       const summary = await summarizeMessages(messagesToSummarize);
-
-      // Replace older messages with summary
       messagesToSend = [{ role: 'system', content: summary }, ...messagesToSend.slice(-10)];
     }
 
@@ -114,28 +122,43 @@ export const streamChat = async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
 
     let fullResponse = '';
+    let finishReason = null;
 
     // Create the chat completion stream
     const stream = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: systemMessage,
-        },
-        ...messagesToSend,
-      ],
-      temperature: 0.7,
-      max_tokens: 1000,
+      model,
+      messages: [systemMessage, ...messagesToSend],
+      temperature,
+      max_tokens,
+      top_p,
+      frequency_penalty,
+      presence_penalty,
+      stop,
       stream: true,
     });
 
     // Stream each chunk
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content || '';
+      finishReason = chunk.choices[0]?.finish_reason;
+
       if (content) {
         fullResponse += content;
-        res.write(`data: ${JSON.stringify({ type: 'text', content })}\n\n`);
+        res.write(
+          `data: ${JSON.stringify({
+            id: chunk.id,
+            object: 'chat.completion.chunk',
+            created: Math.floor(Date.now() / 1000),
+            model: chunk.model,
+            choices: [
+              {
+                index: 0,
+                delta: { content },
+                finish_reason: null,
+              },
+            ],
+          })}\n\n`,
+        );
       }
     }
 
@@ -150,12 +173,25 @@ export const streamChat = async (req, res) => {
     // Save the updated conversation
     await conversation.save();
 
-    // Send completion event with the conversation ID
+    // Send completion event
     res.write(
       `data: ${JSON.stringify({
-        type: 'end',
-        sessionId: conversation._id,
-        isNewConversation: !sessionId,
+        id: conversation._id,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            message: aiMessage,
+            finish_reason: finishReason,
+          },
+        ],
+        usage: {
+          prompt_tokens: totalTokens,
+          completion_tokens: Math.ceil(fullResponse.length / 4),
+          total_tokens: totalTokens + Math.ceil(fullResponse.length / 4),
+        },
       })}\n\n`,
     );
     res.end();
@@ -163,10 +199,22 @@ export const streamChat = async (req, res) => {
     console.error('Error in streaming chat endpoint:', error);
     if (!res.headersSent) {
       return res.status(500).json({
-        error: error.message,
+        error: {
+          message: error.message,
+          type: 'server_error',
+          code: 'internal_error',
+        },
       });
     } else {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({
+          error: {
+            message: error.message,
+            type: 'server_error',
+            code: 'internal_error',
+          },
+        })}\n\n`,
+      );
       res.end();
     }
   }
