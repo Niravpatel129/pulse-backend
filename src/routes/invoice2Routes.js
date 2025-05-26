@@ -21,6 +21,8 @@ import { extractWorkspace, extractWorkspaceWithoutAuth } from '../middleware/wor
 const router = express.Router();
 
 router.route('/:id').get(extractWorkspaceWithoutAuth, getInvoice);
+router.route('/:id/payment-intent').post(extractWorkspaceWithoutAuth, createPaymentIntent);
+router.route('/:id/payment-success').post(extractWorkspaceWithoutAuth, handlePaymentSuccess);
 
 router.use(authenticate);
 router.use(extractWorkspace);
@@ -46,9 +48,5 @@ router.route('/:id/internal-note').patch(updateInternalNote);
 router.route('/:id/attachments').post(addAttachment);
 
 router.route('/:id/attachments/:fileId').delete(deleteAttachment);
-
-router.route('/:id/payment-intent').post(createPaymentIntent);
-
-router.route('/:id/payment-success').post(handlePaymentSuccess);
 
 export default router;
