@@ -5,6 +5,7 @@ import AIConversation from '../../../models/AIConversation.js';
 import ChatSettings from '../../../models/ChatSettings.js';
 import { countTokens, MAX_CONTEXT_TOKENS, summarizeMessages } from '../../../utils/aiUtils.js';
 import PromptManager from '../../../utils/PromptManager.js';
+import ToolsManager from '../../../utils/ToolsManager.js';
 
 const MAX_AGENT_TURNS = 5; // Maximum number of turns in the agent conversation
 const MAX_COMPLETION_TOKENS = 2000; // Maximum tokens for completion
@@ -25,6 +26,7 @@ export const streamChat = async (req, res) => {
     } = req.body;
 
     const workspaceId = req.workspace._id;
+    const toolsManager = new ToolsManager();
 
     if (!message) {
       return res.status(400).json({
@@ -146,25 +148,7 @@ export const streamChat = async (req, res) => {
         presence_penalty,
         stop,
         stream: true,
-        tools: [
-          {
-            type: 'function',
-            function: {
-              name: 'search_web',
-              description: 'Search the web for current information about a topic',
-              parameters: {
-                type: 'object',
-                properties: {
-                  query: {
-                    type: 'string',
-                    description: 'The search query to look up on the web',
-                  },
-                },
-                required: ['query'],
-              },
-            },
-          },
-        ],
+        tools: toolsManager.getTools(),
       });
 
       // Stream each chunk for this agent
@@ -249,32 +233,11 @@ export const streamChat = async (req, res) => {
           });
 
           try {
-            const args = JSON.parse(toolCallArgs);
-            const searchQuery = args.query;
-
-            if (!searchQuery || typeof searchQuery !== 'string') {
-              throw new Error(
-                `Invalid search query format. Received: ${JSON.stringify(searchQuery)}`,
-              );
-            }
-
-            // Here you would implement the actual web search
-            const searchResult = `Search results for: ${searchQuery}`;
-            console.log('Generated search result:', searchResult);
+            const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
 
             // Add the tool response to the conversation
-            messagesToSend.push({
-              role: 'assistant',
-              content: null,
-              tool_calls: [toolCall],
-            });
-
-            messagesToSend.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              name: toolCall.function.name,
-              content: searchResult,
-            });
+            messagesToSend.push(toolsManager.createToolCallMessage(toolCall));
+            messagesToSend.push(toolsManager.createToolResponse(toolCall, searchResult));
 
             // Stream the tool response
             res.write(
@@ -306,12 +269,9 @@ export const streamChat = async (req, res) => {
             hasProcessedToolCall = true;
           } catch (error) {
             console.error('Error executing tool:', error);
-            messagesToSend.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              name: toolCall.function.name,
-              content: `Error executing search: ${error.message}`,
-            });
+            messagesToSend.push(
+              toolsManager.createToolResponse(toolCall, `Error executing search: ${error.message}`),
+            );
           }
         }
       }
