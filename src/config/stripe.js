@@ -53,7 +53,6 @@ export const createPaymentIntent = async (amount, currency, connectedAccountId) 
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency,
-      application_fee_amount: Math.round(amount * 0.1), // 10% platform fee
       transfer_data: {
         destination: connectedAccountId,
       },
