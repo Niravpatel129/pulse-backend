@@ -102,7 +102,7 @@ const mapStripeInvoiceToInvoice2 = async (stripeInvoice) => {
 
   // Map settings
   const settings = {
-    currency: stripeInvoice.amount_details.currency.toLowerCase(),
+    currency: stripeInvoice.amount_details.currency,
     dateFormat: 'MM/DD/YYYY',
     salesTax: {
       enabled: !!stripeInvoice.amount_details.tax,

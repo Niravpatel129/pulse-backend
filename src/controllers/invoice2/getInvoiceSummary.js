@@ -18,13 +18,26 @@ export const getInvoiceSummary = catchAsync(async (req, res, next) => {
     {
       $match: {
         workspace: new mongoose.Types.ObjectId(workspace),
-        status: { $in: ['open', 'overdue', 'paid'] },
+        status: { $in: ['open', 'paid'] },
+      },
+    },
+    {
+      $addFields: {
+        effectiveStatus: {
+          $cond: {
+            if: {
+              $and: [{ $eq: ['$status', 'open'] }, { $lt: ['$dueDate', new Date()] }],
+            },
+            then: 'overdue',
+            else: '$status',
+          },
+        },
       },
     },
     {
       $group: {
         _id: {
-          status: '$status',
+          status: '$effectiveStatus',
           currency: '$settings.currency',
         },
         total_amount: { $sum: '$totals.total' },
