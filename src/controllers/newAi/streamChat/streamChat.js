@@ -3,7 +3,8 @@ import openai from '../../../config/openai.js';
 import Agent from '../../../models/agentModel.js';
 import AIConversation from '../../../models/AIConversation.js';
 import ChatSettings from '../../../models/ChatSettings.js';
-import { countTokens, MAX_CONTEXT_TOKENS, summarizeMessages } from '../../../utils/aiUtils.js';
+import { countTokens } from '../../../utils/aiUtils.js';
+import { firebaseStorage } from '../../../utils/firebase.js';
 import PromptManager from '../../../utils/PromptManager.js';
 import ToolsManager from '../../../utils/ToolsManager.js';
 
@@ -23,19 +24,61 @@ export const streamChat = async (req, res) => {
       presence_penalty = 0,
       stop = null,
       agents = [],
+      images = [],
     } = req.body;
 
     const workspaceId = req.workspace._id;
     const toolsManager = new ToolsManager();
 
-    if (!message) {
+    if (!message && images.length === 0) {
       return res.status(400).json({
         error: {
-          message: 'Message is required',
+          message: 'Message or images are required',
           type: 'invalid_request_error',
           code: 'missing_message',
         },
       });
+    }
+
+    // Process images if present
+    let processedImages = [];
+    if (images.length > 0) {
+      try {
+        // Process each image
+        for (const image of images) {
+          if (image.url.startsWith('data:image')) {
+            // Handle base64 image data
+            const base64Data = image.url.split(',')[1];
+            const buffer = Buffer.from(base64Data, 'base64');
+
+            // Upload to Firebase
+            const storagePath = firebaseStorage.generatePath(
+              workspaceId,
+              `chat_image_${Date.now()}.png`,
+            );
+            const { url } = await firebaseStorage.uploadFile(buffer, storagePath, 'image/png');
+
+            processedImages.push({
+              url,
+              alt: image.alt,
+            });
+          } else if (image.url.startsWith('http')) {
+            // If it's already a regular URL, use it as is
+            processedImages.push(image);
+          } else {
+            console.warn('Unsupported image URL format:', image.url);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing images:', error);
+        return res.status(500).json({
+          error: {
+            message: 'Failed to process images',
+            type: 'server_error',
+            code: 'image_processing_error',
+          },
+        });
+      }
     }
 
     // Get workspace chat settings
@@ -47,6 +90,13 @@ export const streamChat = async (req, res) => {
       workspace: workspaceId,
     });
 
+    console.log('\n=== DEBUG: Agent Selection ===');
+    console.log('Requested agents:', agents);
+    console.log(
+      'Found agents:',
+      selectedAgents.map((a) => ({ id: a._id, name: a.name })),
+    );
+
     if (agents.length > 0 && selectedAgents.length === 0) {
       return res.status(400).json({
         error: {
@@ -55,6 +105,23 @@ export const streamChat = async (req, res) => {
           code: 'invalid_agents',
         },
       });
+    }
+
+    // If no agents specified, use default agent
+    if (selectedAgents.length === 0) {
+      const defaultAgent = await Agent.findOne({ workspace: workspaceId });
+      if (defaultAgent) {
+        selectedAgents.push(defaultAgent);
+        console.log('Using default agent:', defaultAgent.name);
+      } else {
+        return res.status(400).json({
+          error: {
+            message: 'No agents available',
+            type: 'invalid_request_error',
+            code: 'no_agents',
+          },
+        });
+      }
     }
 
     // Get or create conversation
@@ -83,7 +150,7 @@ export const streamChat = async (req, res) => {
     }
 
     if (!conversation) {
-      let title = message.trim();
+      let title = message?.trim() || 'Image Analysis';
       if (title.endsWith('?')) {
         title = title.substring(0, 50);
       } else {
@@ -105,7 +172,8 @@ export const streamChat = async (req, res) => {
     // Add user message
     const userMessage = {
       role: 'user',
-      content: message,
+      content: message || '',
+      images: processedImages.length > 0 ? processedImages : undefined,
     };
     conversation.messages.push(userMessage);
 
@@ -176,73 +244,72 @@ export const streamChat = async (req, res) => {
       };
       messagesToSend.push(systemMessage);
 
+      // Add conversation history, properly formatted
+      const recentMessages = conversation.messages.slice(-10); // Keep last 10 messages for context
+
       console.log('\n=== DEBUG: Conversation State ===');
       console.log('Current Turn:', currentTurn);
       console.log('Current Agent:', currentAgent.name);
       console.log('Active Agents:', Array.from(activeAgents));
 
-      // Add conversation history, properly formatted
-      const recentMessages = conversation.messages.slice(-10); // Keep last 10 messages for context
       console.log('\n=== DEBUG: Recent Messages ===');
       console.log('Number of messages:', recentMessages.length);
       recentMessages.forEach((msg, idx) => {
         console.log(`\nMessage ${idx + 1}:`);
         console.log('Role:', msg.role);
         console.log('Content:', msg.content);
+        if (msg.images) {
+          console.log('Images:', msg.images);
+        }
         if (msg.agent) {
           console.log('Agent:', msg.agent.name);
         }
       });
 
-      messagesToSend.push(...recentMessages);
+      // Format messages for API, including image content
+      const formattedMessages = recentMessages.map((msg) => {
+        if (msg.images && msg.images.length > 0) {
+          return {
+            role: msg.role,
+            content: [
+              { type: 'text', text: msg.content || 'Please analyze this image.' },
+              ...msg.images.map((img) => ({
+                type: 'image_url',
+                image_url: {
+                  url: img.url,
+                },
+              })),
+            ],
+          };
+        }
+        return {
+          role: msg.role,
+          content: msg.content,
+        };
+      });
+
+      messagesToSend.push(...formattedMessages);
 
       console.log('\n=== DEBUG: Final Prompt ===');
       console.log('Total messages to send:', messagesToSend.length);
-      messagesToSend.forEach((msg, idx) => {
-        console.log(`\nMessage ${idx + 1}:`);
-        console.log('Role:', msg.role);
-        console.log('Content:', msg.content);
-        if (msg.agent) {
-          console.log('Agent:', msg.agent.name);
-        }
-      });
-
-      // Check token count and manage context window
-      let totalTokens = countTokens(messagesToSend);
-      console.log('\n=== DEBUG: Token Count ===');
-      console.log('Total tokens:', totalTokens);
-      console.log('Max context tokens:', MAX_CONTEXT_TOKENS);
-
-      if (totalTokens > MAX_CONTEXT_TOKENS) {
-        // Keep system message and last 2 messages
-        const systemMessage = messagesToSend[0];
-        const lastMessages = messagesToSend.slice(-2);
-
-        // Summarize the rest
-        const messagesToSummarize = messagesToSend.slice(1, -2);
-        const summary = await summarizeMessages(messagesToSummarize);
-
-        // Reconstruct messages array with summary
-        messagesToSend = [
-          systemMessage,
-          { role: 'system', content: `Previous conversation summary: ${summary}` },
-          ...lastMessages,
-        ];
-      }
+      console.log('Messages being sent to OpenAI:', JSON.stringify(messagesToSend, null, 2));
 
       // Create the chat completion stream for this agent
       const stream = await openai.chat.completions.create({
-        model,
+        model: 'gpt-4.1',
         messages: messagesToSend,
         temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
         max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
         top_p,
         frequency_penalty,
         presence_penalty,
-        stop,
+        stop: stop || undefined,
         stream: true,
         tools: toolsManager.getTools(),
       });
+
+      console.log('\n=== DEBUG: Stream Created ===');
+      console.log('Stream initialized with model:', 'gpt-4.1');
 
       // Stream each chunk for this agent
       let fullResponse = '';
@@ -252,6 +319,9 @@ export const streamChat = async (req, res) => {
       let lastFinishReason = null;
 
       for await (const chunk of stream) {
+        console.log('\n=== DEBUG: Received Chunk ===');
+        console.log('Chunk:', JSON.stringify(chunk, null, 2));
+
         const content = chunk.choices[0]?.delta?.content || '';
         const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
         const finishReason = chunk.choices[0]?.finish_reason;
@@ -260,6 +330,7 @@ export const streamChat = async (req, res) => {
         // Handle content
         if (content) {
           fullResponse += content;
+          console.log('Content received:', content);
           res.write(
             `data: ${JSON.stringify({
               id: chunk.id,
@@ -547,9 +618,9 @@ export const streamChat = async (req, res) => {
             },
           ],
           usage: {
-            prompt_tokens: totalTokens,
+            prompt_tokens: countTokens(messagesToSend),
             completion_tokens: Math.ceil(fullResponse.length / 4),
-            total_tokens: totalTokens + Math.ceil(fullResponse.length / 4),
+            total_tokens: countTokens(messagesToSend) + Math.ceil(fullResponse.length / 4),
           },
         })}\n\n`,
       );

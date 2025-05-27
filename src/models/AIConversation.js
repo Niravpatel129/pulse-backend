@@ -11,6 +11,12 @@ const messageSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    images: [
+      {
+        url: String,
+        alt: String,
+      },
+    ],
     name: {
       type: String,
       // Only required for function role messages
