@@ -227,6 +227,9 @@ const invoice2Schema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    source: {
+      type: String,
+    },
   },
   {
     timestamps: true,
