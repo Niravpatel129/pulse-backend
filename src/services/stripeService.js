@@ -73,7 +73,6 @@ class StripeService {
       const response = await stripeApi.post('/payment_intents', {
         amount,
         currency,
-        application_fee_amount: Math.round(amount * 0.1), // 10% platform fee
         transfer_data: {
           destination: connectedAccountId,
         },
