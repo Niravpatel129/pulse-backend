@@ -5,6 +5,7 @@ export const getAllInvoices = catchAsync(async (req, res, next) => {
   const invoices = await Invoice2.find({
     workspace: req.workspace._id,
   })
+    .sort({ createdAt: -1 })
     .populate('attachments')
     .populate('customer.id');
 
