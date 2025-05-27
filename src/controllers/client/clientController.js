@@ -1,4 +1,5 @@
 import Client from '../../models/Client.js';
+import Invoice2 from '../../models/invoice2.js';
 import Payment from '../../models/paymentModel.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import AppError from '../../utils/AppError.js';
@@ -160,6 +161,17 @@ export const updateClient = async (req, res, next) => {
     if (!client) {
       return next(new AppError('Client not found', 404));
     }
+
+    // Update client information in Invoice2 documents
+    await Invoice2.updateMany(
+      { 'customer.id': req.params.id },
+      {
+        $set: {
+          'customer.name': client.name,
+          'customer.email': client.email,
+        },
+      },
+    );
 
     res.status(200).json(new ApiResponse(200, client, 'Client updated successfully'));
   } catch (error) {
