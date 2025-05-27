@@ -18,7 +18,7 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
   }
 
   // Find the invoice to get the workspace information and amount
-  const invoice = await Invoice2.findById(id);
+  const invoice = await Invoice2.findById(id).populate('workspace');
 
   if (!invoice) {
     return res.status(404).json({
@@ -75,6 +75,7 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
       paymentAmount,
       paymentCurrency,
       connectAccount.accountId,
+      invoice.workspace.name || invoice.workspace.subdomain,
     );
 
     // Store the payment intent ID in the invoice

@@ -66,8 +66,10 @@ class StripeService {
   }
 
   // Create a payment intent
-  static async createPaymentIntent(amount, currency, connectedAccountId) {
+  static async createPaymentIntent(amount, currency, connectedAccountId, workspaceName) {
     try {
+      const statementDescriptor = workspaceName ? workspaceName.substring(0, 22) : 'PAYMENT';
+
       const response = await stripeApi.post('/payment_intents', {
         amount,
         currency,
@@ -75,6 +77,7 @@ class StripeService {
         transfer_data: {
           destination: connectedAccountId,
         },
+        statement_descriptor_suffix: statementDescriptor,
       });
       return response.data;
     } catch (error) {
