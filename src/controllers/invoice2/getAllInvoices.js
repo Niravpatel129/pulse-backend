@@ -4,7 +4,9 @@ import catchAsync from '../../utils/catchAsync.js';
 export const getAllInvoices = catchAsync(async (req, res, next) => {
   const invoices = await Invoice2.find({
     workspace: req.workspace._id,
-  }).populate('attachments');
+  })
+    .populate('attachments')
+    .populate('customer.id');
 
   res.status(200).json({
     status: 'success',
