@@ -5,7 +5,6 @@ import catchAsync from '../../utils/catchAsync.js';
 export const getInvoice = catchAsync(async (req, res, next) => {
   const invoice = await Invoice2.findOne({
     _id: req.params.id,
-    workspace: req.workspace._id,
   });
 
   if (!invoice) {

@@ -23,7 +23,7 @@ const router = express.Router();
 router.route('/summary').get(extractWorkspaceWithoutAuth, getInvoiceSummary);
 
 // Public routes (no auth required)
-router.route('/:id').get(extractWorkspaceWithoutAuth, getInvoice);
+router.route('/:id').get(getInvoice);
 router.route('/:id/payment-intent').post(extractWorkspaceWithoutAuth, createPaymentIntent);
 router.route('/:id/payment-success').post(extractWorkspaceWithoutAuth, handlePaymentSuccess);
 
