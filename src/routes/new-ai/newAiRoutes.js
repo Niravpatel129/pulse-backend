@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import {
   clearChatHistory,
+  embedWorkspaceData,
   getConversationHistory,
   listConversations,
   streamChat,
@@ -22,5 +23,8 @@ router.get('/chat/conversations', listConversations);
 router.get('/chat/history/:sessionId', getConversationHistory);
 
 router.delete('/chat/history/:sessionId', clearChatHistory);
+
+// New route for embedding workspace data
+router.post('/embed', upload.none(), embedWorkspaceData);
 
 export default router;
