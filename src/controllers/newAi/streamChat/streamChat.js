@@ -81,7 +81,7 @@ function streamStatus(res, message, { type = 'reasoning', step = null } = {}, co
 }
 
 // Helper function to handle tool calls
-async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend) {
+async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend, conversation) {
   try {
     const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
     messagesToSend.push({
@@ -95,7 +95,7 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
       content: JSON.stringify(searchResult),
     });
 
-    // Save tool call to conversation
+    // Save tool call to conversation using findOneAndUpdate
     const currentMessage = conversation.messages[conversation.messages.length - 1];
     if (currentMessage && currentMessage.role === 'assistant') {
       currentMessage.parts.push({
@@ -104,7 +104,11 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
         step: toolCall.function?.name,
         timestamp: new Date(),
       });
-      conversation.save();
+      await AIConversation.findOneAndUpdate(
+        { _id: conversation._id },
+        { $set: { messages: conversation.messages } },
+        { new: true },
+      );
     }
 
     return true;
@@ -311,7 +315,12 @@ export const streamChat = async (req, res) => {
     const saveAssistantPart = async (part) => {
       conversation.messages[assistantMsgIdx].parts.push(part);
       conversation.markModified('messages');
-      await conversation.save();
+      // Use findOneAndUpdate instead of save to avoid parallel save issues
+      await AIConversation.findOneAndUpdate(
+        { _id: conversation._id },
+        { $set: { messages: conversation.messages } },
+        { new: true },
+      );
     };
 
     // Helper function to stream and save part
@@ -385,7 +394,11 @@ export const streamChat = async (req, res) => {
           const textPart = assistantMessage.parts.find((part) => part.type === 'text');
           textPart.content += content;
           conversation.markModified('messages');
-          await conversation.save();
+          await AIConversation.findOneAndUpdate(
+            { _id: conversation._id },
+            { $set: { messages: conversation.messages } },
+            { new: true },
+          );
         }
 
         streamMessage(res, {
@@ -409,11 +422,18 @@ export const streamChat = async (req, res) => {
           step: toolCall.function?.name,
         });
 
-        const success = await handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend);
+        const success = await handleToolCall(
+          toolCall,
+          toolCallArgs,
+          toolsManager,
+          messagesToSend,
+          conversation,
+        );
         if (!success) {
           await streamAndSavePart({
-            type: 'error',
+            type: 'status',
             content: 'Error executing tool',
+            step: toolCall.function?.name,
           });
           streamMessage(res, {
             type: 'error',
@@ -428,12 +448,13 @@ export const streamChat = async (req, res) => {
         }
 
         await streamAndSavePart({
-          type: 'tool_result',
-          content: JSON.stringify(toolCall),
+          type: 'status',
+          content: `Tool execution result: ${JSON.stringify(toolCall)}`,
+          step: toolCall.function?.name,
         });
 
         streamMessage(res, {
-          type: 'tool_result',
+          type: 'status',
           id: chunk.id,
           choices: [
             {
@@ -513,12 +534,12 @@ export const streamChat = async (req, res) => {
 
             if (finishReason === 'stop') {
               await streamAndSavePart({
-                type: 'completion',
-                content: fullResponse,
+                type: 'status',
+                content: 'Response complete',
               });
 
               streamMessage(res, {
-                type: 'completion',
+                type: 'status',
                 id: followUpChunk.id,
                 choices: [
                   {
@@ -540,8 +561,9 @@ export const streamChat = async (req, res) => {
         } catch (followUpError) {
           console.error('Error in follow-up stream:', followUpError);
           await streamAndSavePart({
-            type: 'error',
+            type: 'status',
             content: 'Error processing follow-up response: ' + followUpError.message,
+            step: toolCall?.function?.name,
           });
           streamMessage(res, {
             type: 'error',
@@ -566,9 +588,17 @@ export const streamChat = async (req, res) => {
       return res.end();
     }
 
-    // Update last active timestamp
-    conversation.lastActive = new Date();
-    await conversation.save();
+    // Update last active timestamp using findOneAndUpdate
+    await AIConversation.findOneAndUpdate(
+      { _id: conversation._id },
+      {
+        $set: {
+          lastActive: new Date(),
+          messages: conversation.messages,
+        },
+      },
+      { new: true },
+    );
 
     res.end();
   } catch (error) {
