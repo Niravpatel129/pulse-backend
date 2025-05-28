@@ -1,3 +1,5 @@
+import dedent from 'dedent';
+
 class PromptManager {
   constructor(agent, currentTurn, maxTurns) {
     this.agent = agent;
@@ -42,7 +44,8 @@ class PromptManager {
   }
 
   getConversationContext() {
-    return `You are participating in a conversation with other AI agents. 
+    return dedent`
+      You are participating in a conversation with other AI agents. 
       Current turn: ${this.currentTurn + 1} of ${this.maxTurns}
   
       IMPORTANT: 
@@ -63,11 +66,16 @@ class PromptManager {
           - Do not try to continue the conversation
           - After telling your joke, the conversation will automatically move to the next agent
           - Maintain awareness of the conversation context and previous jokes
-          - Do not repeat jokes that have already been told`;
+          - Do not repeat jokes that have already been told
+    `;
   }
 
   getFullPrompt() {
-    const fullPrompt = `${this.getSystemPrompt()}\n\n${this.getConversationContext()}`;
+    const fullPrompt = dedent`
+      ${this.getSystemPrompt()}
+
+      ${this.getConversationContext()}
+    `;
 
     console.log('\n=== DEBUG: Full Prompt ===');
     console.log('Agent:', this.agent.name);
