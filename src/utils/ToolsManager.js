@@ -100,26 +100,39 @@ class ToolsManager {
         this.embeddingsCache.set(query, queryEmbedding);
       }
 
-      // Get workspace embeddings from the database
+      // Try to get cached results first
+      const cacheKey = `workspace_search_${this.workspaceId}_${query}`;
+      const cachedResults = this.embeddingsCache.get(cacheKey);
+      if (cachedResults) {
+        return cachedResults;
+      }
+
+      // Get workspace embeddings from the database with pagination
       const embeddings = await WorkspaceEmbedding.find({
         workspace: this.workspaceId,
         status: 'active',
       })
         .select('title description metadata embedding')
-        .limit(100) // Limit to prevent memory issues
         .lean();
 
       if (!embeddings.length) {
         return 'No workspace embeddings found to search through.';
       }
 
-      // Calculate similarity scores
-      const results = embeddings.map((doc) => ({
-        title: doc.title,
-        description: doc.description,
-        metadata: doc.metadata,
-        similarity: this.cosineSimilarity(queryEmbedding, doc.embedding),
-      }));
+      // Calculate similarity scores in batches to avoid memory issues
+      const batchSize = 50;
+      const results = [];
+
+      for (let i = 0; i < embeddings.length; i += batchSize) {
+        const batch = embeddings.slice(i, i + batchSize);
+        const batchResults = batch.map((doc) => ({
+          title: doc.title,
+          description: doc.description,
+          metadata: doc.metadata,
+          similarity: this.cosineSimilarity(queryEmbedding, doc.embedding),
+        }));
+        results.push(...batchResults);
+      }
 
       // Sort by similarity and get top results
       const topResults = results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
@@ -129,12 +142,17 @@ class ToolsManager {
       }
 
       // Format results
-      return topResults.map((result) => ({
+      const formattedResults = topResults.map((result) => ({
         title: result.title,
         description: result.description,
         metadata: result.metadata,
         relevance: Math.round(result.similarity * 100) + '%',
       }));
+
+      // Cache the results for 5 minutes
+      this.embeddingsCache.set(cacheKey, formattedResults, 300);
+
+      return formattedResults;
     } catch (error) {
       console.error('Error searching workspace embeddings:', error);
       throw new Error(`Failed to search workspace: ${error.message}`);

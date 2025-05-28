@@ -43,38 +43,10 @@ class PromptManager {
     return fullSystemPrompt;
   }
 
-  getConversationContext() {
-    return dedent`
-      You are participating in a conversation with other AI agents. 
-      Current turn: ${this.currentTurn + 1} of ${this.maxTurns}
-  
-      IMPORTANT: 
-      1. Each agent should provide exactly ONE response and then stop
-      2. If you don't have anything meaningful to add, respond with "NO_RESPONSE_NEEDED"
-      3. For natural turn-based conversations, just respond naturally without special prefixes
-      4. Only use special prefixes in these specific cases:
-         - Use "AGENT_QUERY:" when you need specific information from another agent
-         - Use "AGENT_COLLABORATE:" when you need to work together on a complex task
-      5. Your response should be unique and add value to the conversation
-      6. Keep your responses concise and focused
-      7. Always acknowledge the other agent's response before providing your own
-      8. After providing your single response, do not continue the conversation
-      9. Track the turn count - you are on turn ${this.currentTurn + 1} of ${this.maxTurns}
-      10. For joke-telling scenarios:
-          - Tell exactly ONE joke
-          - Do not add commentary or ask questions
-          - Do not try to continue the conversation
-          - After telling your joke, the conversation will automatically move to the next agent
-          - Maintain awareness of the conversation context and previous jokes
-          - Do not repeat jokes that have already been told
-    `;
-  }
-
   getFullPrompt() {
     const fullPrompt = dedent`
       ${this.getSystemPrompt()}
 
-      ${this.getConversationContext()}
     `;
 
     console.log('\n=== DEBUG: Full Prompt ===');
