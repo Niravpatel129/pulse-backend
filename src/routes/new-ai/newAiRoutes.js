@@ -2,8 +2,10 @@ import express from 'express';
 import multer from 'multer';
 import {
   clearChatHistory,
+  deleteWorkspaceEmbeddings,
   embedWorkspaceData,
   getConversationHistory,
+  getWorkspaceEmbeddings,
   listConversations,
   streamChat,
 } from '../../controllers/newAi/index.js';
@@ -24,7 +26,10 @@ router.get('/chat/history/:sessionId', getConversationHistory);
 
 router.delete('/chat/history/:sessionId', clearChatHistory);
 
-// New route for embedding workspace data
 router.post('/embed', upload.none(), embedWorkspaceData);
+
+router.get('/embeddings', getWorkspaceEmbeddings);
+
+router.delete('/embeddings/:id', deleteWorkspaceEmbeddings);
 
 export default router;

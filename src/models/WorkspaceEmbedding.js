@@ -14,6 +14,10 @@ const workspaceEmbeddingSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    description: {
+      type: String,
+      trim: true,
+    },
     embedding: {
       type: [Number],
       required: true,
@@ -26,7 +30,7 @@ const workspaceEmbeddingSchema = new mongoose.Schema(
       type: {
         type: String,
         required: true,
-        enum: ['workspace_data', 'user_data', 'project_data', 'custom'],
+        enum: ['workspace_data', 'user_data', 'project_data', 'custom', 'document'],
         default: 'workspace_data',
       },
       source: String,

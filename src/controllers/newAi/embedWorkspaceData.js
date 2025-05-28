@@ -1,10 +1,15 @@
-import { OpenAIEmbeddings } from '@langchain/openai';
+import { OpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import WorkspaceEmbedding from '../../models/WorkspaceEmbedding.js';
 import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
 // Initialize OpenAI embeddings
 const embeddings = new OpenAIEmbeddings({
+  openAIApiKey: process.env.OPENAI_API_KEY,
+});
+
+// Initialize OpenAI for text generation
+const openai = new OpenAI({
   openAIApiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -49,10 +54,28 @@ export const embedWorkspaceData = async (req, res, next) => {
           }
         }
 
+        // Generate description using OpenAI
+        let description = '';
+        try {
+          const prompt = `Generate a concise description (max 2 sentences) for the following content:\n\n${text}`;
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 100,
+            temperature: 0.7,
+          });
+          description = completion.choices[0].message.content.trim();
+        } catch (error) {
+          console.error('Error generating description:', error);
+          // Fallback description if API call fails
+          description = `Content embedded on ${new Date().toLocaleDateString()}`;
+        }
+
         // Create new embedding document
         const embeddingDoc = new WorkspaceEmbedding({
           workspace: workspace._id,
           title,
+          description,
           embedding,
           metadata,
           createdBy: userId,
