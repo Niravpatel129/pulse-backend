@@ -3,7 +3,6 @@ import openai from '../../../config/openai.js';
 import Agent from '../../../models/agentModel.js';
 import AIConversation from '../../../models/AIConversation.js';
 import ChatSettings from '../../../models/ChatSettings.js';
-import { countTokens } from '../../../utils/aiUtils.js';
 import { firebaseStorage } from '../../../utils/firebase.js';
 import PromptManager from '../../../utils/PromptManager.js';
 import ToolsManager from '../../../utils/ToolsManager.js';
@@ -16,7 +15,7 @@ export const streamChat = async (req, res) => {
     const {
       message,
       sessionId,
-      model = 'gpt-4',
+      model = 'o4-mini',
       temperature = 0.7,
       max_tokens = MAX_COMPLETION_TOKENS,
       top_p = 1,
@@ -109,10 +108,10 @@ export const streamChat = async (req, res) => {
 
     // If no agents specified, use default agent
     if (selectedAgents.length === 0) {
-      const defaultAgent = await Agent.findOne({ workspace: workspaceId });
-      if (defaultAgent) {
-        selectedAgents.push(defaultAgent);
-        console.log('Using default agent:', defaultAgent.name);
+      const allAgents = await Agent.find({ workspace: workspaceId });
+      if (allAgents.length > 0) {
+        selectedAgents.push(allAgents[0]); // Use the first agent (index 0)
+        console.log('Using first available agent:', allAgents[0].name);
       } else {
         return res.status(400).json({
           error: {
@@ -296,7 +295,7 @@ export const streamChat = async (req, res) => {
 
       // Create the chat completion stream for this agent
       const stream = await openai.chat.completions.create({
-        model: 'gpt-4.1',
+        model: model,
         messages: messagesToSend,
         temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
         max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
@@ -309,7 +308,7 @@ export const streamChat = async (req, res) => {
       });
 
       console.log('\n=== DEBUG: Stream Created ===');
-      console.log('Stream initialized with model:', 'gpt-4.1');
+      console.log('Stream initialized with model:', model);
 
       // Stream each chunk for this agent
       let fullResponse = '';
@@ -378,10 +377,22 @@ export const streamChat = async (req, res) => {
         // Process tool call when finished
         if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
           try {
+            console.log('\n=== DEBUG: Processing Tool Call ===');
+            console.log('Tool:', toolCall.function.name);
+            console.log('Arguments:', toolCallArgs);
+
+            // Complete the tool call object with accumulated arguments
+            toolCall.function.arguments = toolCallArgs;
+
             const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
+            console.log('Tool execution result:', searchResult);
 
             // Add the tool response to the conversation
-            messagesToSend.push(toolsManager.createToolCallMessage(toolCall));
+            messagesToSend.push({
+              role: 'assistant',
+              content: null,
+              tool_calls: [toolCall],
+            });
             messagesToSend.push({
               role: 'tool',
               tool_call_id: toolCall.id,
@@ -417,11 +428,114 @@ export const streamChat = async (req, res) => {
             );
 
             hasProcessedToolCall = true;
+
+            try {
+              console.log('\n=== DEBUG: Creating Follow-up Stream ===');
+              // Create a new stream for the follow-up response
+              const followUpStream = await openai.chat.completions.create({
+                model: model,
+                messages: messagesToSend,
+                temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
+                max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+                top_p,
+                frequency_penalty,
+                presence_penalty,
+                stop,
+                stream: true,
+                tools: toolsManager.getTools(),
+              });
+
+              console.log('Follow-up stream created successfully');
+
+              // Reset state for follow-up response
+              fullResponse = '';
+              toolCall = null;
+              toolCallArgs = '';
+              hasProcessedToolCall = false;
+              lastFinishReason = null;
+
+              // Process follow-up response
+              for await (const followUpChunk of followUpStream) {
+                const content = followUpChunk.choices[0]?.delta?.content || '';
+                const finishReason = followUpChunk.choices[0]?.finish_reason;
+                lastFinishReason = finishReason || lastFinishReason;
+
+                if (content) {
+                  fullResponse += content;
+                  res.write(
+                    `data: ${JSON.stringify({
+                      id: followUpChunk.id,
+                      object: 'chat.completion.chunk',
+                      created: Math.floor(Date.now() / 1000),
+                      model: followUpChunk.model,
+                      sessionId: conversation._id,
+                      agent: {
+                        id: currentAgent._id,
+                        name: currentAgent.name,
+                        icon: currentAgent.icon,
+                      },
+                      turn: currentTurn,
+                      choices: [
+                        {
+                          index: 0,
+                          delta: { content },
+                          finish_reason: null,
+                        },
+                      ],
+                    })}\n\n`,
+                  );
+                }
+              }
+
+              // Add follow-up response to conversation
+              if (fullResponse.trim()) {
+                const followUpMessage = {
+                  role: 'assistant',
+                  content: fullResponse,
+                  agent: {
+                    id: currentAgent._id,
+                    name: currentAgent.name,
+                    icon: currentAgent.icon,
+                  },
+                };
+                conversation.messages.push(followUpMessage);
+                await conversation.save();
+                console.log('Follow-up response saved to conversation');
+              }
+            } catch (followUpError) {
+              console.error('Error in follow-up stream:', followUpError);
+              // Send error message to client
+              res.write(
+                `data: ${JSON.stringify({
+                  error: {
+                    message: 'Error processing follow-up response: ' + followUpError.message,
+                    type: 'server_error',
+                    code: 'follow_up_error',
+                  },
+                })}\n\n`,
+              );
+              res.end();
+              return;
+            }
           } catch (error) {
             console.error('Error executing tool:', error);
-            messagesToSend.push(
-              toolsManager.createToolResponse(toolCall, `Error executing search: ${error.message}`),
+            messagesToSend.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: `Error executing tool: ${error.message}`,
+            });
+            // Send error message to client
+            res.write(
+              `data: ${JSON.stringify({
+                error: {
+                  message: 'Error executing tool: ' + error.message,
+                  type: 'server_error',
+                  code: 'tool_execution_error',
+                },
+              })}\n\n`,
             );
+            res.end();
+            return;
           }
         }
       }
@@ -521,113 +635,6 @@ export const streamChat = async (req, res) => {
       console.log('Last message:', conversation.messages[conversation.messages.length - 1]);
 
       lastResponses.set(currentAgent._id.toString(), trimmedResponse);
-
-      // If we processed a tool call, continue the conversation
-      if (hasProcessedToolCall) {
-        // Create a new stream for the follow-up response
-        const followUpStream = await openai.chat.completions.create({
-          model,
-          messages: messagesToSend,
-          temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
-          max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
-          top_p,
-          frequency_penalty,
-          presence_penalty,
-          stop,
-          stream: true,
-        });
-
-        // Reset state for follow-up response
-        fullResponse = '';
-        toolCall = null;
-        toolCallArgs = '';
-        hasProcessedToolCall = false;
-        lastFinishReason = null;
-
-        // Process follow-up response
-        for await (const chunk of followUpStream) {
-          const content = chunk.choices[0]?.delta?.content || '';
-          const finishReason = chunk.choices[0]?.finish_reason;
-          lastFinishReason = finishReason || lastFinishReason;
-
-          if (content) {
-            fullResponse += content;
-            res.write(
-              `data: ${JSON.stringify({
-                id: chunk.id,
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: chunk.model,
-                sessionId: conversation._id,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
-                turn: currentTurn,
-                choices: [
-                  {
-                    index: 0,
-                    delta: { content },
-                    finish_reason: null,
-                  },
-                ],
-              })}\n\n`,
-            );
-          }
-        }
-
-        // Add follow-up response to conversation
-        if (fullResponse.trim()) {
-          const followUpMessage = {
-            role: 'assistant',
-            content: fullResponse,
-            agent: {
-              id: currentAgent._id,
-              name: currentAgent.name,
-              icon: currentAgent.icon,
-            },
-          };
-          conversation.messages.push(followUpMessage);
-        }
-      }
-
-      // Send completion event
-      res.write(
-        `data: ${JSON.stringify({
-          id: conversation._id,
-          object: 'chat.completion',
-          created: Math.floor(Date.now() / 1000),
-          model,
-          sessionId: conversation._id,
-          agent: {
-            id: currentAgent._id,
-            name: currentAgent.name,
-            icon: currentAgent.icon,
-          },
-          turn: currentTurn,
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: fullResponse,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
-              },
-              finish_reason: lastFinishReason,
-            },
-          ],
-          usage: {
-            prompt_tokens: countTokens(messagesToSend),
-            completion_tokens: Math.ceil(fullResponse.length / 4),
-            total_tokens: countTokens(messagesToSend) + Math.ceil(fullResponse.length / 4),
-          },
-        })}\n\n`,
-      );
 
       // Move to next agent
       currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;

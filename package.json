@@ -21,6 +21,7 @@
     "bcryptjs": "^3.0.2",
     "bullmq": "^5.51.1",
     "chalk": "^5.4.1",
+    "clipboardy": "^4.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dedent": "^1.6.0",

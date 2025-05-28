@@ -219,10 +219,13 @@ export const embedWorkspaceData = async (req, res, next) => {
     let processedCount = 0;
     let failedCount = 0;
     let totalRawTextLength = 0;
+    let progress = 0;
 
     const embeddedDocs = await Promise.all(
       documents.map(async (doc, index) => {
         console.log(`\nProcessing document ${index + 1}/${documents.length}`);
+        progress = Math.round(((index + 1) / documents.length) * 100);
+        console.log(`Progress: ${progress}%`);
 
         // Handle both string and object data
         const rawText = typeof doc === 'string' ? doc : formatStructuredData(doc);
@@ -373,6 +376,7 @@ export const embedWorkspaceData = async (req, res, next) => {
           averageRawTextLength: Math.round(totalRawTextLength / processedCount),
           averageTextLength: Math.round(totalTextLength / processedCount),
           averageTokensPerDocument: Math.round(totalTokens / processedCount),
+          progress: 100, // Final progress is 100% when complete
         },
         'Workspace data embedded successfully',
       ),
