@@ -28,7 +28,7 @@ export const streamChat = async (req, res) => {
     } = req.body;
 
     const workspaceId = req.workspace._id;
-    const toolsManager = new ToolsManager();
+    const toolsManager = new ToolsManager(workspaceId);
 
     if (!message && images.length === 0) {
       return res.status(400).json({

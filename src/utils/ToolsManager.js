@@ -1,5 +1,9 @@
+import { OpenAIEmbeddings } from '@langchain/openai';
+import WorkspaceEmbedding from '../models/WorkspaceEmbedding.js';
+
 class ToolsManager {
-  constructor() {
+  constructor(workspaceId) {
+    this.workspaceId = workspaceId;
     this.tools = [
       {
         type: 'function',
@@ -12,6 +16,27 @@ class ToolsManager {
               query: {
                 type: 'string',
                 description: 'The search query to look up on the web',
+              },
+            },
+            required: ['query'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'search_workspace',
+          description: 'Search through workspace embeddings for relevant information',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'The search query to find relevant workspace content',
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of results to return (default: 3)',
               },
             },
             required: ['query'],
@@ -32,6 +57,8 @@ class ToolsManager {
       switch (toolCall.function.name) {
         case 'search_web':
           return await this.executeSearchWeb(args.query);
+        case 'search_workspace':
+          return await this.executeSearchWorkspace(args.query, args.limit || 3);
         default:
           throw new Error(`Unknown tool: ${toolCall.function.name}`);
       }
@@ -47,6 +74,72 @@ class ToolsManager {
 
     // TODO: Implement actual web search functionality
     return `Search results for: ${query}`;
+  }
+
+  async executeSearchWorkspace(query, limit) {
+    if (!query || typeof query !== 'string') {
+      throw new Error(`Invalid search query format. Received: ${JSON.stringify(query)}`);
+    }
+
+    if (!this.workspaceId) {
+      throw new Error('Workspace ID is required for workspace search');
+    }
+
+    try {
+      // Get workspace embeddings from the database
+      const embeddings = await WorkspaceEmbedding.find({
+        workspace: this.workspaceId,
+        status: 'active',
+      }).select('title description metadata embedding');
+
+      if (!embeddings.length) {
+        return 'No workspace embeddings found to search through.';
+      }
+
+      // Create embeddings instance for query
+      const embeddingsModel = new OpenAIEmbeddings({
+        openAIApiKey: process.env.OPENAI_API_KEY,
+      });
+
+      // Get query embedding
+      const queryEmbedding = await embeddingsModel.embedQuery(query);
+
+      // Calculate similarity scores
+      const results = embeddings.map((doc) => {
+        const similarity = this.cosineSimilarity(queryEmbedding, doc.embedding);
+        return {
+          title: doc.title,
+          description: doc.description,
+          metadata: doc.metadata,
+          similarity,
+        };
+      });
+
+      // Sort by similarity and get top results
+      const topResults = results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
+
+      if (topResults.length === 0) {
+        return 'No relevant workspace content found.';
+      }
+
+      // Format results
+      return topResults.map((result) => ({
+        title: result.title,
+        description: result.description,
+        metadata: result.metadata,
+        relevance: Math.round(result.similarity * 100) + '%',
+      }));
+    } catch (error) {
+      console.error('Error searching workspace embeddings:', error);
+      throw new Error(`Failed to search workspace: ${error.message}`);
+    }
+  }
+
+  cosineSimilarity(vecA, vecB) {
+    const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
+    const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
+    const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
+    return dotProduct / (magnitudeA * magnitudeB);
   }
 
   createToolResponse(toolCall, content) {

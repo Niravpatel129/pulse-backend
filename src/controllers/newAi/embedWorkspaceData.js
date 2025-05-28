@@ -58,7 +58,9 @@ export const embedWorkspaceData = async (req, res, next) => {
         // Generate description using OpenAI
         let description = '';
         try {
-          const prompt = `Generate a concise description (max 2 sentences) for the following content:\n\n${text}`;
+          // Truncate text to a reasonable length (e.g., 2000 characters) for description generation
+          const truncatedText = text.length > 2000 ? text.slice(0, 2000) + '...' : text;
+          const prompt = `Generate a concise description (max 2 sentences) for the following content:\n\n${truncatedText}`;
           const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [{ role: 'user', content: prompt }],
