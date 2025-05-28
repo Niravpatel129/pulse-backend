@@ -93,7 +93,7 @@ export const streamChat = async (req, res) => {
     const {
       message,
       sessionId,
-      model = 'o4-mini',
+      model = 'gpt-3.5-turbo-0125',
       max_tokens = MAX_COMPLETION_TOKENS,
       top_p = 1,
       frequency_penalty = 0,
