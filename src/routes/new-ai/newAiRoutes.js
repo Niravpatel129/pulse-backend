@@ -13,7 +13,12 @@ import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 
 const router = express.Router();
-const upload = multer();
+const upload = multer({
+  limits: {
+    fieldSize: 50 * 1024 * 1024, // 50MB for fields
+    fileSize: 50 * 1024 * 1024, // 50MB for files
+  },
+});
 
 router.use(authenticate);
 router.use(extractWorkspace);
