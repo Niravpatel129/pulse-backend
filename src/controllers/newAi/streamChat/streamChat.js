@@ -313,18 +313,72 @@ export const streamChat = async (req, res) => {
 
     // Helper function to save assistant part
     const saveAssistantPart = async (part) => {
-      conversation.messages[assistantMsgIdx].parts.push(part);
+      console.log('Saving assistant part:', {
+        partType: part.type,
+        contentLength: part.content?.length,
+        conversationId: conversation._id,
+        currentMessageCount: conversation.messages.length,
+        assistantMsgIdx,
+      });
+
+      // Ensure we have a text part for the main content
+      if (part.type === 'text') {
+        const existingTextPart = conversation.messages[assistantMsgIdx].parts.find(
+          (p) => p.type === 'text',
+        );
+        if (existingTextPart) {
+          console.log('Updating existing text part:', {
+            oldLength: existingTextPart.content.length,
+            newContentLength: part.content.length,
+          });
+          existingTextPart.content += part.content;
+        } else {
+          console.log('Creating new text part');
+          conversation.messages[assistantMsgIdx].parts.push(part);
+        }
+      } else {
+        console.log('Adding non-text part');
+        conversation.messages[assistantMsgIdx].parts.push(part);
+      }
+
       conversation.markModified('messages');
+      console.log('Before save - Message parts:', {
+        messageCount: conversation.messages.length,
+        partsCount: conversation.messages[assistantMsgIdx].parts.length,
+        parts: conversation.messages[assistantMsgIdx].parts.map((p) => ({
+          type: p.type,
+          contentLength: p.content?.length,
+        })),
+      });
+
       // Use findOneAndUpdate instead of save to avoid parallel save issues
-      await AIConversation.findOneAndUpdate(
+      const updatedConversation = await AIConversation.findOneAndUpdate(
         { _id: conversation._id },
         { $set: { messages: conversation.messages } },
         { new: true },
       );
+
+      console.log('After save - Message parts:', {
+        messageCount: updatedConversation.messages.length,
+        partsCount: updatedConversation.messages[assistantMsgIdx].parts.length,
+        parts: updatedConversation.messages[assistantMsgIdx].parts.map((p) => ({
+          type: p.type,
+          contentLength: p.content?.length,
+        })),
+      });
+
+      // Update our local conversation object with the latest data
+      Object.assign(conversation, updatedConversation);
     };
 
     // Helper function to stream and save part
     const streamAndSavePart = async (part) => {
+      console.log('Streaming and saving part:', {
+        type: part.type,
+        contentLength: part.content?.length,
+        step: part.step,
+      });
+
       const partWithTimestamp = {
         ...part,
         timestamp: new Date(),
@@ -343,12 +397,41 @@ export const streamChat = async (req, res) => {
     let lastFinishReason = null;
     let finalResponse = null;
 
+    console.log('Starting stream processing');
+
     // Process stream
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content || '';
       const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
       const finishReason = chunk.choices[0]?.finish_reason;
       lastFinishReason = finishReason || lastFinishReason;
+
+      if (content) {
+        console.log('Received content chunk:', {
+          contentLength: content.length,
+          fullResponseLength: fullResponse.length,
+        });
+        fullResponse += content;
+
+        // Stream and save text content
+        await streamAndSavePart({
+          type: 'text',
+          content: content,
+        });
+
+        streamMessage(res, {
+          type: 'text',
+          id: chunk.id,
+          choices: [
+            {
+              index: 0,
+              delta: { content },
+              finish_reason: null,
+            },
+          ],
+          conversationId: conversation._id,
+        });
+      }
 
       if (toolCalls.length > 0 && !hasProcessedToolCall) {
         const currentToolCall = toolCalls[0];
@@ -378,44 +461,17 @@ export const streamChat = async (req, res) => {
         }
         if (currentToolCall.function?.arguments) {
           toolCallArgs += currentToolCall.function.arguments;
+          // Update the toolCall object with accumulated arguments
+          toolCall.function.arguments = toolCallArgs;
         }
-      }
-
-      if (content) {
-        fullResponse += content;
-
-        // Stream and save text content
-        if (!assistantMessage.parts.some((part) => part.type === 'text')) {
-          await streamAndSavePart({
-            type: 'text',
-            content: content,
-          });
-        } else {
-          const textPart = assistantMessage.parts.find((part) => part.type === 'text');
-          textPart.content += content;
-          conversation.markModified('messages');
-          await AIConversation.findOneAndUpdate(
-            { _id: conversation._id },
-            { $set: { messages: conversation.messages } },
-            { new: true },
-          );
-        }
-
-        streamMessage(res, {
-          type: 'text',
-          id: chunk.id,
-          choices: [
-            {
-              index: 0,
-              delta: { content },
-              finish_reason: null,
-            },
-          ],
-          conversationId: conversation._id,
-        });
       }
 
       if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
+        console.log('Processing tool call:', {
+          toolName: toolCall.function?.name,
+          arguments: toolCallArgs,
+        });
+
         await streamAndSavePart({
           type: 'status',
           content: 'Waiting for external tool result...',
@@ -506,17 +562,10 @@ export const streamChat = async (req, res) => {
               fullResponse += content;
 
               // Stream and save text content
-              if (!assistantMessage.parts.some((part) => part.type === 'text')) {
-                await streamAndSavePart({
-                  type: 'text',
-                  content: content,
-                });
-              } else {
-                const textPart = assistantMessage.parts.find((part) => part.type === 'text');
-                textPart.content += content;
-                conversation.markModified('messages');
-                await conversation.save();
-              }
+              await streamAndSavePart({
+                type: 'text',
+                content: content,
+              });
 
               streamMessage(res, {
                 type: 'text',
@@ -536,6 +585,12 @@ export const streamChat = async (req, res) => {
               await streamAndSavePart({
                 type: 'status',
                 content: 'Response complete',
+              });
+
+              // Ensure the final response is saved
+              await streamAndSavePart({
+                type: 'text',
+                content: fullResponse,
               });
 
               streamMessage(res, {
@@ -558,6 +613,15 @@ export const streamChat = async (req, res) => {
               break;
             }
           }
+
+          // Send final response if we have one
+          if (finalResponse) {
+            streamMessage(res, {
+              type: 'text',
+              content: finalResponse,
+              conversationId: conversation._id,
+            });
+          }
         } catch (followUpError) {
           console.error('Error in follow-up stream:', followUpError);
           await streamAndSavePart({
@@ -579,6 +643,12 @@ export const streamChat = async (req, res) => {
       }
     }
 
+    console.log('Stream processing complete:', {
+      fullResponseLength: fullResponse.length,
+      hasProcessedToolCall,
+      lastFinishReason,
+    });
+
     const trimmedResponse = fullResponse.trim();
 
     if (!trimmedResponse && !hasProcessedToolCall) {
@@ -588,8 +658,13 @@ export const streamChat = async (req, res) => {
       return res.end();
     }
 
-    // Update last active timestamp using findOneAndUpdate
-    await AIConversation.findOneAndUpdate(
+    // Final save of the conversation
+    console.log('Performing final save:', {
+      messageCount: conversation.messages.length,
+      lastMessageParts: conversation.messages[conversation.messages.length - 1]?.parts?.length,
+    });
+
+    const finalSave = await AIConversation.findOneAndUpdate(
       { _id: conversation._id },
       {
         $set: {
@@ -599,6 +674,11 @@ export const streamChat = async (req, res) => {
       },
       { new: true },
     );
+
+    console.log('Final save complete:', {
+      messageCount: finalSave.messages.length,
+      lastMessageParts: finalSave.messages[finalSave.messages.length - 1]?.parts?.length,
+    });
 
     res.end();
   } catch (error) {

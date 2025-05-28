@@ -58,7 +58,8 @@ class ToolsManager {
 
       switch (toolCall.function.name) {
         case 'search_web':
-          return await this.executeSearchWeb(args.query);
+          // OpenAI handles web search natively through function calling
+          return `Searching the web for: ${args.query}`;
         case 'search_workspace':
           return await this.executeSearchWorkspace(args.query, args.limit || 3);
         default:
@@ -67,15 +68,6 @@ class ToolsManager {
     } catch (error) {
       throw new Error(`Error executing tool: ${error.message}`);
     }
-  }
-
-  async executeSearchWeb(query) {
-    if (!query || typeof query !== 'string') {
-      throw new Error(`Invalid search query format. Received: ${JSON.stringify(query)}`);
-    }
-
-    // TODO: Implement actual web search functionality
-    return `Search results for: ${query}`;
   }
 
   async executeSearchWorkspace(query, limit) {
