@@ -239,7 +239,7 @@ export const streamChat = async (req, res) => {
     let toolCallArgs = '';
     let hasProcessedToolCall = false;
     let lastFinishReason = null;
-    let shouldSaveMessage = true; // Add flag to control message saving
+    let finalResponse = null; // Add variable to store final response
 
     // Process stream
     for await (const chunk of stream) {
@@ -327,7 +327,6 @@ export const streamChat = async (req, res) => {
         });
 
         hasProcessedToolCall = true;
-        shouldSaveMessage = false; // Don't save the initial tool call message
 
         // Create follow-up stream
         try {
@@ -348,7 +347,6 @@ export const streamChat = async (req, res) => {
           toolCallArgs = '';
           hasProcessedToolCall = false;
           lastFinishReason = null;
-          shouldSaveMessage = true; // Enable saving for the follow-up response
 
           for await (const followUpChunk of followUpStream) {
             const content = followUpChunk.choices[0]?.delta?.content || '';
@@ -402,21 +400,8 @@ export const streamChat = async (req, res) => {
                 ],
               });
 
-              // Save the message only if we should
-              if (shouldSaveMessage && fullResponse.trim()) {
-                const followUpMessage = {
-                  role: 'assistant',
-                  content: fullResponse,
-                  agent: {
-                    id: currentAgent._id,
-                    name: currentAgent.name,
-                    icon: currentAgent.icon,
-                  },
-                };
-                conversation.messages.push(followUpMessage);
-                conversation.lastActive = new Date();
-                await conversation.save();
-              }
+              // Store the final response
+              finalResponse = fullResponse;
               break;
             }
           }
@@ -445,11 +430,11 @@ export const streamChat = async (req, res) => {
       return;
     }
 
-    // If no tool call was processed, save the direct response
-    if (!hasProcessedToolCall && shouldSaveMessage && trimmedResponse) {
+    // Save the final response if we have one
+    if (finalResponse || (!hasProcessedToolCall && trimmedResponse)) {
       const aiMessage = {
         role: 'assistant',
-        content: fullResponse,
+        content: finalResponse || fullResponse,
         agent: {
           id: currentAgent._id,
           name: currentAgent.name,
