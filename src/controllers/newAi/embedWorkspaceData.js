@@ -1,5 +1,5 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
-import { MongoClient } from 'mongodb';
+import WorkspaceEmbedding from '../../models/WorkspaceEmbedding.js';
 import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
@@ -10,8 +10,9 @@ const embeddings = new OpenAIEmbeddings({
 
 export const embedWorkspaceData = async (req, res, next) => {
   try {
-    const { data } = req.body;
+    const { data, storeText = false } = req.body;
     const workspace = req.workspace;
+    const userId = req.user.userId;
 
     if (!data) {
       throw new ApiError(400, 'Data is required for embedding');
@@ -21,14 +22,6 @@ export const embedWorkspaceData = async (req, res, next) => {
       throw new ApiError(404, 'Workspace not found');
     }
 
-    // Connect to MongoDB
-    const mongoClient = new MongoClient(process.env.MONGO_URI);
-    await mongoClient.connect();
-
-    // Get the database and collection
-    const db = mongoClient.db(process.env.DB_NAME);
-    const collection = db.collection('embeddings');
-
     // Process the data and create embeddings
     const documents = Array.isArray(data) ? data : [data];
 
@@ -37,24 +30,45 @@ export const embedWorkspaceData = async (req, res, next) => {
         const text = typeof doc === 'string' ? doc : JSON.stringify(doc);
         const embedding = await embeddings.embedQuery(text);
 
-        return {
-          text,
-          embedding,
-          workspaceId: workspace._id,
-          metadata: {
-            type: 'workspace_data',
-            timestamp: new Date(),
-            ...(typeof doc === 'object' ? doc : {}),
-          },
+        // Extract metadata and title from the document
+        const metadata = {
+          type: 'workspace_data',
+          ...(typeof doc === 'object' ? doc : {}),
         };
+
+        // Generate a title if not provided
+        let title = metadata.title;
+        if (!title) {
+          if (typeof doc === 'string') {
+            // Use first 50 characters of text as title
+            title = doc.slice(0, 50) + (doc.length > 50 ? '...' : '');
+          } else if (doc.content) {
+            title = doc.content.slice(0, 50) + (doc.content.length > 50 ? '...' : '');
+          } else {
+            title = `Embedding ${new Date().toISOString()}`;
+          }
+        }
+
+        // Create new embedding document
+        const embeddingDoc = new WorkspaceEmbedding({
+          workspace: workspace._id,
+          title,
+          embedding,
+          metadata,
+          createdBy: userId,
+        });
+
+        // Only store text if explicitly requested
+        if (storeText) {
+          embeddingDoc.text = text;
+        }
+
+        return embeddingDoc;
       }),
     );
 
-    // Store the embeddings in MongoDB
-    await collection.insertMany(embeddedDocs);
-
-    // Close the MongoDB connection
-    await mongoClient.close();
+    // Save all embeddings
+    await WorkspaceEmbedding.insertMany(embeddedDocs);
 
     return res
       .status(200)
