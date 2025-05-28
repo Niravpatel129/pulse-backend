@@ -83,7 +83,50 @@ function streamStatus(res, message, { type = 'reasoning', step = null } = {}, co
 // Helper function to handle tool calls
 async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend, conversation) {
   try {
-    const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
+    // Validate and parse tool call arguments
+    let parsedArgs;
+    try {
+      // Check if we have multiple JSON objects concatenated
+      if (toolCallArgs.includes('}{')) {
+        // Split into individual JSON objects and parse each one
+        const jsonObjects = toolCallArgs.split('}{').map((obj, index) => {
+          // Add back the braces that were split
+          if (index === 0) return obj + '}';
+          if (index === toolCallArgs.split('}{').length - 1) return '{' + obj;
+          return '{' + obj + '}';
+        });
+
+        // Parse each JSON object
+        parsedArgs = jsonObjects.map((obj) => JSON.parse(obj));
+      } else {
+        parsedArgs = JSON.parse(toolCallArgs);
+      }
+    } catch (parseError) {
+      console.error('JSON parsing error in tool call arguments:', {
+        error: parseError.message,
+        position: parseError.message.match(/position (\d+)/)?.[1],
+        arguments: toolCallArgs,
+        toolName: toolCall.function?.name,
+      });
+      throw new Error(`Invalid JSON in tool arguments: ${parseError.message}`);
+    }
+
+    const searchResult = await toolsManager.executeTool(toolCall, parsedArgs);
+
+    // Ensure searchResult is properly stringified
+    let searchResultContent;
+    try {
+      searchResultContent =
+        typeof searchResult === 'string' ? searchResult : JSON.stringify(searchResult);
+    } catch (stringifyError) {
+      console.error('Error stringifying search result:', {
+        error: stringifyError.message,
+        result: searchResult,
+        toolName: toolCall.function?.name,
+      });
+      throw new Error(`Failed to stringify search result: ${stringifyError.message}`);
+    }
+
     messagesToSend.push({
       role: 'assistant',
       content: null,
@@ -92,7 +135,7 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
     messagesToSend.push({
       role: 'tool',
       tool_call_id: toolCall.id,
-      content: JSON.stringify(searchResult),
+      content: searchResultContent,
     });
 
     // Save tool call to conversation using findOneAndUpdate
@@ -113,7 +156,12 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
 
     return true;
   } catch (error) {
-    console.error('Error executing tool:', error);
+    console.error('Error executing tool:', {
+      error: error.message,
+      toolName: toolCall.function?.name,
+      arguments: toolCallArgs,
+      stack: error.stack,
+    });
     messagesToSend.push({
       role: 'tool',
       tool_call_id: toolCall.id,

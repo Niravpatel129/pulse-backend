@@ -54,11 +54,22 @@ class ToolsManager {
 
   async executeTool(toolCall, toolCallArgs) {
     try {
-      const args = JSON.parse(toolCallArgs);
+      // toolCallArgs is already parsed in handleToolCall
+      const args = toolCallArgs;
 
       switch (toolCall.function.name) {
         case 'search_web':
-          // OpenAI handles web search natively through function calling
+          // Handle multiple queries if they exist
+          if (Array.isArray(args)) {
+            const results = await Promise.all(
+              args.map(async (query) => ({
+                query: query.query,
+                result: `Searching the web for: ${query.query}`,
+              })),
+            );
+            return results;
+          }
+          // Single query case
           return `Searching the web for: ${args.query}`;
         case 'search_workspace':
           return await this.executeSearchWorkspace(args.query, args.limit || 3);
