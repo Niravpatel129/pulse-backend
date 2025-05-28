@@ -104,6 +104,19 @@ class ToolsManager {
           }
           return await this.executeSearchWorkspace(args.query, args.limit || 3);
         case 'get_pricing':
+          // Handle array of part numbers
+          if (Array.isArray(args)) {
+            const results = await Promise.all(
+              args.map(async (arg) => {
+                if (!arg.partNumber) {
+                  throw new Error('Part number is required for pricing lookup');
+                }
+                return await this.executeGetPricing(arg.partNumber);
+              }),
+            );
+            return results;
+          }
+          // Single part number case
           if (!args.partNumber) {
             throw new Error('Part number is required for pricing lookup');
           }
@@ -245,11 +258,21 @@ class ToolsManager {
     }
 
     try {
-      // First search for the product in workspace to get additional context
-      const searchResults = await this.executeSearchWorkspace(partNumber, 1);
+      // Add timeout to the workspace search
+      const searchPromise = this.executeSearchWorkspace(partNumber, 1);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Search timed out')), 5000),
+      );
+
+      // Race between search and timeout
+      const searchResults = await Promise.race([searchPromise, timeoutPromise]);
 
       if (!searchResults || searchResults.length === 0) {
-        return `No product found with part number: ${partNumber}`;
+        return {
+          partNumber,
+          status: 'not_found',
+          message: `No product found with part number: ${partNumber}`,
+        };
       }
 
       // Here you would typically integrate with your pricing system
@@ -257,20 +280,36 @@ class ToolsManager {
       const product = searchResults[0];
       return {
         partNumber,
+        status: 'success',
         title: product.title,
         description: product.description,
         metadata: product.metadata,
         pricing: {
-          // This is where you would integrate with your actual pricing system
-          // For now returning mock data
           currency: 'USD',
           price: 'Contact for pricing',
           availability: 'In stock',
         },
       };
     } catch (error) {
-      console.error('Error getting pricing:', error);
-      throw new Error(`Failed to get pricing: ${error.message}`);
+      console.error('Error getting pricing:', {
+        partNumber,
+        error: error.message,
+        stack: error.stack,
+      });
+
+      if (error.message === 'Search timed out') {
+        return {
+          partNumber,
+          status: 'timeout',
+          message: 'Search timed out. Please try again.',
+        };
+      }
+
+      return {
+        partNumber,
+        status: 'error',
+        message: `Failed to get pricing: ${error.message}`,
+      };
     }
   }
 }
