@@ -382,7 +382,11 @@ export const streamChat = async (req, res) => {
 
             // Add the tool response to the conversation
             messagesToSend.push(toolsManager.createToolCallMessage(toolCall));
-            messagesToSend.push(toolsManager.createToolResponse(toolCall, searchResult));
+            messagesToSend.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(searchResult),
+            });
 
             // Stream the tool response
             res.write(
