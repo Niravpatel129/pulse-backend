@@ -16,7 +16,6 @@ export const streamChat = async (req, res) => {
       message,
       sessionId,
       model = 'o4-mini',
-      temperature = 0.7,
       max_tokens = MAX_COMPLETION_TOKENS,
       top_p = 1,
       frequency_penalty = 0,
@@ -289,6 +288,11 @@ export const streamChat = async (req, res) => {
 
       messagesToSend.push(...formattedMessages);
 
+      // Ensure messagesToSend is not null before using it
+      if (!messagesToSend || !Array.isArray(messagesToSend)) {
+        messagesToSend = [];
+      }
+
       console.log('\n=== DEBUG: Final Prompt ===');
       console.log('Total messages to send:', messagesToSend.length);
       console.log('Messages being sent to OpenAI:', JSON.stringify(messagesToSend, null, 2));
@@ -297,8 +301,7 @@ export const streamChat = async (req, res) => {
       const stream = await openai.chat.completions.create({
         model: model,
         messages: messagesToSend,
-        temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
-        max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+        max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
         top_p,
         frequency_penalty,
         presence_penalty,
@@ -435,8 +438,7 @@ export const streamChat = async (req, res) => {
               const followUpStream = await openai.chat.completions.create({
                 model: model,
                 messages: messagesToSend,
-                temperature: currentTurn > 0 ? Math.min(temperature + 0.2, 1.0) : temperature,
-                max_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+                max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
                 top_p,
                 frequency_penalty,
                 presence_penalty,
@@ -484,6 +486,36 @@ export const streamChat = async (req, res) => {
                       ],
                     })}\n\n`,
                   );
+                }
+
+                // Send final message when stream is complete
+                if (finishReason === 'stop') {
+                  res.write(
+                    `data: ${JSON.stringify({
+                      id: followUpChunk.id,
+                      object: 'chat.completion.chunk',
+                      created: Math.floor(Date.now() / 1000),
+                      model: followUpChunk.model,
+                      sessionId: conversation._id,
+                      agent: {
+                        id: currentAgent._id,
+                        name: currentAgent.name,
+                        icon: currentAgent.icon,
+                      },
+                      turn: currentTurn,
+                      choices: [
+                        {
+                          index: 0,
+                          message: {
+                            role: 'assistant',
+                            content: fullResponse,
+                          },
+                          finish_reason: 'stop',
+                        },
+                      ],
+                    })}\n\n`,
+                  );
+                  break;
                 }
               }
 
@@ -633,6 +665,35 @@ export const streamChat = async (req, res) => {
       console.log('Agent:', currentAgent.name);
       console.log('Total messages after save:', conversation.messages.length);
       console.log('Last message:', conversation.messages[conversation.messages.length - 1]);
+
+      // Don't send the final message again since it was already streamed
+      if (!hasProcessedToolCall) {
+        res.write(
+          `data: ${JSON.stringify({
+            id: followUpChunk.id,
+            object: 'chat.completion.chunk',
+            created: Math.floor(Date.now() / 1000),
+            model: followUpChunk.model,
+            sessionId: conversation._id,
+            agent: {
+              id: currentAgent._id,
+              name: currentAgent.name,
+              icon: currentAgent.icon,
+            },
+            turn: currentTurn,
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: fullResponse,
+                },
+                finish_reason: 'stop',
+              },
+            ],
+          })}\n\n`,
+        );
+      }
 
       lastResponses.set(currentAgent._id.toString(), trimmedResponse);
 
