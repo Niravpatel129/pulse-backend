@@ -7,7 +7,6 @@ import { firebaseStorage } from '../../../utils/firebase.js';
 import PromptManager from '../../../utils/PromptManager.js';
 import ToolsManager from '../../../utils/ToolsManager.js';
 
-const MAX_AGENT_TURNS = 5; // Maximum number of turns in the agent conversation
 const MAX_COMPLETION_TOKENS = 2000; // Maximum tokens for completion
 
 // Helper function to process images
@@ -187,397 +186,296 @@ export const streamChat = async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    // Initialize conversation state
-    let currentTurn = 0;
-    let activeAgents = new Set(selectedAgents.map((agent) => agent._id.toString()));
-    let lastResponses = new Map();
-    let currentAgentIndex = 0;
+    // Use the first agent
+    const currentAgent = selectedAgents[0];
+    const promptManager = new PromptManager(currentAgent, 0, 1);
+    let messagesToSend = [];
 
-    // Handle direct agent request
-    const directAgentRequest = message.toLowerCase().match(/^(clara|leo)\s+(.+)$/i);
-    if (directAgentRequest) {
-      const [_, requestedAgent, actualMessage] = directAgentRequest;
-      const targetAgent = selectedAgents.find(
-        (a) => a.name.toLowerCase() === requestedAgent.toLowerCase(),
-      );
+    // Add system message
+    messagesToSend.push({
+      role: 'system',
+      content: promptManager.getFullPrompt(),
+    });
 
-      if (targetAgent) {
-        activeAgents.clear();
-        activeAgents.add(targetAgent._id.toString());
-        currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
-        message = actualMessage.trim();
-        userMessage.content = message;
-      }
-    }
-
-    // Main conversation loop
-    while (currentTurn < MAX_AGENT_TURNS && activeAgents.size > 0) {
-      const currentAgent = selectedAgents[currentAgentIndex];
-
-      if (selectedAgents.length === 1 && currentTurn > 0) {
-        break;
-      }
-
-      if (!activeAgents.has(currentAgent._id.toString())) {
-        currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
-        continue;
-      }
-
-      const promptManager = new PromptManager(currentAgent, currentTurn, MAX_AGENT_TURNS);
-      let messagesToSend = [];
-
-      // Add system message
-      messagesToSend.push({
-        role: 'system',
-        content: promptManager.getFullPrompt(),
-      });
-
-      // Add conversation history
-      const recentMessages = conversation.messages.slice(-10);
-      const formattedMessages = recentMessages.map((msg) => {
-        if (msg.images && msg.images.length > 0) {
-          return {
-            role: msg.role,
-            content: [
-              { type: 'text', text: msg.content || 'Please analyze this image.' },
-              ...msg.images.map((img) => ({
-                type: 'image_url',
-                image_url: { url: img.url },
-              })),
-            ],
-          };
-        }
+    // Add conversation history
+    const recentMessages = conversation.messages.slice(-10);
+    const formattedMessages = recentMessages.map((msg) => {
+      if (msg.images && msg.images.length > 0) {
         return {
           role: msg.role,
-          content: msg.content,
+          content: [
+            { type: 'text', text: msg.content || 'Please analyze this image.' },
+            ...msg.images.map((img) => ({
+              type: 'image_url',
+              image_url: { url: img.url },
+            })),
+          ],
         };
-      });
-
-      messagesToSend.push(...formattedMessages);
-
-      // Create chat completion stream
-      const stream = await openai.chat.completions.create({
-        model: model,
-        messages: messagesToSend,
-        max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
-        top_p,
-        frequency_penalty,
-        presence_penalty,
-        stop: stop || undefined,
-        stream: true,
-        tools: toolsManager.getTools(),
-      });
-
-      let fullResponse = '';
-      let toolCall = null;
-      let toolCallArgs = '';
-      let hasProcessedToolCall = false;
-      let lastFinishReason = null;
-
-      // Process stream
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
-        const finishReason = chunk.choices[0]?.finish_reason;
-        lastFinishReason = finishReason || lastFinishReason;
-
-        if (content) {
-          fullResponse += content;
-          streamMessage(res, {
-            id: chunk.id,
-            object: 'chat.completion.chunk',
-            created: Math.floor(Date.now() / 1000),
-            model: chunk.model,
-            sessionId: conversation._id,
-            agent: {
-              id: currentAgent._id,
-              name: currentAgent.name,
-              icon: currentAgent.icon,
-            },
-            turn: currentTurn,
-            choices: [
-              {
-                index: 0,
-                delta: { content },
-                finish_reason: null,
-              },
-            ],
-          });
-        }
-
-        if (toolCalls.length > 0) {
-          const currentToolCall = toolCalls[0];
-          if (currentToolCall.function?.name) {
-            toolCall = {
-              id: currentToolCall.id,
-              type: 'function',
-              function: {
-                name: currentToolCall.function.name,
-                arguments: '',
-              },
-            };
-          }
-          if (currentToolCall.function?.arguments) {
-            toolCallArgs += currentToolCall.function.arguments;
-          }
-        }
-
-        if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
-          const success = await handleToolCall(
-            toolCall,
-            toolCallArgs,
-            toolsManager,
-            messagesToSend,
-          );
-          if (!success) {
-            streamMessage(res, {
-              error: {
-                message: 'Error executing tool',
-                type: 'server_error',
-                code: 'tool_execution_error',
-              },
-            });
-            res.end();
-            return;
-          }
-
-          streamMessage(res, {
-            id: chunk.id,
-            object: 'chat.completion.chunk',
-            created: Math.floor(Date.now() / 1000),
-            model: chunk.model,
-            sessionId: conversation._id,
-            agent: {
-              id: currentAgent._id,
-              name: currentAgent.name,
-              icon: currentAgent.icon,
-            },
-            turn: currentTurn,
-            choices: [
-              {
-                index: 0,
-                message: {
-                  role: 'assistant',
-                  content: null,
-                  tool_calls: [toolCall],
-                },
-                finish_reason: 'tool_calls',
-              },
-            ],
-          });
-
-          hasProcessedToolCall = true;
-
-          // Create follow-up stream
-          try {
-            const followUpStream = await openai.chat.completions.create({
-              model: model,
-              messages: messagesToSend,
-              max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
-              top_p,
-              frequency_penalty,
-              presence_penalty,
-              stop,
-              stream: true,
-              tools: toolsManager.getTools(),
-            });
-
-            fullResponse = '';
-            toolCall = null;
-            toolCallArgs = '';
-            hasProcessedToolCall = false;
-            lastFinishReason = null;
-
-            for await (const followUpChunk of followUpStream) {
-              const content = followUpChunk.choices[0]?.delta?.content || '';
-              const finishReason = followUpChunk.choices[0]?.finish_reason;
-              lastFinishReason = finishReason || lastFinishReason;
-
-              if (content) {
-                fullResponse += content;
-                streamMessage(res, {
-                  id: followUpChunk.id,
-                  object: 'chat.completion.chunk',
-                  created: Math.floor(Date.now() / 1000),
-                  model: followUpChunk.model,
-                  sessionId: conversation._id,
-                  agent: {
-                    id: currentAgent._id,
-                    name: currentAgent.name,
-                    icon: currentAgent.icon,
-                  },
-                  turn: currentTurn,
-                  choices: [
-                    {
-                      index: 0,
-                      delta: { content },
-                      finish_reason: null,
-                    },
-                  ],
-                });
-              }
-
-              if (finishReason === 'stop') {
-                streamMessage(res, {
-                  id: followUpChunk.id,
-                  object: 'chat.completion.chunk',
-                  created: Math.floor(Date.now() / 1000),
-                  model: followUpChunk.model,
-                  sessionId: conversation._id,
-                  agent: {
-                    id: currentAgent._id,
-                    name: currentAgent.name,
-                    icon: currentAgent.icon,
-                  },
-                  turn: currentTurn,
-                  choices: [
-                    {
-                      index: 0,
-                      message: {
-                        role: 'assistant',
-                        content: fullResponse,
-                      },
-                      finish_reason: 'stop',
-                    },
-                  ],
-                });
-                break;
-              }
-            }
-
-            if (fullResponse.trim()) {
-              const followUpMessage = {
-                role: 'assistant',
-                content: fullResponse,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
-              };
-              conversation.messages.push(followUpMessage);
-              await conversation.save();
-            }
-          } catch (followUpError) {
-            console.error('Error in follow-up stream:', followUpError);
-            streamMessage(res, {
-              error: {
-                message: 'Error processing follow-up response: ' + followUpError.message,
-                type: 'server_error',
-                code: 'follow_up_error',
-              },
-            });
-            res.end();
-            return;
-          }
-        }
       }
-
-      const trimmedResponse = fullResponse.trim();
-
-      if (!trimmedResponse && !hasProcessedToolCall) {
-        console.warn('Empty response received from agent:', {
-          agent: currentAgent.name,
-          turn: currentTurn,
-        });
-        activeAgents.delete(currentAgent._id.toString());
-        continue;
-      }
-
-      activeAgents.delete(currentAgent._id.toString());
-
-      if (
-        trimmedResponse.toUpperCase() === 'NO_RESPONSE_NEEDED' ||
-        trimmedResponse.toUpperCase() === 'TASK_COMPLETE' ||
-        (lastResponses.has(currentAgent._id.toString()) &&
-          lastResponses.get(currentAgent._id.toString()) === trimmedResponse)
-      ) {
-        continue;
-      } else if (trimmedResponse.startsWith('CONVERSATION_END:')) {
-        const endMessage = trimmedResponse.substring('CONVERSATION_END:'.length).trim();
-        activeAgents.clear();
-        const endSystemMessage = {
-          role: 'system',
-          content: `Conversation ended by ${currentAgent.name}: ${endMessage}`,
-        };
-        messagesToSend = [endSystemMessage, ...messagesToSend];
-      } else if (currentTurn === MAX_AGENT_TURNS - 1) {
-        const forcedEndMessage = `${currentAgent.name} has reached the maximum number of turns (${MAX_AGENT_TURNS}). Ending conversation.`;
-        const endSystemMessage = {
-          role: 'system',
-          content: forcedEndMessage,
-        };
-        messagesToSend = [endSystemMessage, ...messagesToSend];
-        activeAgents.clear();
-      } else if (
-        trimmedResponse.startsWith('AGENT_QUERY:') ||
-        trimmedResponse.startsWith('AGENT_COLLABORATE:')
-      ) {
-        const queryMatch = trimmedResponse.match(
-          /(?:AGENT_QUERY|AGENT_COLLABORATE):\s*(\w+):\s*(.*)/i,
-        );
-        if (queryMatch) {
-          const [_, targetAgentName, query] = queryMatch;
-          const targetAgent = selectedAgents.find(
-            (a) => a.name.toLowerCase() === targetAgentName.toLowerCase(),
-          );
-
-          if (targetAgent && activeAgents.has(targetAgent._id.toString())) {
-            currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
-            const collaborationMessage = {
-              role: 'system',
-              content: `Previous agent requested ${
-                trimmedResponse.startsWith('AGENT_QUERY:') ? 'input' : 'collaboration'
-              } from ${targetAgentName}: ${query}`,
-            };
-            messagesToSend = [collaborationMessage, ...messagesToSend];
-          }
-        }
-      }
-
-      const aiMessage = {
-        role: 'assistant',
-        content: hasProcessedToolCall
-          ? 'Processing your request...'
-          : fullResponse || 'No response generated',
-        agent: {
-          id: currentAgent._id,
-          name: currentAgent.name,
-          icon: currentAgent.icon,
-        },
+      return {
+        role: msg.role,
+        content: msg.content,
       };
-      conversation.messages.push(aiMessage);
-      await conversation.save();
+    });
 
-      if (!hasProcessedToolCall) {
+    messagesToSend.push(...formattedMessages);
+
+    // Create chat completion stream
+    const stream = await openai.chat.completions.create({
+      model: model,
+      messages: messagesToSend,
+      max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+      top_p,
+      frequency_penalty,
+      presence_penalty,
+      stop: stop || undefined,
+      stream: true,
+      tools: toolsManager.getTools(),
+    });
+
+    let fullResponse = '';
+    let toolCall = null;
+    let toolCallArgs = '';
+    let hasProcessedToolCall = false;
+    let lastFinishReason = null;
+
+    // Process stream
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
+      const finishReason = chunk.choices[0]?.finish_reason;
+      lastFinishReason = finishReason || lastFinishReason;
+
+      if (content) {
+        fullResponse += content;
         streamMessage(res, {
-          id: Date.now().toString(),
+          id: chunk.id,
           object: 'chat.completion.chunk',
           created: Math.floor(Date.now() / 1000),
-          model: model,
+          model: chunk.model,
           sessionId: conversation._id,
           agent: {
             id: currentAgent._id,
             name: currentAgent.name,
             icon: currentAgent.icon,
           },
-          turn: currentTurn,
           choices: [
             {
               index: 0,
-              message: {
-                role: 'assistant',
-                content: fullResponse,
-              },
-              finish_reason: 'stop',
+              delta: { content },
+              finish_reason: null,
             },
           ],
         });
       }
 
-      lastResponses.set(currentAgent._id.toString(), trimmedResponse);
-      currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
-      currentTurn++;
+      if (toolCalls.length > 0) {
+        const currentToolCall = toolCalls[0];
+        if (currentToolCall.function?.name) {
+          toolCall = {
+            id: currentToolCall.id,
+            type: 'function',
+            function: {
+              name: currentToolCall.function.name,
+              arguments: '',
+            },
+          };
+        }
+        if (currentToolCall.function?.arguments) {
+          toolCallArgs += currentToolCall.function.arguments;
+        }
+      }
+
+      if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
+        const success = await handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend);
+        if (!success) {
+          streamMessage(res, {
+            error: {
+              message: 'Error executing tool',
+              type: 'server_error',
+              code: 'tool_execution_error',
+            },
+          });
+          res.end();
+          return;
+        }
+
+        streamMessage(res, {
+          id: chunk.id,
+          object: 'chat.completion.chunk',
+          created: Math.floor(Date.now() / 1000),
+          model: chunk.model,
+          sessionId: conversation._id,
+          agent: {
+            id: currentAgent._id,
+            name: currentAgent.name,
+            icon: currentAgent.icon,
+          },
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [toolCall],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        });
+
+        hasProcessedToolCall = true;
+
+        // Create follow-up stream
+        try {
+          const followUpStream = await openai.chat.completions.create({
+            model: model,
+            messages: messagesToSend,
+            max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+            top_p,
+            frequency_penalty,
+            presence_penalty,
+            stop,
+            stream: true,
+            tools: toolsManager.getTools(),
+          });
+
+          fullResponse = '';
+          toolCall = null;
+          toolCallArgs = '';
+          hasProcessedToolCall = false;
+          lastFinishReason = null;
+
+          for await (const followUpChunk of followUpStream) {
+            const content = followUpChunk.choices[0]?.delta?.content || '';
+            const finishReason = followUpChunk.choices[0]?.finish_reason;
+            lastFinishReason = finishReason || lastFinishReason;
+
+            if (content) {
+              fullResponse += content;
+              streamMessage(res, {
+                id: followUpChunk.id,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: followUpChunk.model,
+                sessionId: conversation._id,
+                agent: {
+                  id: currentAgent._id,
+                  name: currentAgent.name,
+                  icon: currentAgent.icon,
+                },
+                choices: [
+                  {
+                    index: 0,
+                    delta: { content },
+                    finish_reason: null,
+                  },
+                ],
+              });
+            }
+
+            if (finishReason === 'stop') {
+              streamMessage(res, {
+                id: followUpChunk.id,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: followUpChunk.model,
+                sessionId: conversation._id,
+                agent: {
+                  id: currentAgent._id,
+                  name: currentAgent.name,
+                  icon: currentAgent.icon,
+                },
+                choices: [
+                  {
+                    index: 0,
+                    message: {
+                      role: 'assistant',
+                      content: fullResponse,
+                    },
+                    finish_reason: 'stop',
+                  },
+                ],
+              });
+              break;
+            }
+          }
+
+          if (fullResponse.trim()) {
+            const followUpMessage = {
+              role: 'assistant',
+              content: fullResponse,
+              agent: {
+                id: currentAgent._id,
+                name: currentAgent.name,
+                icon: currentAgent.icon,
+              },
+            };
+            conversation.messages.push(followUpMessage);
+            await conversation.save();
+          }
+        } catch (followUpError) {
+          console.error('Error in follow-up stream:', followUpError);
+          streamMessage(res, {
+            error: {
+              message: 'Error processing follow-up response: ' + followUpError.message,
+              type: 'server_error',
+              code: 'follow_up_error',
+            },
+          });
+          res.end();
+          return;
+        }
+      }
+    }
+
+    const trimmedResponse = fullResponse.trim();
+
+    if (!trimmedResponse && !hasProcessedToolCall) {
+      console.warn('Empty response received from agent:', {
+        agent: currentAgent.name,
+      });
+      res.end();
+      return;
+    }
+
+    const aiMessage = {
+      role: 'assistant',
+      content: hasProcessedToolCall
+        ? 'Processing your request...'
+        : fullResponse || 'No response generated',
+      agent: {
+        id: currentAgent._id,
+        name: currentAgent.name,
+        icon: currentAgent.icon,
+      },
+    };
+    conversation.messages.push(aiMessage);
+    await conversation.save();
+
+    if (!hasProcessedToolCall) {
+      streamMessage(res, {
+        id: Date.now().toString(),
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model: model,
+        sessionId: conversation._id,
+        agent: {
+          id: currentAgent._id,
+          name: currentAgent.name,
+          icon: currentAgent.icon,
+        },
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: fullResponse,
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      });
     }
 
     conversation.lastActive = new Date();
