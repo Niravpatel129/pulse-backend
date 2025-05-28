@@ -239,6 +239,7 @@ export const streamChat = async (req, res) => {
     let toolCallArgs = '';
     let hasProcessedToolCall = false;
     let lastFinishReason = null;
+    let shouldSaveMessage = true; // Add flag to control message saving
 
     // Process stream
     for await (const chunk of stream) {
@@ -326,6 +327,7 @@ export const streamChat = async (req, res) => {
         });
 
         hasProcessedToolCall = true;
+        shouldSaveMessage = false; // Don't save the initial tool call message
 
         // Create follow-up stream
         try {
@@ -346,6 +348,7 @@ export const streamChat = async (req, res) => {
           toolCallArgs = '';
           hasProcessedToolCall = false;
           lastFinishReason = null;
+          shouldSaveMessage = true; // Enable saving for the follow-up response
 
           for await (const followUpChunk of followUpStream) {
             const content = followUpChunk.choices[0]?.delta?.content || '';
@@ -398,23 +401,24 @@ export const streamChat = async (req, res) => {
                   },
                 ],
               });
+
+              // Save the message only if we should
+              if (shouldSaveMessage && fullResponse.trim()) {
+                const followUpMessage = {
+                  role: 'assistant',
+                  content: fullResponse,
+                  agent: {
+                    id: currentAgent._id,
+                    name: currentAgent.name,
+                    icon: currentAgent.icon,
+                  },
+                };
+                conversation.messages.push(followUpMessage);
+                conversation.lastActive = new Date();
+                await conversation.save();
+              }
               break;
             }
-          }
-
-          if (fullResponse.trim()) {
-            const followUpMessage = {
-              role: 'assistant',
-              content: fullResponse,
-              agent: {
-                id: currentAgent._id,
-                name: currentAgent.name,
-                icon: currentAgent.icon,
-              },
-            };
-            conversation.messages.push(followUpMessage);
-            conversation.lastActive = new Date();
-            await conversation.save();
           }
         } catch (followUpError) {
           console.error('Error in follow-up stream:', followUpError);
@@ -442,7 +446,7 @@ export const streamChat = async (req, res) => {
     }
 
     // If no tool call was processed, save the direct response
-    if (!hasProcessedToolCall && trimmedResponse) {
+    if (!hasProcessedToolCall && shouldSaveMessage && trimmedResponse) {
       const aiMessage = {
         role: 'assistant',
         content: fullResponse,
@@ -455,32 +459,6 @@ export const streamChat = async (req, res) => {
       conversation.messages.push(aiMessage);
       conversation.lastActive = new Date();
       await conversation.save();
-    }
-
-    // Send final message if no tool call was processed
-    if (!hasProcessedToolCall) {
-      streamMessage(res, {
-        id: Date.now().toString(),
-        object: 'chat.completion.chunk',
-        created: Math.floor(Date.now() / 1000),
-        model: model,
-        sessionId: conversation._id,
-        agent: {
-          id: currentAgent._id,
-          name: currentAgent.name,
-          icon: currentAgent.icon,
-        },
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: fullResponse,
-            },
-            finish_reason: 'stop',
-          },
-        ],
-      });
     }
 
     res.end();
