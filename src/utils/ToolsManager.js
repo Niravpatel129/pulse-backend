@@ -1,9 +1,11 @@
 import { OpenAIEmbeddings } from '@langchain/openai';
+import NodeCache from 'node-cache';
 import WorkspaceEmbedding from '../models/WorkspaceEmbedding.js';
 
 class ToolsManager {
   constructor(workspaceId) {
     this.workspaceId = workspaceId;
+    this.embeddingsCache = new NodeCache({ stdTTL: 3600 }); // Cache embeddings for 1 hour
     this.tools = [
       {
         type: 'function',
@@ -86,34 +88,38 @@ class ToolsManager {
     }
 
     try {
-      // Get workspace embeddings from the database
-      const embeddings = await WorkspaceEmbedding.find({
-        workspace: this.workspaceId,
-        status: 'active',
-      }).select('title description metadata embedding');
-
-      if (!embeddings.length) {
-        return 'No workspace embeddings found to search through.';
-      }
-
       // Create embeddings instance for query
       const embeddingsModel = new OpenAIEmbeddings({
         openAIApiKey: process.env.OPENAI_API_KEY,
       });
 
-      // Get query embedding
-      const queryEmbedding = await embeddingsModel.embedQuery(query);
+      // Get query embedding (with caching)
+      let queryEmbedding = this.embeddingsCache.get(query);
+      if (!queryEmbedding) {
+        queryEmbedding = await embeddingsModel.embedQuery(query);
+        this.embeddingsCache.set(query, queryEmbedding);
+      }
+
+      // Get workspace embeddings from the database
+      const embeddings = await WorkspaceEmbedding.find({
+        workspace: this.workspaceId,
+        status: 'active',
+      })
+        .select('title description metadata embedding')
+        .limit(100) // Limit to prevent memory issues
+        .lean();
+
+      if (!embeddings.length) {
+        return 'No workspace embeddings found to search through.';
+      }
 
       // Calculate similarity scores
-      const results = embeddings.map((doc) => {
-        const similarity = this.cosineSimilarity(queryEmbedding, doc.embedding);
-        return {
-          title: doc.title,
-          description: doc.description,
-          metadata: doc.metadata,
-          similarity,
-        };
-      });
+      const results = embeddings.map((doc) => ({
+        title: doc.title,
+        description: doc.description,
+        metadata: doc.metadata,
+        similarity: this.cosineSimilarity(queryEmbedding, doc.embedding),
+      }));
 
       // Sort by similarity and get top results
       const topResults = results.sort((a, b) => b.similarity - a.similarity).slice(0, limit);

@@ -178,6 +178,7 @@ export const streamChat = async (req, res) => {
       images: processedImages.length > 0 ? processedImages : undefined,
     };
     conversation.messages.push(userMessage);
+    conversation.lastActive = new Date();
     await conversation.save();
 
     // Set up streaming response
@@ -412,6 +413,7 @@ export const streamChat = async (req, res) => {
               },
             };
             conversation.messages.push(followUpMessage);
+            conversation.lastActive = new Date();
             await conversation.save();
           }
         } catch (followUpError) {
@@ -439,20 +441,23 @@ export const streamChat = async (req, res) => {
       return;
     }
 
-    const aiMessage = {
-      role: 'assistant',
-      content: hasProcessedToolCall
-        ? 'Processing your request...'
-        : fullResponse || 'No response generated',
-      agent: {
-        id: currentAgent._id,
-        name: currentAgent.name,
-        icon: currentAgent.icon,
-      },
-    };
-    conversation.messages.push(aiMessage);
-    await conversation.save();
+    // If no tool call was processed, save the direct response
+    if (!hasProcessedToolCall && trimmedResponse) {
+      const aiMessage = {
+        role: 'assistant',
+        content: fullResponse,
+        agent: {
+          id: currentAgent._id,
+          name: currentAgent.name,
+          icon: currentAgent.icon,
+        },
+      };
+      conversation.messages.push(aiMessage);
+      conversation.lastActive = new Date();
+      await conversation.save();
+    }
 
+    // Send final message if no tool call was processed
     if (!hasProcessedToolCall) {
       streamMessage(res, {
         id: Date.now().toString(),
@@ -478,8 +483,6 @@ export const streamChat = async (req, res) => {
       });
     }
 
-    conversation.lastActive = new Date();
-    await conversation.save();
     res.end();
   } catch (error) {
     console.error('Error in streaming chat endpoint:', error);
