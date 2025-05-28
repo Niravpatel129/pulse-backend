@@ -61,7 +61,7 @@ function streamMessage(res, data) {
 }
 
 // Helper function to stream status/reasoning content
-function streamStatus(res, message, { type = 'reasoning', step = null } = {}) {
+function streamStatus(res, message, { type = 'reasoning', step = null } = {}, conversation = null) {
   const statusMessage = {
     type,
     step,
@@ -71,7 +71,7 @@ function streamStatus(res, message, { type = 'reasoning', step = null } = {}) {
   streamMessage(res, statusMessage);
 
   // Save status message to conversation if it's a reasoning or action
-  if (type === 'reasoning' || type === 'action') {
+  if (conversation && (type === 'reasoning' || type === 'action')) {
     const currentMessage = conversation.messages[conversation.messages.length - 1];
     if (currentMessage && currentMessage.role === 'assistant') {
       currentMessage.parts.push(statusMessage);
@@ -121,6 +121,12 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
 
 // Main stream chat function
 export const streamChat = async (req, res) => {
+  // Set up streaming response headers once at the start
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
   try {
     const {
       message,
@@ -140,13 +146,15 @@ export const streamChat = async (req, res) => {
 
     // Validate input
     if (!message && images.length === 0) {
-      return res.status(400).json({
+      streamMessage(res, {
+        type: 'error',
         error: {
           message: 'Message or images are required',
           type: 'invalid_request_error',
           code: 'missing_message',
         },
       });
+      return res.end();
     }
 
     // Process images if present
@@ -157,13 +165,15 @@ export const streamChat = async (req, res) => {
         processedImages = await processImages(images, workspaceId);
       } catch (error) {
         console.error('Error processing images:', error);
-        return res.status(500).json({
+        streamMessage(res, {
+          type: 'error',
           error: {
             message: 'Failed to process images',
             type: 'server_error',
             code: 'image_processing_error',
           },
         });
+        return res.end();
       }
     }
 
@@ -178,13 +188,15 @@ export const streamChat = async (req, res) => {
     });
 
     if (agents.length > 0 && selectedAgents.length === 0) {
-      return res.status(400).json({
+      streamMessage(res, {
+        type: 'error',
         error: {
           message: 'No valid agents found',
           type: 'invalid_request_error',
           code: 'invalid_agents',
         },
       });
+      return res.end();
     }
 
     // Use default agent if none specified
@@ -193,13 +205,15 @@ export const streamChat = async (req, res) => {
       if (allAgents.length > 0) {
         selectedAgents.push(allAgents[0]);
       } else {
-        return res.status(400).json({
+        streamMessage(res, {
+          type: 'error',
           error: {
             message: 'No agents available',
             type: 'invalid_request_error',
             code: 'no_agents',
           },
         });
+        return res.end();
       }
     }
 
@@ -222,12 +236,6 @@ export const streamChat = async (req, res) => {
     conversation.lastActive = new Date();
     await conversation.save();
 
-    // Set up streaming response
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-
     // Use the first agent
     const currentAgent = selectedAgents[0];
     const promptManager = new PromptManager(currentAgent, 0, 1);
@@ -242,11 +250,12 @@ export const streamChat = async (req, res) => {
     // Add conversation history
     const recentMessages = conversation.messages.slice(-10);
     const formattedMessages = recentMessages.map((msg) => {
+      // For messages with images
       if (msg.images && msg.images.length > 0) {
         return {
           role: msg.role,
           content: [
-            { type: 'text', text: msg.content || 'Please analyze this image.' },
+            { type: 'text', text: msg.parts?.[0]?.content || 'Please analyze this image.' },
             ...msg.images.map((img) => ({
               type: 'image_url',
               image_url: { url: img.url },
@@ -254,15 +263,21 @@ export const streamChat = async (req, res) => {
           ],
         };
       }
+
+      // For regular messages, use the first text part or empty string
       return {
         role: msg.role,
-        content: msg.content,
+        content: msg.parts?.find((part) => part.type === 'text')?.content || '',
       };
     });
 
-    messagesToSend.push(...formattedMessages);
+    // Filter out any messages with empty content
+    const validMessages = formattedMessages.filter((msg) => msg.content !== '');
 
-    streamStatus(res, 'Thinking...', { type: 'reasoning' });
+    messagesToSend.push(...validMessages);
+
+    // Now we can pass conversation to streamStatus since it's created
+    streamStatus(res, 'Thinking...', { type: 'reasoning' }, conversation);
 
     // Create chat completion stream
     const stream = await openai.chat.completions.create({
@@ -302,10 +317,15 @@ export const streamChat = async (req, res) => {
               arguments: '',
             },
           };
-          streamStatus(res, `Running action: ${currentToolCall.function.name}`, {
-            type: 'action',
-            step: currentToolCall.function.name,
-          });
+          streamStatus(
+            res,
+            `Running action: ${currentToolCall.function.name}`,
+            {
+              type: 'action',
+              step: currentToolCall.function.name,
+            },
+            conversation,
+          );
         }
         if (currentToolCall.function?.arguments) {
           toolCallArgs += currentToolCall.function.arguments;
@@ -328,10 +348,15 @@ export const streamChat = async (req, res) => {
       }
 
       if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
-        streamStatus(res, 'Waiting for external tool result...', {
-          type: 'status',
-          step: toolCall.function?.name,
-        });
+        streamStatus(
+          res,
+          'Waiting for external tool result...',
+          {
+            type: 'status',
+            step: toolCall.function?.name,
+          },
+          conversation,
+        );
 
         const success = await handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend);
         if (!success) {
@@ -343,8 +368,7 @@ export const streamChat = async (req, res) => {
               code: 'tool_execution_error',
             },
           });
-          res.end();
-          return;
+          return res.end();
         }
 
         streamMessage(res, {
@@ -367,7 +391,7 @@ export const streamChat = async (req, res) => {
 
         // Create follow-up stream
         try {
-          streamStatus(res, 'Processing tool results...', { type: 'reasoning' });
+          streamStatus(res, 'Processing tool results...', { type: 'reasoning' }, conversation);
 
           const followUpStream = await openai.chat.completions.create({
             model: model,
@@ -437,8 +461,7 @@ export const streamChat = async (req, res) => {
               code: 'follow_up_error',
             },
           });
-          res.end();
-          return;
+          return res.end();
         }
       }
     }
@@ -449,8 +472,7 @@ export const streamChat = async (req, res) => {
       console.warn('Empty response received from agent:', {
         agent: currentAgent.name,
       });
-      res.end();
-      return;
+      return res.end();
     }
 
     // Save the final response if we have one
@@ -478,24 +500,14 @@ export const streamChat = async (req, res) => {
     res.end();
   } catch (error) {
     console.error('Error in streaming chat endpoint:', error);
-    if (!res.headersSent) {
-      return res.status(500).json({
-        error: {
-          message: error.message,
-          type: 'server_error',
-          code: 'internal_error',
-        },
-      });
-    } else {
-      streamMessage(res, {
-        type: 'error',
-        error: {
-          message: error.message,
-          type: 'server_error',
-          code: 'internal_error',
-        },
-      });
-      res.end();
-    }
+    streamMessage(res, {
+      type: 'error',
+      error: {
+        message: error.message,
+        type: 'server_error',
+        code: 'internal_error',
+      },
+    });
+    res.end();
   }
 };
