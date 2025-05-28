@@ -62,12 +62,22 @@ function streamMessage(res, data) {
 
 // Helper function to stream status/reasoning content
 function streamStatus(res, message, { type = 'reasoning', step = null } = {}) {
-  streamMessage(res, {
+  const statusMessage = {
     type,
     step,
     content: message,
     timestamp: Date.now(),
-  });
+  };
+  streamMessage(res, statusMessage);
+
+  // Save status message to conversation if it's a reasoning or action
+  if (type === 'reasoning' || type === 'action') {
+    const currentMessage = conversation.messages[conversation.messages.length - 1];
+    if (currentMessage && currentMessage.role === 'assistant') {
+      currentMessage.parts.push(statusMessage);
+      conversation.save();
+    }
+  }
 }
 
 // Helper function to handle tool calls
@@ -84,6 +94,19 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
       tool_call_id: toolCall.id,
       content: JSON.stringify(searchResult),
     });
+
+    // Save tool call to conversation
+    const currentMessage = conversation.messages[conversation.messages.length - 1];
+    if (currentMessage && currentMessage.role === 'assistant') {
+      currentMessage.parts.push({
+        type: 'tool_call',
+        content: JSON.stringify(toolCall),
+        step: toolCall.function?.name,
+        timestamp: new Date(),
+      });
+      conversation.save();
+    }
+
     return true;
   } catch (error) {
     console.error('Error executing tool:', error);
@@ -186,7 +209,13 @@ export const streamChat = async (req, res) => {
     // Add user message
     const userMessage = {
       role: 'user',
-      content: message || '',
+      parts: [
+        {
+          type: 'text',
+          content: message || '',
+          timestamp: new Date(),
+        },
+      ],
       images: processedImages.length > 0 ? processedImages : undefined,
     };
     conversation.messages.push(userMessage);
@@ -428,7 +457,13 @@ export const streamChat = async (req, res) => {
     if (finalResponse || (!hasProcessedToolCall && trimmedResponse)) {
       const aiMessage = {
         role: 'assistant',
-        content: finalResponse || fullResponse,
+        parts: [
+          {
+            type: 'text',
+            content: finalResponse || fullResponse,
+            timestamp: new Date(),
+          },
+        ],
         agent: {
           id: currentAgent._id,
           name: currentAgent.name,

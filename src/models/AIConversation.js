@@ -1,16 +1,27 @@
 import mongoose from 'mongoose';
 
-const messageSchema = new mongoose.Schema(
+const MessagePartSchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ['text', 'reasoning', 'action', 'tool_call', 'status'],
+      required: true,
+    },
+    content: { type: String, required: true },
+    step: String,
+    timestamp: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
+const MessageSchema = new mongoose.Schema(
   {
     role: {
       type: String,
       required: true,
       enum: ['system', 'user', 'assistant', 'function'],
     },
-    content: {
-      type: String,
-      required: true,
-    },
+    parts: [MessagePartSchema],
     images: [
       {
         url: String,
@@ -34,6 +45,7 @@ const messageSchema = new mongoose.Schema(
       name: String,
       icon: String,
     },
+    timestamp: { type: Date, default: Date.now },
   },
   { _id: false },
 );
@@ -49,7 +61,7 @@ const aiConversationSchema = new mongoose.Schema(
       type: String,
       default: 'New Conversation',
     },
-    messages: [messageSchema],
+    messages: [MessageSchema],
     lastActive: {
       type: Date,
       default: Date.now,
