@@ -292,6 +292,41 @@ export const streamChat = async (req, res) => {
       tools: toolsManager.getTools(),
     });
 
+    // Create initial assistant message
+    const assistantMessage = {
+      role: 'assistant',
+      parts: [],
+      agent: {
+        id: currentAgent._id,
+        name: currentAgent.name,
+        icon: currentAgent.icon,
+      },
+      timestamp: new Date(),
+    };
+    conversation.messages.push(assistantMessage);
+    await conversation.save();
+    const assistantMsgIdx = conversation.messages.length - 1;
+
+    // Helper function to save assistant part
+    const saveAssistantPart = async (part) => {
+      conversation.messages[assistantMsgIdx].parts.push(part);
+      conversation.markModified('messages');
+      await conversation.save();
+    };
+
+    // Helper function to stream and save part
+    const streamAndSavePart = async (part) => {
+      const partWithTimestamp = {
+        ...part,
+        timestamp: new Date(),
+      };
+      streamMessage(res, {
+        ...partWithTimestamp,
+        conversationId: conversation._id,
+      });
+      await saveAssistantPart(partWithTimestamp);
+    };
+
     let fullResponse = '';
     let toolCall = null;
     let toolCallArgs = '';
@@ -317,15 +352,20 @@ export const streamChat = async (req, res) => {
               arguments: '',
             },
           };
-          streamStatus(
-            res,
-            `Running action: ${currentToolCall.function.name}`,
-            {
-              type: 'action',
-              step: currentToolCall.function.name,
-            },
-            conversation,
-          );
+
+          // Stream and save tool call as a part
+          await streamAndSavePart({
+            type: 'tool_call',
+            content: JSON.stringify(toolCall),
+            step: currentToolCall.function.name,
+          });
+
+          // Stream status
+          await streamAndSavePart({
+            type: 'action',
+            content: `Running action: ${currentToolCall.function.name}`,
+            step: currentToolCall.function.name,
+          });
         }
         if (currentToolCall.function?.arguments) {
           toolCallArgs += currentToolCall.function.arguments;
@@ -334,6 +374,20 @@ export const streamChat = async (req, res) => {
 
       if (content) {
         fullResponse += content;
+
+        // Stream and save text content
+        if (!assistantMessage.parts.some((part) => part.type === 'text')) {
+          await streamAndSavePart({
+            type: 'text',
+            content: content,
+          });
+        } else {
+          const textPart = assistantMessage.parts.find((part) => part.type === 'text');
+          textPart.content += content;
+          conversation.markModified('messages');
+          await conversation.save();
+        }
+
         streamMessage(res, {
           type: 'text',
           id: chunk.id,
@@ -344,22 +398,23 @@ export const streamChat = async (req, res) => {
               finish_reason: null,
             },
           ],
+          conversationId: conversation._id,
         });
       }
 
       if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
-        streamStatus(
-          res,
-          'Waiting for external tool result...',
-          {
-            type: 'status',
-            step: toolCall.function?.name,
-          },
-          conversation,
-        );
+        await streamAndSavePart({
+          type: 'status',
+          content: 'Waiting for external tool result...',
+          step: toolCall.function?.name,
+        });
 
         const success = await handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend);
         if (!success) {
+          await streamAndSavePart({
+            type: 'error',
+            content: 'Error executing tool',
+          });
           streamMessage(res, {
             type: 'error',
             error: {
@@ -367,9 +422,15 @@ export const streamChat = async (req, res) => {
               type: 'server_error',
               code: 'tool_execution_error',
             },
+            conversationId: conversation._id,
           });
           return res.end();
         }
+
+        await streamAndSavePart({
+          type: 'tool_result',
+          content: JSON.stringify(toolCall),
+        });
 
         streamMessage(res, {
           type: 'tool_result',
@@ -385,13 +446,17 @@ export const streamChat = async (req, res) => {
               finish_reason: 'tool_calls',
             },
           ],
+          conversationId: conversation._id,
         });
 
         hasProcessedToolCall = true;
 
         // Create follow-up stream
         try {
-          streamStatus(res, 'Processing tool results...', { type: 'reasoning' }, conversation);
+          await streamAndSavePart({
+            type: 'reasoning',
+            content: 'Processing tool results...',
+          });
 
           const followUpStream = await openai.chat.completions.create({
             model: model,
@@ -418,6 +483,20 @@ export const streamChat = async (req, res) => {
 
             if (content) {
               fullResponse += content;
+
+              // Stream and save text content
+              if (!assistantMessage.parts.some((part) => part.type === 'text')) {
+                await streamAndSavePart({
+                  type: 'text',
+                  content: content,
+                });
+              } else {
+                const textPart = assistantMessage.parts.find((part) => part.type === 'text');
+                textPart.content += content;
+                conversation.markModified('messages');
+                await conversation.save();
+              }
+
               streamMessage(res, {
                 type: 'text',
                 id: followUpChunk.id,
@@ -428,10 +507,16 @@ export const streamChat = async (req, res) => {
                     finish_reason: null,
                   },
                 ],
+                conversationId: conversation._id,
               });
             }
 
             if (finishReason === 'stop') {
+              await streamAndSavePart({
+                type: 'completion',
+                content: fullResponse,
+              });
+
               streamMessage(res, {
                 type: 'completion',
                 id: followUpChunk.id,
@@ -445,6 +530,7 @@ export const streamChat = async (req, res) => {
                     finish_reason: 'stop',
                   },
                 ],
+                conversationId: conversation._id,
               });
 
               finalResponse = fullResponse;
@@ -453,6 +539,10 @@ export const streamChat = async (req, res) => {
           }
         } catch (followUpError) {
           console.error('Error in follow-up stream:', followUpError);
+          await streamAndSavePart({
+            type: 'error',
+            content: 'Error processing follow-up response: ' + followUpError.message,
+          });
           streamMessage(res, {
             type: 'error',
             error: {
@@ -460,6 +550,7 @@ export const streamChat = async (req, res) => {
               type: 'server_error',
               code: 'follow_up_error',
             },
+            conversationId: conversation._id,
           });
           return res.end();
         }
@@ -475,27 +566,9 @@ export const streamChat = async (req, res) => {
       return res.end();
     }
 
-    // Save the final response if we have one
-    if (finalResponse || (!hasProcessedToolCall && trimmedResponse)) {
-      const aiMessage = {
-        role: 'assistant',
-        parts: [
-          {
-            type: 'text',
-            content: finalResponse || fullResponse,
-            timestamp: new Date(),
-          },
-        ],
-        agent: {
-          id: currentAgent._id,
-          name: currentAgent.name,
-          icon: currentAgent.icon,
-        },
-      };
-      conversation.messages.push(aiMessage);
-      conversation.lastActive = new Date();
-      await conversation.save();
-    }
+    // Update last active timestamp
+    conversation.lastActive = new Date();
+    await conversation.save();
 
     res.end();
   } catch (error) {
