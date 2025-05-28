@@ -472,6 +472,25 @@ export const streamChat = async (req, res) => {
       }
 
       if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
+        // Validate that we have arguments before proceeding
+        if (!toolCallArgs || !toolCallArgs.trim()) {
+          await streamAndSavePart({
+            type: 'status',
+            content: 'Error: Missing required arguments for tool call',
+            step: toolCall.function?.name,
+          });
+          streamMessage(res, {
+            type: 'error',
+            error: {
+              message: 'Missing required arguments for tool call',
+              type: 'validation_error',
+              code: 'missing_arguments',
+            },
+            conversationId: conversation._id,
+          });
+          return res.end();
+        }
+
         await streamAndSavePart({
           type: 'status',
           content: 'Waiting for external tool result...',

@@ -71,6 +71,16 @@ class ToolsManager {
 
   async executeTool(toolCall, toolCallArgs) {
     try {
+      // Validate tool call
+      if (!toolCall || !toolCall.function || !toolCall.function.name) {
+        throw new Error('Invalid tool call format');
+      }
+
+      // Validate arguments
+      if (!toolCallArgs || (typeof toolCallArgs === 'string' && !toolCallArgs.trim())) {
+        throw new Error(`Missing required arguments for tool: ${toolCall.function.name}`);
+      }
+
       // toolCallArgs is already parsed in handleToolCall
       const args = toolCallArgs;
 
@@ -89,13 +99,24 @@ class ToolsManager {
           // Single query case
           return `Searching the web for: ${args.query}`;
         case 'search_workspace':
+          if (!args.query) {
+            throw new Error('Query parameter is required for workspace search');
+          }
           return await this.executeSearchWorkspace(args.query, args.limit || 3);
         case 'get_pricing':
+          if (!args.partNumber) {
+            throw new Error('Part number is required for pricing lookup');
+          }
           return await this.executeGetPricing(args.partNumber);
         default:
           throw new Error(`Unknown tool: ${toolCall.function.name}`);
       }
     } catch (error) {
+      console.error('Error executing tool:', {
+        tool: toolCall?.function?.name,
+        error: error.message,
+        args: toolCallArgs,
+      });
       throw new Error(`Error executing tool: ${error.message}`);
     }
   }
@@ -129,13 +150,14 @@ class ToolsManager {
         return cachedResults;
       }
 
-      // Get workspace embeddings from the database with pagination
+      // Get workspace embeddings from the database with pagination and timeout
       const embeddings = await WorkspaceEmbedding.find({
         workspace: this.workspaceId,
         status: 'active',
       })
         .select('title description metadata embedding')
-        .lean();
+        .lean()
+        .maxTimeMS(5000); // 5 second timeout
 
       if (!embeddings.length) {
         return 'No workspace embeddings found to search through.';
@@ -147,13 +169,22 @@ class ToolsManager {
 
       for (let i = 0; i < embeddings.length; i += batchSize) {
         const batch = embeddings.slice(i, i + batchSize);
-        const batchResults = batch.map((doc) => ({
-          title: doc.title,
-          description: doc.description,
-          metadata: doc.metadata,
-          similarity: this.cosineSimilarity(queryEmbedding, doc.embedding),
-        }));
-        results.push(...batchResults);
+        try {
+          const batchResults = batch.map((doc) => ({
+            title: doc.title,
+            description: doc.description,
+            metadata: doc.metadata,
+            similarity: this.cosineSimilarity(queryEmbedding, doc.embedding),
+          }));
+          results.push(...batchResults);
+        } catch (error) {
+          console.error(`Error processing batch ${i / batchSize + 1}:`, error);
+          continue; // Skip problematic batch and continue with others
+        }
+      }
+
+      if (results.length === 0) {
+        return 'Error processing workspace content. Please try again.';
       }
 
       // Sort by similarity and get top results
@@ -177,6 +208,9 @@ class ToolsManager {
       return formattedResults;
     } catch (error) {
       console.error('Error searching workspace embeddings:', error);
+      if (error.name === 'MongooseError' && error.message.includes('timed out')) {
+        return 'Search timed out. Please try again with a more specific query.';
+      }
       throw new Error(`Failed to search workspace: ${error.message}`);
     }
   }
