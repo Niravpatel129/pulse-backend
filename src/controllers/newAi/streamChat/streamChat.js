@@ -10,6 +10,84 @@ import ToolsManager from '../../../utils/ToolsManager.js';
 const MAX_AGENT_TURNS = 5; // Maximum number of turns in the agent conversation
 const MAX_COMPLETION_TOKENS = 2000; // Maximum tokens for completion
 
+// Helper function to process images
+async function processImages(images, workspaceId) {
+  const processedImages = [];
+  for (const image of images) {
+    if (image.url.startsWith('data:image')) {
+      const base64Data = image.url.split(',')[1];
+      const buffer = Buffer.from(base64Data, 'base64');
+      const storagePath = firebaseStorage.generatePath(workspaceId, `chat_image_${Date.now()}.png`);
+      const { url } = await firebaseStorage.uploadFile(buffer, storagePath, 'image/png');
+      processedImages.push({ url, alt: image.alt });
+    } else if (image.url.startsWith('http')) {
+      processedImages.push(image);
+    } else {
+      console.warn('Unsupported image URL format:', image.url);
+    }
+  }
+  return processedImages;
+}
+
+// Helper function to get or create conversation
+async function getOrCreateConversation(sessionId, workspaceId, message) {
+  if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+    const conversation = await AIConversation.findOne({
+      _id: sessionId,
+      workspace: workspaceId,
+    });
+    if (conversation) return conversation;
+  }
+
+  let title = message?.trim() || 'Image Analysis';
+  if (title.endsWith('?')) {
+    title = title.substring(0, 50);
+  } else {
+    const words = title.split(' ');
+    if (words.length > 5) {
+      title = words.slice(0, 5).join(' ') + '...';
+    }
+  }
+
+  return await AIConversation.create({
+    workspace: workspaceId,
+    messages: [],
+    title: title,
+  });
+}
+
+// Helper function to stream a message
+function streamMessage(res, data) {
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+// Helper function to handle tool calls
+async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend) {
+  try {
+    const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
+    messagesToSend.push({
+      role: 'assistant',
+      content: null,
+      tool_calls: [toolCall],
+    });
+    messagesToSend.push({
+      role: 'tool',
+      tool_call_id: toolCall.id,
+      content: JSON.stringify(searchResult),
+    });
+    return true;
+  } catch (error) {
+    console.error('Error executing tool:', error);
+    messagesToSend.push({
+      role: 'tool',
+      tool_call_id: toolCall.id,
+      content: `Error executing tool: ${error.message}`,
+    });
+    return false;
+  }
+}
+
+// Main stream chat function
 export const streamChat = async (req, res) => {
   try {
     const {
@@ -28,6 +106,7 @@ export const streamChat = async (req, res) => {
     const workspaceId = req.workspace._id;
     const toolsManager = new ToolsManager(workspaceId);
 
+    // Validate input
     if (!message && images.length === 0) {
       return res.status(400).json({
         error: {
@@ -42,31 +121,7 @@ export const streamChat = async (req, res) => {
     let processedImages = [];
     if (images.length > 0) {
       try {
-        // Process each image
-        for (const image of images) {
-          if (image.url.startsWith('data:image')) {
-            // Handle base64 image data
-            const base64Data = image.url.split(',')[1];
-            const buffer = Buffer.from(base64Data, 'base64');
-
-            // Upload to Firebase
-            const storagePath = firebaseStorage.generatePath(
-              workspaceId,
-              `chat_image_${Date.now()}.png`,
-            );
-            const { url } = await firebaseStorage.uploadFile(buffer, storagePath, 'image/png');
-
-            processedImages.push({
-              url,
-              alt: image.alt,
-            });
-          } else if (image.url.startsWith('http')) {
-            // If it's already a regular URL, use it as is
-            processedImages.push(image);
-          } else {
-            console.warn('Unsupported image URL format:', image.url);
-          }
-        }
+        processedImages = await processImages(images, workspaceId);
       } catch (error) {
         console.error('Error processing images:', error);
         return res.status(500).json({
@@ -82,18 +137,11 @@ export const streamChat = async (req, res) => {
     // Get workspace chat settings
     const chatSettings = await ChatSettings.findOne({ workspace: workspaceId });
 
-    // Get all specified agents
+    // Get selected agents
     const selectedAgents = await Agent.find({
       _id: { $in: agents },
       workspace: workspaceId,
     });
-
-    console.log('\n=== DEBUG: Agent Selection ===');
-    console.log('Requested agents:', agents);
-    console.log(
-      'Found agents:',
-      selectedAgents.map((a) => ({ id: a._id, name: a.name })),
-    );
 
     if (agents.length > 0 && selectedAgents.length === 0) {
       return res.status(400).json({
@@ -105,12 +153,11 @@ export const streamChat = async (req, res) => {
       });
     }
 
-    // If no agents specified, use default agent
+    // Use default agent if none specified
     if (selectedAgents.length === 0) {
       const allAgents = await Agent.find({ workspace: workspaceId });
       if (allAgents.length > 0) {
-        selectedAgents.push(allAgents[0]); // Use the first agent (index 0)
-        console.log('Using first available agent:', allAgents[0].name);
+        selectedAgents.push(allAgents[0]);
       } else {
         return res.status(400).json({
           error: {
@@ -123,49 +170,7 @@ export const streamChat = async (req, res) => {
     }
 
     // Get or create conversation
-    let conversation;
-    if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
-      conversation = await AIConversation.findOne({
-        _id: sessionId,
-        workspace: workspaceId,
-      });
-
-      console.log('\n=== DEBUG: MongoDB Conversation ===');
-      console.log('Session ID:', sessionId);
-      console.log('Found conversation:', conversation ? 'Yes' : 'No');
-      if (conversation) {
-        console.log('Total messages in DB:', conversation.messages.length);
-        console.log('Messages in DB:');
-        conversation.messages.forEach((msg, idx) => {
-          console.log(`\nDB Message ${idx + 1}:`);
-          console.log('Role:', msg.role);
-          console.log('Content:', msg.content);
-          if (msg.agent) {
-            console.log('Agent:', msg.agent.name);
-          }
-        });
-      }
-    }
-
-    if (!conversation) {
-      let title = message?.trim() || 'Image Analysis';
-      if (title.endsWith('?')) {
-        title = title.substring(0, 50);
-      } else {
-        const words = title.split(' ');
-        if (words.length > 5) {
-          title = words.slice(0, 5).join(' ') + '...';
-        }
-      }
-
-      conversation = await AIConversation.create({
-        workspace: workspaceId,
-        messages: [],
-        title: title,
-      });
-      console.log('\n=== DEBUG: Created New Conversation ===');
-      console.log('Title:', title);
-    }
+    const conversation = await getOrCreateConversation(sessionId, workspaceId, message);
 
     // Add user message
     const userMessage = {
@@ -174,12 +179,7 @@ export const streamChat = async (req, res) => {
       images: processedImages.length > 0 ? processedImages : undefined,
     };
     conversation.messages.push(userMessage);
-
-    // Save after adding user message
     await conversation.save();
-    console.log('\n=== DEBUG: After Adding User Message ===');
-    console.log('Total messages after save:', conversation.messages.length);
-    console.log('Last message:', conversation.messages[conversation.messages.length - 1]);
 
     // Set up streaming response
     res.setHeader('Content-Type', 'text/event-stream');
@@ -193,7 +193,7 @@ export const streamChat = async (req, res) => {
     let lastResponses = new Map();
     let currentAgentIndex = 0;
 
-    // Check for direct agent request in the message
+    // Handle direct agent request
     const directAgentRequest = message.toLowerCase().match(/^(clara|leo)\s+(.+)$/i);
     if (directAgentRequest) {
       const [_, requestedAgent, actualMessage] = directAgentRequest;
@@ -202,69 +202,38 @@ export const streamChat = async (req, res) => {
       );
 
       if (targetAgent) {
-        // Only activate the requested agent
         activeAgents.clear();
         activeAgents.add(targetAgent._id.toString());
         currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
-
-        // Update the message to remove the agent name
         message = actualMessage.trim();
         userMessage.content = message;
       }
     }
 
-    // Continue conversation until no more responses or max turns reached
+    // Main conversation loop
     while (currentTurn < MAX_AGENT_TURNS && activeAgents.size > 0) {
-      // Get current agent
       const currentAgent = selectedAgents[currentAgentIndex];
 
-      // If there's only one agent, stop after first response
       if (selectedAgents.length === 1 && currentTurn > 0) {
         break;
       }
 
       if (!activeAgents.has(currentAgent._id.toString())) {
-        // Move to next agent if current one is inactive
         currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
         continue;
       }
 
-      // Create prompt manager for current agent
       const promptManager = new PromptManager(currentAgent, currentTurn, MAX_AGENT_TURNS);
-
-      // Prepare messages for the API call
       let messagesToSend = [];
 
-      // Add system message first
-      const systemMessage = {
+      // Add system message
+      messagesToSend.push({
         role: 'system',
         content: promptManager.getFullPrompt(),
-      };
-      messagesToSend.push(systemMessage);
-
-      // Add conversation history, properly formatted
-      const recentMessages = conversation.messages.slice(-10); // Keep last 10 messages for context
-
-      console.log('\n=== DEBUG: Conversation State ===');
-      console.log('Current Turn:', currentTurn);
-      console.log('Current Agent:', currentAgent.name);
-      console.log('Active Agents:', Array.from(activeAgents));
-
-      console.log('\n=== DEBUG: Recent Messages ===');
-      console.log('Number of messages:', recentMessages.length);
-      recentMessages.forEach((msg, idx) => {
-        console.log(`\nMessage ${idx + 1}:`);
-        console.log('Role:', msg.role);
-        console.log('Content:', msg.content);
-        if (msg.images) {
-          console.log('Images:', msg.images);
-        }
-        if (msg.agent) {
-          console.log('Agent:', msg.agent.name);
-        }
       });
 
-      // Format messages for API, including image content
+      // Add conversation history
+      const recentMessages = conversation.messages.slice(-10);
       const formattedMessages = recentMessages.map((msg) => {
         if (msg.images && msg.images.length > 0) {
           return {
@@ -273,9 +242,7 @@ export const streamChat = async (req, res) => {
               { type: 'text', text: msg.content || 'Please analyze this image.' },
               ...msg.images.map((img) => ({
                 type: 'image_url',
-                image_url: {
-                  url: img.url,
-                },
+                image_url: { url: img.url },
               })),
             ],
           };
@@ -288,16 +255,7 @@ export const streamChat = async (req, res) => {
 
       messagesToSend.push(...formattedMessages);
 
-      // Ensure messagesToSend is not null before using it
-      if (!messagesToSend || !Array.isArray(messagesToSend)) {
-        messagesToSend = [];
-      }
-
-      console.log('\n=== DEBUG: Final Prompt ===');
-      console.log('Total messages to send:', messagesToSend.length);
-      console.log('Messages being sent to OpenAI:', JSON.stringify(messagesToSend, null, 2));
-
-      // Create the chat completion stream for this agent
+      // Create chat completion stream
       const stream = await openai.chat.completions.create({
         model: model,
         messages: messagesToSend,
@@ -310,57 +268,45 @@ export const streamChat = async (req, res) => {
         tools: toolsManager.getTools(),
       });
 
-      console.log('\n=== DEBUG: Stream Created ===');
-      console.log('Stream initialized with model:', model);
-
-      // Stream each chunk for this agent
       let fullResponse = '';
       let toolCall = null;
       let toolCallArgs = '';
       let hasProcessedToolCall = false;
       let lastFinishReason = null;
 
+      // Process stream
       for await (const chunk of stream) {
-        console.log('\n=== DEBUG: Received Chunk ===');
-        console.log('Chunk:', JSON.stringify(chunk, null, 2));
-
         const content = chunk.choices[0]?.delta?.content || '';
         const toolCalls = chunk.choices[0]?.delta?.tool_calls || [];
         const finishReason = chunk.choices[0]?.finish_reason;
         lastFinishReason = finishReason || lastFinishReason;
 
-        // Handle content
         if (content) {
           fullResponse += content;
-          console.log('Content received:', content);
-          res.write(
-            `data: ${JSON.stringify({
-              id: chunk.id,
-              object: 'chat.completion.chunk',
-              created: Math.floor(Date.now() / 1000),
-              model: chunk.model,
-              sessionId: conversation._id,
-              agent: {
-                id: currentAgent._id,
-                name: currentAgent.name,
-                icon: currentAgent.icon,
+          streamMessage(res, {
+            id: chunk.id,
+            object: 'chat.completion.chunk',
+            created: Math.floor(Date.now() / 1000),
+            model: chunk.model,
+            sessionId: conversation._id,
+            agent: {
+              id: currentAgent._id,
+              name: currentAgent.name,
+              icon: currentAgent.icon,
+            },
+            turn: currentTurn,
+            choices: [
+              {
+                index: 0,
+                delta: { content },
+                finish_reason: null,
               },
-              turn: currentTurn,
-              choices: [
-                {
-                  index: 0,
-                  delta: { content },
-                  finish_reason: null,
-                },
-              ],
-            })}\n\n`,
-          );
+            ],
+          });
         }
 
-        // Handle tool calls
         if (toolCalls.length > 0) {
           const currentToolCall = toolCalls[0];
-
           if (currentToolCall.function?.name) {
             toolCall = {
               id: currentToolCall.id,
@@ -371,309 +317,35 @@ export const streamChat = async (req, res) => {
               },
             };
           }
-
           if (currentToolCall.function?.arguments) {
             toolCallArgs += currentToolCall.function.arguments;
           }
         }
 
-        // Process tool call when finished
         if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
-          try {
-            console.log('\n=== DEBUG: Processing Tool Call ===');
-            console.log('Tool:', toolCall.function.name);
-            console.log('Arguments:', toolCallArgs);
-
-            // Complete the tool call object with accumulated arguments
-            toolCall.function.arguments = toolCallArgs;
-
-            const searchResult = await toolsManager.executeTool(toolCall, toolCallArgs);
-            console.log('Tool execution result:', searchResult);
-
-            // Add the tool response to the conversation
-            messagesToSend.push({
-              role: 'assistant',
-              content: null,
-              tool_calls: [toolCall],
+          const success = await handleToolCall(
+            toolCall,
+            toolCallArgs,
+            toolsManager,
+            messagesToSend,
+          );
+          if (!success) {
+            streamMessage(res, {
+              error: {
+                message: 'Error executing tool',
+                type: 'server_error',
+                code: 'tool_execution_error',
+              },
             });
-            messagesToSend.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(searchResult),
-            });
-
-            // Stream the tool response
-            res.write(
-              `data: ${JSON.stringify({
-                id: chunk.id,
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: chunk.model,
-                sessionId: conversation._id,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
-                turn: currentTurn,
-                choices: [
-                  {
-                    index: 0,
-                    message: {
-                      role: 'assistant',
-                      content: null,
-                      tool_calls: [toolCall],
-                    },
-                    finish_reason: 'tool_calls',
-                  },
-                ],
-              })}\n\n`,
-            );
-
-            hasProcessedToolCall = true;
-
-            try {
-              console.log('\n=== DEBUG: Creating Follow-up Stream ===');
-              // Create a new stream for the follow-up response
-              const followUpStream = await openai.chat.completions.create({
-                model: model,
-                messages: messagesToSend,
-                max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
-                top_p,
-                frequency_penalty,
-                presence_penalty,
-                stop,
-                stream: true,
-                tools: toolsManager.getTools(),
-              });
-
-              console.log('Follow-up stream created successfully');
-
-              // Reset state for follow-up response
-              fullResponse = '';
-              toolCall = null;
-              toolCallArgs = '';
-              hasProcessedToolCall = false;
-              lastFinishReason = null;
-
-              // Process follow-up response
-              for await (const followUpChunk of followUpStream) {
-                const content = followUpChunk.choices[0]?.delta?.content || '';
-                const finishReason = followUpChunk.choices[0]?.finish_reason;
-                lastFinishReason = finishReason || lastFinishReason;
-
-                if (content) {
-                  fullResponse += content;
-                  res.write(
-                    `data: ${JSON.stringify({
-                      id: followUpChunk.id,
-                      object: 'chat.completion.chunk',
-                      created: Math.floor(Date.now() / 1000),
-                      model: followUpChunk.model,
-                      sessionId: conversation._id,
-                      agent: {
-                        id: currentAgent._id,
-                        name: currentAgent.name,
-                        icon: currentAgent.icon,
-                      },
-                      turn: currentTurn,
-                      choices: [
-                        {
-                          index: 0,
-                          delta: { content },
-                          finish_reason: null,
-                        },
-                      ],
-                    })}\n\n`,
-                  );
-                }
-
-                // Send final message when stream is complete
-                if (finishReason === 'stop') {
-                  res.write(
-                    `data: ${JSON.stringify({
-                      id: followUpChunk.id,
-                      object: 'chat.completion.chunk',
-                      created: Math.floor(Date.now() / 1000),
-                      model: followUpChunk.model,
-                      sessionId: conversation._id,
-                      agent: {
-                        id: currentAgent._id,
-                        name: currentAgent.name,
-                        icon: currentAgent.icon,
-                      },
-                      turn: currentTurn,
-                      choices: [
-                        {
-                          index: 0,
-                          message: {
-                            role: 'assistant',
-                            content: fullResponse,
-                          },
-                          finish_reason: 'stop',
-                        },
-                      ],
-                    })}\n\n`,
-                  );
-                  break;
-                }
-              }
-
-              // Add follow-up response to conversation
-              if (fullResponse.trim()) {
-                const followUpMessage = {
-                  role: 'assistant',
-                  content: fullResponse,
-                  agent: {
-                    id: currentAgent._id,
-                    name: currentAgent.name,
-                    icon: currentAgent.icon,
-                  },
-                };
-                conversation.messages.push(followUpMessage);
-                await conversation.save();
-                console.log('Follow-up response saved to conversation');
-              }
-            } catch (followUpError) {
-              console.error('Error in follow-up stream:', followUpError);
-              // Send error message to client
-              res.write(
-                `data: ${JSON.stringify({
-                  error: {
-                    message: 'Error processing follow-up response: ' + followUpError.message,
-                    type: 'server_error',
-                    code: 'follow_up_error',
-                  },
-                })}\n\n`,
-              );
-              res.end();
-              return;
-            }
-          } catch (error) {
-            console.error('Error executing tool:', error);
-            messagesToSend.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: `Error executing tool: ${error.message}`,
-            });
-            // Send error message to client
-            res.write(
-              `data: ${JSON.stringify({
-                error: {
-                  message: 'Error executing tool: ' + error.message,
-                  type: 'server_error',
-                  code: 'tool_execution_error',
-                },
-              })}\n\n`,
-            );
             res.end();
             return;
           }
-        }
-      }
 
-      // Process the response
-      const trimmedResponse = fullResponse.trim();
-
-      if (!trimmedResponse && !hasProcessedToolCall) {
-        console.warn('Empty response received from agent:', {
-          agent: currentAgent.name,
-          turn: currentTurn,
-        });
-        activeAgents.delete(currentAgent._id.toString());
-        continue;
-      }
-
-      // Mark agent as inactive after providing their response
-      activeAgents.delete(currentAgent._id.toString());
-
-      if (
-        trimmedResponse.toUpperCase() === 'NO_RESPONSE_NEEDED' ||
-        trimmedResponse.toUpperCase() === 'TASK_COMPLETE' ||
-        (lastResponses.has(currentAgent._id.toString()) &&
-          lastResponses.get(currentAgent._id.toString()) === trimmedResponse)
-      ) {
-        // Agent already marked as inactive above
-        continue;
-      } else if (trimmedResponse.startsWith('CONVERSATION_END:')) {
-        // Extract the ending message
-        const endMessage = trimmedResponse.substring('CONVERSATION_END:'.length).trim();
-        // Mark all agents as inactive to end the conversation
-        activeAgents.clear();
-        // Add the ending message to the conversation
-        const endSystemMessage = {
-          role: 'system',
-          content: `Conversation ended by ${currentAgent.name}: ${endMessage}`,
-        };
-        messagesToSend = [endSystemMessage, ...messagesToSend];
-      } else if (currentTurn === MAX_AGENT_TURNS - 1) {
-        // Force conversation end on the last turn if not already ended
-        const forcedEndMessage = `${currentAgent.name} has reached the maximum number of turns (${MAX_AGENT_TURNS}). Ending conversation.`;
-        const endSystemMessage = {
-          role: 'system',
-          content: forcedEndMessage,
-        };
-        messagesToSend = [endSystemMessage, ...messagesToSend];
-        activeAgents.clear();
-      } else if (
-        trimmedResponse.startsWith('AGENT_QUERY:') ||
-        trimmedResponse.startsWith('AGENT_COLLABORATE:')
-      ) {
-        // Extract the query and target agent
-        const queryMatch = trimmedResponse.match(
-          /(?:AGENT_QUERY|AGENT_COLLABORATE):\s*(\w+):\s*(.*)/i,
-        );
-        if (queryMatch) {
-          const [_, targetAgentName, query] = queryMatch;
-          const targetAgent = selectedAgents.find(
-            (a) => a.name.toLowerCase() === targetAgentName.toLowerCase(),
-          );
-
-          if (targetAgent && activeAgents.has(targetAgent._id.toString())) {
-            // Move to the target agent in the next turn
-            currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
-
-            // Add the query/collaboration request to the conversation context
-            const collaborationMessage = {
-              role: 'system',
-              content: `Previous agent requested ${
-                trimmedResponse.startsWith('AGENT_QUERY:') ? 'input' : 'collaboration'
-              } from ${targetAgentName}: ${query}`,
-            };
-            messagesToSend = [collaborationMessage, ...messagesToSend];
-          }
-        }
-      }
-
-      // Add AI response to conversation
-      const aiMessage = {
-        role: 'assistant',
-        content: hasProcessedToolCall
-          ? 'Processing your request...'
-          : fullResponse || 'No response generated',
-        agent: {
-          id: currentAgent._id,
-          name: currentAgent.name,
-          icon: currentAgent.icon,
-        },
-      };
-      conversation.messages.push(aiMessage);
-
-      // Save after adding agent response
-      await conversation.save();
-      console.log('\n=== DEBUG: After Adding Agent Response ===');
-      console.log('Agent:', currentAgent.name);
-      console.log('Total messages after save:', conversation.messages.length);
-      console.log('Last message:', conversation.messages[conversation.messages.length - 1]);
-
-      // Don't send the final message again since it was already streamed
-      if (!hasProcessedToolCall) {
-        res.write(
-          `data: ${JSON.stringify({
-            id: followUpChunk.id,
+          streamMessage(res, {
+            id: chunk.id,
             object: 'chat.completion.chunk',
             created: Math.floor(Date.now() / 1000),
-            model: followUpChunk.model,
+            model: chunk.model,
             sessionId: conversation._id,
             agent: {
               id: currentAgent._id,
@@ -686,26 +358,230 @@ export const streamChat = async (req, res) => {
                 index: 0,
                 message: {
                   role: 'assistant',
-                  content: fullResponse,
+                  content: null,
+                  tool_calls: [toolCall],
                 },
-                finish_reason: 'stop',
+                finish_reason: 'tool_calls',
               },
             ],
-          })}\n\n`,
+          });
+
+          hasProcessedToolCall = true;
+
+          // Create follow-up stream
+          try {
+            const followUpStream = await openai.chat.completions.create({
+              model: model,
+              messages: messagesToSend,
+              max_completion_tokens: Math.min(max_tokens, MAX_COMPLETION_TOKENS),
+              top_p,
+              frequency_penalty,
+              presence_penalty,
+              stop,
+              stream: true,
+              tools: toolsManager.getTools(),
+            });
+
+            fullResponse = '';
+            toolCall = null;
+            toolCallArgs = '';
+            hasProcessedToolCall = false;
+            lastFinishReason = null;
+
+            for await (const followUpChunk of followUpStream) {
+              const content = followUpChunk.choices[0]?.delta?.content || '';
+              const finishReason = followUpChunk.choices[0]?.finish_reason;
+              lastFinishReason = finishReason || lastFinishReason;
+
+              if (content) {
+                fullResponse += content;
+                streamMessage(res, {
+                  id: followUpChunk.id,
+                  object: 'chat.completion.chunk',
+                  created: Math.floor(Date.now() / 1000),
+                  model: followUpChunk.model,
+                  sessionId: conversation._id,
+                  agent: {
+                    id: currentAgent._id,
+                    name: currentAgent.name,
+                    icon: currentAgent.icon,
+                  },
+                  turn: currentTurn,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: { content },
+                      finish_reason: null,
+                    },
+                  ],
+                });
+              }
+
+              if (finishReason === 'stop') {
+                streamMessage(res, {
+                  id: followUpChunk.id,
+                  object: 'chat.completion.chunk',
+                  created: Math.floor(Date.now() / 1000),
+                  model: followUpChunk.model,
+                  sessionId: conversation._id,
+                  agent: {
+                    id: currentAgent._id,
+                    name: currentAgent.name,
+                    icon: currentAgent.icon,
+                  },
+                  turn: currentTurn,
+                  choices: [
+                    {
+                      index: 0,
+                      message: {
+                        role: 'assistant',
+                        content: fullResponse,
+                      },
+                      finish_reason: 'stop',
+                    },
+                  ],
+                });
+                break;
+              }
+            }
+
+            if (fullResponse.trim()) {
+              const followUpMessage = {
+                role: 'assistant',
+                content: fullResponse,
+                agent: {
+                  id: currentAgent._id,
+                  name: currentAgent.name,
+                  icon: currentAgent.icon,
+                },
+              };
+              conversation.messages.push(followUpMessage);
+              await conversation.save();
+            }
+          } catch (followUpError) {
+            console.error('Error in follow-up stream:', followUpError);
+            streamMessage(res, {
+              error: {
+                message: 'Error processing follow-up response: ' + followUpError.message,
+                type: 'server_error',
+                code: 'follow_up_error',
+              },
+            });
+            res.end();
+            return;
+          }
+        }
+      }
+
+      const trimmedResponse = fullResponse.trim();
+
+      if (!trimmedResponse && !hasProcessedToolCall) {
+        console.warn('Empty response received from agent:', {
+          agent: currentAgent.name,
+          turn: currentTurn,
+        });
+        activeAgents.delete(currentAgent._id.toString());
+        continue;
+      }
+
+      activeAgents.delete(currentAgent._id.toString());
+
+      if (
+        trimmedResponse.toUpperCase() === 'NO_RESPONSE_NEEDED' ||
+        trimmedResponse.toUpperCase() === 'TASK_COMPLETE' ||
+        (lastResponses.has(currentAgent._id.toString()) &&
+          lastResponses.get(currentAgent._id.toString()) === trimmedResponse)
+      ) {
+        continue;
+      } else if (trimmedResponse.startsWith('CONVERSATION_END:')) {
+        const endMessage = trimmedResponse.substring('CONVERSATION_END:'.length).trim();
+        activeAgents.clear();
+        const endSystemMessage = {
+          role: 'system',
+          content: `Conversation ended by ${currentAgent.name}: ${endMessage}`,
+        };
+        messagesToSend = [endSystemMessage, ...messagesToSend];
+      } else if (currentTurn === MAX_AGENT_TURNS - 1) {
+        const forcedEndMessage = `${currentAgent.name} has reached the maximum number of turns (${MAX_AGENT_TURNS}). Ending conversation.`;
+        const endSystemMessage = {
+          role: 'system',
+          content: forcedEndMessage,
+        };
+        messagesToSend = [endSystemMessage, ...messagesToSend];
+        activeAgents.clear();
+      } else if (
+        trimmedResponse.startsWith('AGENT_QUERY:') ||
+        trimmedResponse.startsWith('AGENT_COLLABORATE:')
+      ) {
+        const queryMatch = trimmedResponse.match(
+          /(?:AGENT_QUERY|AGENT_COLLABORATE):\s*(\w+):\s*(.*)/i,
         );
+        if (queryMatch) {
+          const [_, targetAgentName, query] = queryMatch;
+          const targetAgent = selectedAgents.find(
+            (a) => a.name.toLowerCase() === targetAgentName.toLowerCase(),
+          );
+
+          if (targetAgent && activeAgents.has(targetAgent._id.toString())) {
+            currentAgentIndex = selectedAgents.findIndex((a) => a._id.equals(targetAgent._id));
+            const collaborationMessage = {
+              role: 'system',
+              content: `Previous agent requested ${
+                trimmedResponse.startsWith('AGENT_QUERY:') ? 'input' : 'collaboration'
+              } from ${targetAgentName}: ${query}`,
+            };
+            messagesToSend = [collaborationMessage, ...messagesToSend];
+          }
+        }
+      }
+
+      const aiMessage = {
+        role: 'assistant',
+        content: hasProcessedToolCall
+          ? 'Processing your request...'
+          : fullResponse || 'No response generated',
+        agent: {
+          id: currentAgent._id,
+          name: currentAgent.name,
+          icon: currentAgent.icon,
+        },
+      };
+      conversation.messages.push(aiMessage);
+      await conversation.save();
+
+      if (!hasProcessedToolCall) {
+        streamMessage(res, {
+          id: Date.now().toString(),
+          object: 'chat.completion.chunk',
+          created: Math.floor(Date.now() / 1000),
+          model: model,
+          sessionId: conversation._id,
+          agent: {
+            id: currentAgent._id,
+            name: currentAgent.name,
+            icon: currentAgent.icon,
+          },
+          turn: currentTurn,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: fullResponse,
+              },
+              finish_reason: 'stop',
+            },
+          ],
+        });
       }
 
       lastResponses.set(currentAgent._id.toString(), trimmedResponse);
-
-      // Move to next agent
       currentAgentIndex = (currentAgentIndex + 1) % selectedAgents.length;
       currentTurn++;
     }
 
-    // Update conversation
     conversation.lastActive = new Date();
     await conversation.save();
-
     res.end();
   } catch (error) {
     console.error('Error in streaming chat endpoint:', error);
@@ -718,15 +594,13 @@ export const streamChat = async (req, res) => {
         },
       });
     } else {
-      res.write(
-        `data: ${JSON.stringify({
-          error: {
-            message: error.message,
-            type: 'server_error',
-            code: 'internal_error',
-          },
-        })}\n\n`,
-      );
+      streamMessage(res, {
+        error: {
+          message: error.message,
+          type: 'server_error',
+          code: 'internal_error',
+        },
+      });
       res.end();
     }
   }
