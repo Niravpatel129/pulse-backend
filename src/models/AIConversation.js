@@ -4,7 +4,7 @@ const MessagePartSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ['text', 'reasoning', 'action', 'tool_call', 'status'],
+      enum: ['text', 'reasoning', 'action', 'tool_call', 'tool_response', 'status'],
       required: true,
     },
     content: { type: String, required: true },

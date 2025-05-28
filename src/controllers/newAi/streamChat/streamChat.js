@@ -83,50 +83,46 @@ function streamStatus(res, message, { type = 'reasoning', step = null } = {}, co
 // Helper function to handle tool calls
 async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend, conversation) {
   try {
-    // Validate and parse tool call arguments
+    // Validate tool call
+    if (!toolCall || !toolCall.function || !toolCall.function.name) {
+      throw new Error('Invalid tool call format');
+    }
+
+    // Validate arguments
+    if (!toolCallArgs || (typeof toolCallArgs === 'string' && !toolCallArgs.trim())) {
+      throw new Error(`Missing required arguments for tool: ${toolCall.function.name}`);
+    }
+
+    // Parse arguments if they're a string
     let parsedArgs;
     try {
-      // Check if we have multiple JSON objects concatenated
-      if (toolCallArgs.includes('}{')) {
-        // Split into individual JSON objects and parse each one
-        const jsonObjects = toolCallArgs.split('}{').map((obj, index) => {
-          // Add back the braces that were split
-          if (index === 0) return obj + '}';
-          if (index === toolCallArgs.split('}{').length - 1) return '{' + obj;
-          return '{' + obj + '}';
-        });
-
-        // Parse each JSON object
-        parsedArgs = jsonObjects.map((obj) => JSON.parse(obj));
-      } else {
-        parsedArgs = JSON.parse(toolCallArgs);
-      }
+      parsedArgs = typeof toolCallArgs === 'string' ? JSON.parse(toolCallArgs) : toolCallArgs;
     } catch (parseError) {
       console.error('JSON parsing error in tool call arguments:', {
         error: parseError.message,
-        position: parseError.message.match(/position (\d+)/)?.[1],
         arguments: toolCallArgs,
         toolName: toolCall.function?.name,
       });
       throw new Error(`Invalid JSON in tool arguments: ${parseError.message}`);
     }
 
-    const searchResult = await toolsManager.executeTool(toolCall, parsedArgs);
+    // Execute the tool
+    const result = await toolsManager.executeTool(toolCall, parsedArgs);
 
-    // Ensure searchResult is properly stringified
-    let searchResultContent;
+    // Format the result
+    let resultContent;
     try {
-      searchResultContent =
-        typeof searchResult === 'string' ? searchResult : JSON.stringify(searchResult);
+      resultContent = typeof result === 'string' ? result : JSON.stringify(result);
     } catch (stringifyError) {
-      console.error('Error stringifying search result:', {
+      console.error('Error stringifying tool result:', {
         error: stringifyError.message,
-        result: searchResult,
+        result,
         toolName: toolCall.function?.name,
       });
-      throw new Error(`Failed to stringify search result: ${stringifyError.message}`);
+      throw new Error(`Failed to stringify tool result: ${stringifyError.message}`);
     }
 
+    // Add tool call and response to messages
     messagesToSend.push({
       role: 'assistant',
       content: null,
@@ -135,15 +131,22 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
     messagesToSend.push({
       role: 'tool',
       tool_call_id: toolCall.id,
-      content: searchResultContent,
+      name: toolCall.function.name,
+      content: resultContent,
     });
 
-    // Save tool call to conversation using findOneAndUpdate
+    // Save tool call to conversation
     const currentMessage = conversation.messages[conversation.messages.length - 1];
     if (currentMessage && currentMessage.role === 'assistant') {
       currentMessage.parts.push({
         type: 'tool_call',
         content: JSON.stringify(toolCall),
+        step: toolCall.function?.name,
+        timestamp: new Date(),
+      });
+      currentMessage.parts.push({
+        type: 'tool_response',
+        content: resultContent,
         step: toolCall.function?.name,
         timestamp: new Date(),
       });
@@ -165,6 +168,7 @@ async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSe
     messagesToSend.push({
       role: 'tool',
       tool_call_id: toolCall.id,
+      name: toolCall.function.name,
       content: `Error executing tool: ${error.message}`,
     });
     return false;
@@ -493,7 +497,7 @@ export const streamChat = async (req, res) => {
 
         await streamAndSavePart({
           type: 'status',
-          content: 'Waiting for external tool result...',
+          content: 'Executing tool...',
           step: toolCall.function?.name,
         });
 
@@ -504,6 +508,7 @@ export const streamChat = async (req, res) => {
           messagesToSend,
           conversation,
         );
+
         if (!success) {
           await streamAndSavePart({
             type: 'status',
@@ -524,30 +529,13 @@ export const streamChat = async (req, res) => {
 
         await streamAndSavePart({
           type: 'status',
-          content: `Tool execution result: ${JSON.stringify(toolCall)}`,
+          content: 'Tool execution complete',
           step: toolCall.function?.name,
-        });
-
-        streamMessage(res, {
-          type: 'status',
-          id: chunk.id,
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: 'assistant',
-                content: null,
-                tool_calls: [toolCall],
-              },
-              finish_reason: 'tool_calls',
-            },
-          ],
-          conversationId: conversation._id,
         });
 
         hasProcessedToolCall = true;
 
-        // Create follow-up stream
+        // Create follow-up stream with updated messages
         try {
           await streamAndSavePart({
             type: 'reasoning',
@@ -566,38 +554,45 @@ export const streamChat = async (req, res) => {
             tools: toolsManager.getTools(),
           });
 
+          // Reset for follow-up stream
           fullResponse = '';
           toolCall = null;
           toolCallArgs = '';
           hasProcessedToolCall = false;
           lastFinishReason = null;
 
+          // Process follow-up stream
           for await (const followUpChunk of followUpStream) {
             const content = followUpChunk.choices[0]?.delta?.content || '';
+            const toolCalls = followUpChunk.choices[0]?.delta?.tool_calls || [];
             const finishReason = followUpChunk.choices[0]?.finish_reason;
             lastFinishReason = finishReason || lastFinishReason;
 
             if (content) {
               fullResponse += content;
-
-              // Stream and save text content
               await streamAndSavePart({
                 type: 'text',
                 content: content,
               });
+            }
 
-              streamMessage(res, {
-                type: 'text',
-                id: followUpChunk.id,
-                choices: [
-                  {
-                    index: 0,
-                    delta: { content },
-                    finish_reason: null,
+            if (toolCalls.length > 0 && !hasProcessedToolCall) {
+              // Handle nested tool calls if needed
+              const currentToolCall = toolCalls[0];
+              if (currentToolCall.function?.name) {
+                toolCall = {
+                  id: currentToolCall.id,
+                  type: 'function',
+                  function: {
+                    name: currentToolCall.function.name,
+                    arguments: '',
                   },
-                ],
-                conversationId: conversation._id,
-              });
+                };
+              }
+              if (currentToolCall.function?.arguments) {
+                toolCallArgs += currentToolCall.function.arguments;
+                toolCall.function.arguments = toolCallArgs;
+              }
             }
 
             if (finishReason === 'stop') {
@@ -605,41 +600,8 @@ export const streamChat = async (req, res) => {
                 type: 'status',
                 content: 'Response complete',
               });
-
-              // Ensure the final response is saved
-              await streamAndSavePart({
-                type: 'text',
-                content: fullResponse,
-              });
-
-              streamMessage(res, {
-                type: 'status',
-                id: followUpChunk.id,
-                choices: [
-                  {
-                    index: 0,
-                    message: {
-                      role: 'assistant',
-                      content: fullResponse,
-                    },
-                    finish_reason: 'stop',
-                  },
-                ],
-                conversationId: conversation._id,
-              });
-
-              finalResponse = fullResponse;
               break;
             }
-          }
-
-          // Send final response if we have one
-          if (finalResponse) {
-            streamMessage(res, {
-              type: 'text',
-              content: finalResponse,
-              conversationId: conversation._id,
-            });
           }
         } catch (followUpError) {
           console.error('Error in follow-up stream:', followUpError);

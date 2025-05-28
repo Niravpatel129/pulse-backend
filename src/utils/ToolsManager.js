@@ -10,23 +10,6 @@ class ToolsManager {
       {
         type: 'function',
         function: {
-          name: 'search_web',
-          description: 'Search the web for current information about a topic',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'The search query to look up on the web',
-              },
-            },
-            required: ['query'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
           name: 'search_workspace',
           description: 'Search through workspace embeddings for relevant information',
           parameters: {
@@ -81,23 +64,10 @@ class ToolsManager {
         throw new Error(`Missing required arguments for tool: ${toolCall.function.name}`);
       }
 
-      // toolCallArgs is already parsed in handleToolCall
-      const args = toolCallArgs;
+      // Parse arguments if they're a string
+      const args = typeof toolCallArgs === 'string' ? JSON.parse(toolCallArgs) : toolCallArgs;
 
       switch (toolCall.function.name) {
-        case 'search_web':
-          // Handle multiple queries if they exist
-          if (Array.isArray(args)) {
-            const results = await Promise.all(
-              args.map(async (query) => ({
-                query: query.query,
-                result: `Searching the web for: ${query.query}`,
-              })),
-            );
-            return results;
-          }
-          // Single query case
-          return `Searching the web for: ${args.query}`;
         case 'search_workspace':
           if (!args.query) {
             throw new Error('Query parameter is required for workspace search');
@@ -106,14 +76,28 @@ class ToolsManager {
         case 'get_pricing':
           // Handle array of part numbers
           if (Array.isArray(args)) {
-            const results = await Promise.all(
-              args.map(async (arg) => {
+            // Process sequentially to avoid overwhelming the system
+            const results = [];
+            for (const arg of args) {
+              try {
                 if (!arg.partNumber) {
-                  throw new Error('Part number is required for pricing lookup');
+                  results.push({
+                    partNumber: 'unknown',
+                    status: 'error',
+                    message: 'Part number is required for pricing lookup',
+                  });
+                  continue;
                 }
-                return await this.executeGetPricing(arg.partNumber);
-              }),
-            );
+                const result = await this.executeGetPricing(arg.partNumber);
+                results.push(result);
+              } catch (error) {
+                results.push({
+                  partNumber: arg.partNumber,
+                  status: 'error',
+                  message: `Failed to get pricing: ${error.message}`,
+                });
+              }
+            }
             return results;
           }
           // Single part number case
@@ -228,30 +212,6 @@ class ToolsManager {
     }
   }
 
-  cosineSimilarity(vecA, vecB) {
-    const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
-    const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
-    const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
-    return dotProduct / (magnitudeA * magnitudeB);
-  }
-
-  createToolResponse(toolCall, content) {
-    return {
-      role: 'tool',
-      tool_call_id: toolCall.id,
-      name: toolCall.function.name,
-      content: content,
-    };
-  }
-
-  createToolCallMessage(toolCall) {
-    return {
-      role: 'assistant',
-      content: null,
-      tool_calls: [toolCall],
-    };
-  }
-
   async executeGetPricing(partNumber) {
     if (!partNumber || typeof partNumber !== 'string') {
       throw new Error(`Invalid part number format. Received: ${JSON.stringify(partNumber)}`);
@@ -260,8 +220,8 @@ class ToolsManager {
     try {
       // Add timeout to the workspace search
       const searchPromise = this.executeSearchWorkspace(partNumber, 1);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Search timed out')), 5000),
+      const timeoutPromise = new Promise(
+        (_, reject) => setTimeout(() => reject(new Error('Search timed out')), 10000), // 10 second timeout
       );
 
       // Race between search and timeout
@@ -301,7 +261,7 @@ class ToolsManager {
         return {
           partNumber,
           status: 'timeout',
-          message: 'Search timed out. Please try again.',
+          message: 'Search timed out. Please try again with a more specific query.',
         };
       }
 
@@ -311,6 +271,30 @@ class ToolsManager {
         message: `Failed to get pricing: ${error.message}`,
       };
     }
+  }
+
+  cosineSimilarity(vecA, vecB) {
+    const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
+    const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
+    const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
+    return dotProduct / (magnitudeA * magnitudeB);
+  }
+
+  createToolResponse(toolCall, content) {
+    return {
+      role: 'tool',
+      tool_call_id: toolCall.id,
+      name: toolCall.function.name,
+      content: content,
+    };
+  }
+
+  createToolCallMessage(toolCall) {
+    return {
+      role: 'assistant',
+      content: null,
+      tool_calls: [toolCall],
+    };
   }
 }
 
