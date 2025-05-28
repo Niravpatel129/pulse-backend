@@ -386,14 +386,11 @@ export function initializeProjectInactivityChecker() {
   // Schedule to run every day at midnight
   cron.schedule('0 0 * * *', () => {
     console.log('Running scheduled project inactivity check');
-    checkInactiveProjects();
-    checkReminders();
   });
 
   // Run duplicate alert cleanup weekly (Sunday at 1 AM)
   cron.schedule('0 1 * * 0', () => {
     console.log('Running scheduled duplicate alert cleanup');
-    cleanupDuplicateAlerts();
   });
 
   console.log('Project inactivity checker initialized successfully');
