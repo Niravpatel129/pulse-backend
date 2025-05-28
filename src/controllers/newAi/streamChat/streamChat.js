@@ -60,6 +60,16 @@ function streamMessage(res, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+// Helper function to stream status/reasoning content
+function streamStatus(res, message, { type = 'reasoning', step = null } = {}) {
+  streamMessage(res, {
+    type,
+    step,
+    content: message,
+    timestamp: Date.now(),
+  });
+}
+
 // Helper function to handle tool calls
 async function handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend) {
   try {
@@ -120,6 +130,7 @@ export const streamChat = async (req, res) => {
     let processedImages = [];
     if (images.length > 0) {
       try {
+        streamStatus(res, 'Processing images...', { type: 'status', step: 'image_processing' });
         processedImages = await processImages(images, workspaceId);
       } catch (error) {
         console.error('Error processing images:', error);
@@ -137,6 +148,7 @@ export const streamChat = async (req, res) => {
     const chatSettings = await ChatSettings.findOne({ workspace: workspaceId });
 
     // Get selected agents
+    streamStatus(res, 'Loading agent configuration...', { type: 'status', step: 'agent_setup' });
     const selectedAgents = await Agent.find({
       _id: { $in: agents },
       workspace: workspaceId,
@@ -221,6 +233,8 @@ export const streamChat = async (req, res) => {
 
     messagesToSend.push(...formattedMessages);
 
+    streamStatus(res, 'Thinking...', { type: 'reasoning' });
+
     // Create chat completion stream
     const stream = await openai.chat.completions.create({
       model: model,
@@ -239,7 +253,7 @@ export const streamChat = async (req, res) => {
     let toolCallArgs = '';
     let hasProcessedToolCall = false;
     let lastFinishReason = null;
-    let finalResponse = null; // Add variable to store final response
+    let finalResponse = null;
 
     // Process stream
     for await (const chunk of stream) {
@@ -248,30 +262,7 @@ export const streamChat = async (req, res) => {
       const finishReason = chunk.choices[0]?.finish_reason;
       lastFinishReason = finishReason || lastFinishReason;
 
-      if (content) {
-        fullResponse += content;
-        streamMessage(res, {
-          id: chunk.id,
-          object: 'chat.completion.chunk',
-          created: Math.floor(Date.now() / 1000),
-          model: chunk.model,
-          sessionId: conversation._id,
-          agent: {
-            id: currentAgent._id,
-            name: currentAgent.name,
-            icon: currentAgent.icon,
-          },
-          choices: [
-            {
-              index: 0,
-              delta: { content },
-              finish_reason: null,
-            },
-          ],
-        });
-      }
-
-      if (toolCalls.length > 0) {
+      if (toolCalls.length > 0 && !hasProcessedToolCall) {
         const currentToolCall = toolCalls[0];
         if (currentToolCall.function?.name) {
           toolCall = {
@@ -282,16 +273,41 @@ export const streamChat = async (req, res) => {
               arguments: '',
             },
           };
+          streamStatus(res, `Running action: ${currentToolCall.function.name}`, {
+            type: 'action',
+            step: currentToolCall.function.name,
+          });
         }
         if (currentToolCall.function?.arguments) {
           toolCallArgs += currentToolCall.function.arguments;
         }
       }
 
+      if (content) {
+        fullResponse += content;
+        streamMessage(res, {
+          type: 'text',
+          id: chunk.id,
+          choices: [
+            {
+              index: 0,
+              delta: { content },
+              finish_reason: null,
+            },
+          ],
+        });
+      }
+
       if (finishReason === 'tool_calls' && toolCall && !hasProcessedToolCall) {
+        streamStatus(res, 'Waiting for external tool result...', {
+          type: 'status',
+          step: toolCall.function?.name,
+        });
+
         const success = await handleToolCall(toolCall, toolCallArgs, toolsManager, messagesToSend);
         if (!success) {
           streamMessage(res, {
+            type: 'error',
             error: {
               message: 'Error executing tool',
               type: 'server_error',
@@ -303,16 +319,8 @@ export const streamChat = async (req, res) => {
         }
 
         streamMessage(res, {
+          type: 'tool_result',
           id: chunk.id,
-          object: 'chat.completion.chunk',
-          created: Math.floor(Date.now() / 1000),
-          model: chunk.model,
-          sessionId: conversation._id,
-          agent: {
-            id: currentAgent._id,
-            name: currentAgent.name,
-            icon: currentAgent.icon,
-          },
           choices: [
             {
               index: 0,
@@ -330,6 +338,8 @@ export const streamChat = async (req, res) => {
 
         // Create follow-up stream
         try {
+          streamStatus(res, 'Processing tool results...', { type: 'reasoning' });
+
           const followUpStream = await openai.chat.completions.create({
             model: model,
             messages: messagesToSend,
@@ -356,16 +366,8 @@ export const streamChat = async (req, res) => {
             if (content) {
               fullResponse += content;
               streamMessage(res, {
+                type: 'text',
                 id: followUpChunk.id,
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: followUpChunk.model,
-                sessionId: conversation._id,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
                 choices: [
                   {
                     index: 0,
@@ -378,16 +380,8 @@ export const streamChat = async (req, res) => {
 
             if (finishReason === 'stop') {
               streamMessage(res, {
+                type: 'completion',
                 id: followUpChunk.id,
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: followUpChunk.model,
-                sessionId: conversation._id,
-                agent: {
-                  id: currentAgent._id,
-                  name: currentAgent.name,
-                  icon: currentAgent.icon,
-                },
                 choices: [
                   {
                     index: 0,
@@ -400,7 +394,6 @@ export const streamChat = async (req, res) => {
                 ],
               });
 
-              // Store the final response
               finalResponse = fullResponse;
               break;
             }
@@ -408,6 +401,7 @@ export const streamChat = async (req, res) => {
         } catch (followUpError) {
           console.error('Error in follow-up stream:', followUpError);
           streamMessage(res, {
+            type: 'error',
             error: {
               message: 'Error processing follow-up response: ' + followUpError.message,
               type: 'server_error',
@@ -459,6 +453,7 @@ export const streamChat = async (req, res) => {
       });
     } else {
       streamMessage(res, {
+        type: 'error',
         error: {
           message: error.message,
           type: 'server_error',
