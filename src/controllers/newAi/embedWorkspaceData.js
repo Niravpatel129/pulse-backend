@@ -1,4 +1,5 @@
-import { OpenAI, OpenAIEmbeddings } from '@langchain/openai';
+import { OpenAIEmbeddings } from '@langchain/openai';
+import OpenAI from 'openai';
 import WorkspaceEmbedding from '../../models/WorkspaceEmbedding.js';
 import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
@@ -10,7 +11,7 @@ const embeddings = new OpenAIEmbeddings({
 
 // Initialize OpenAI for text generation
 const openai = new OpenAI({
-  openAIApiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export const embedWorkspaceData = async (req, res, next) => {
