@@ -45,6 +45,23 @@ class ToolsManager {
           },
         },
       },
+      {
+        type: 'function',
+        function: {
+          name: 'get_pricing',
+          description: 'Get pricing information for a specific part number',
+          parameters: {
+            type: 'object',
+            properties: {
+              partNumber: {
+                type: 'string',
+                description: 'The part number to get pricing information for',
+              },
+            },
+            required: ['partNumber'],
+          },
+        },
+      },
     ];
   }
 
@@ -73,6 +90,8 @@ class ToolsManager {
           return `Searching the web for: ${args.query}`;
         case 'search_workspace':
           return await this.executeSearchWorkspace(args.query, args.limit || 3);
+        case 'get_pricing':
+          return await this.executeGetPricing(args.partNumber);
         default:
           throw new Error(`Unknown tool: ${toolCall.function.name}`);
       }
@@ -184,6 +203,41 @@ class ToolsManager {
       content: null,
       tool_calls: [toolCall],
     };
+  }
+
+  async executeGetPricing(partNumber) {
+    if (!partNumber || typeof partNumber !== 'string') {
+      throw new Error(`Invalid part number format. Received: ${JSON.stringify(partNumber)}`);
+    }
+
+    try {
+      // First search for the product in workspace to get additional context
+      const searchResults = await this.executeSearchWorkspace(partNumber, 1);
+
+      if (!searchResults || searchResults.length === 0) {
+        return `No product found with part number: ${partNumber}`;
+      }
+
+      // Here you would typically integrate with your pricing system
+      // For now, returning a mock response with the product details
+      const product = searchResults[0];
+      return {
+        partNumber,
+        title: product.title,
+        description: product.description,
+        metadata: product.metadata,
+        pricing: {
+          // This is where you would integrate with your actual pricing system
+          // For now returning mock data
+          currency: 'USD',
+          price: 'Contact for pricing',
+          availability: 'In stock',
+        },
+      };
+    } catch (error) {
+      console.error('Error getting pricing:', error);
+      throw new Error(`Failed to get pricing: ${error.message}`);
+    }
   }
 }
 
