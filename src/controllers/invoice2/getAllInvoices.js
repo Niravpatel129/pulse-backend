@@ -2,13 +2,35 @@ import Invoice2 from '../../models/invoice2.js';
 import catchAsync from '../../utils/catchAsync.js';
 
 export const getAllInvoices = catchAsync(async (req, res, next) => {
-  const { page = 1, limit = 10 } = req.query;
+  const { page = 1, limit = 10, status, search = '' } = req.query;
 
   const skip = (page - 1) * limit;
 
-  const total = await Invoice2.countDocuments({
+  // Build query object
+  const query = {
     workspace: req.workspace._id,
-  });
+  };
+
+  // Add status filter if provided
+  if (status) {
+    if (status === 'overdue') {
+      query.dueDate = { $lt: new Date() };
+      query.status = { $ne: 'paid' }; // Exclude paid invoices
+    } else {
+      query.status = status;
+    }
+  }
+
+  // Add search functionality
+  if (search) {
+    query.$or = [
+      { invoiceNumber: { $regex: search, $options: 'i' } },
+      { 'customer.name': { $regex: search, $options: 'i' } },
+      { 'customer.email': { $regex: search, $options: 'i' } },
+    ];
+  }
+
+  const total = await Invoice2.countDocuments(query);
 
   const totalPages = Math.ceil(total / limit);
   const currentPage = parseInt(page);
@@ -20,9 +42,7 @@ export const getAllInvoices = catchAsync(async (req, res, next) => {
     });
   }
 
-  const invoices = await Invoice2.find({
-    workspace: req.workspace._id,
-  })
+  const invoices = await Invoice2.find(query)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit))
