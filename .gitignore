@@ -2,6 +2,9 @@
 node_modules/
 jspm_packages/
 
+# Scripts
+scripts/
+
 # Environment variables
 .env
 .env.local

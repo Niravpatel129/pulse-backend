@@ -200,7 +200,7 @@ const invoice2Schema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['bank_transfer', 'credit_card', 'cash', 'check', 'other'],
+      enum: ['bank_transfer', 'credit_card', 'cash', 'check', 'other', 'stripe'],
       default: 'bank_transfer',
     },
     paidAt: {
