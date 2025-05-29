@@ -48,9 +48,9 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     });
   }
 
-  // Calculate payment amount in dollars
   const paymentAmount = paymentIntentDetails.amount / 100;
-  const isFullPayment = paymentAmount >= invoice.totals.total;
+  const isFullPayment = true; // we don't support partial payments yet
+
   const isDepositPayment =
     invoice.requireDeposit &&
     Math.abs(paymentAmount - (invoice.totals.total * invoice.depositPercentage) / 100) < 0.01;
