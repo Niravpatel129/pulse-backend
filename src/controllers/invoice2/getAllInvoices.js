@@ -10,6 +10,16 @@ export const getAllInvoices = catchAsync(async (req, res, next) => {
     workspace: req.workspace._id,
   });
 
+  const totalPages = Math.ceil(total / limit);
+  const currentPage = parseInt(page);
+
+  if (currentPage > totalPages && totalPages > 0) {
+    return res.status(400).json({
+      status: 'error',
+      message: `Page ${currentPage} does not exist. There are only ${totalPages} pages available.`,
+    });
+  }
+
   const invoices = await Invoice2.find({
     workspace: req.workspace._id,
   })
@@ -24,9 +34,9 @@ export const getAllInvoices = catchAsync(async (req, res, next) => {
     results: invoices.length,
     pagination: {
       total,
-      page: parseInt(page),
+      page: currentPage,
       limit: parseInt(limit),
-      pages: Math.ceil(total / limit),
+      pages: totalPages,
     },
     data: {
       invoices,
