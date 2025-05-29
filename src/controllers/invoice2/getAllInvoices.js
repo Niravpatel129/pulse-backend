@@ -15,7 +15,7 @@ export const getAllInvoices = catchAsync(async (req, res, next) => {
   if (status) {
     if (status === 'overdue') {
       query.dueDate = { $lt: new Date() };
-      query.status = { $ne: 'paid' }; // Exclude paid invoices
+      query.status = { $ne: 'paid', $ne: 'cancelled', $ne: 'draft' }; // Exclude paid invoices
     } else {
       query.status = status;
     }
