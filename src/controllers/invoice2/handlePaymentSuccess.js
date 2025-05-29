@@ -1,7 +1,6 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import Invoice2 from '../../models/invoice2.js';
 import Payment from '../../models/paymentModel.js';
-import { sendPaymentNotifications } from '../../services/paymentNotificationService.js';
 import StripeService from '../../services/stripeService.js';
 
 // @desc    Handle successful payment for an invoice
@@ -112,10 +111,7 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
 
   // Send payment notifications
   if (payment.type === 'payment' || payment.type === 'deposit') {
-    // Send notifications asynchronously - don't wait for completion
-    sendPaymentNotifications(payment, invoice, invoice.customer.id, invoice.workspace).catch(
-      (err) => console.error('Error sending payment notifications:', err),
-    );
+    // TODO: Send notifications asynchronously - don't wait for completion
   }
 
   res.status(200).json({
