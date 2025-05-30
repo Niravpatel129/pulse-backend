@@ -118,7 +118,7 @@ class GmailListenerService {
           await this.refreshTokensIfNeeded(oauth2Client, integration);
           await this.checkNewEmails(oauth2Client, integration);
         } catch (error) {
-          console.error(`Error in polling interval for ${email}:`, error);
+          console.error(`Error in polling interval for ${email}`);
           if (error.code === 401) {
             // Handle token refresh failure
             integration.isActive = false;
