@@ -36,6 +36,39 @@ class GmailListenerService {
   }
 
   /**
+   * Proactively refresh tokens if they're about to expire
+   */
+  async refreshTokensIfNeeded(oauth2Client, integration) {
+    try {
+      // Check if token is expired or about to expire (within 5 minutes)
+      const isTokenExpired =
+        integration.tokenExpiry &&
+        Date.now() >= new Date(integration.tokenExpiry).getTime() - 5 * 60 * 1000;
+
+      if (isTokenExpired) {
+        console.log(`Refreshing tokens for ${integration.email}`);
+        const { tokens } = await oauth2Client.refreshToken(integration.refreshToken);
+
+        // Update tokens in database
+        integration.accessToken = tokens.access_token;
+        if (tokens.refresh_token) integration.refreshToken = tokens.refresh_token;
+        integration.tokenExpiry = new Date(tokens.expiry_date);
+        await integration.save();
+
+        // Update oauth client with new tokens
+        oauth2Client.setCredentials({
+          access_token: integration.accessToken,
+          refresh_token: integration.refreshToken,
+          expiry_date: integration.tokenExpiry.getTime(),
+        });
+      }
+    } catch (error) {
+      console.error(`Error refreshing tokens for ${integration.email}`);
+      throw error;
+    }
+  }
+
+  /**
    * Set up listener for a specific Gmail integration
    */
   async setupListenerForIntegration(integration) {
@@ -79,20 +112,33 @@ class GmailListenerService {
       });
 
       // Start polling interval
-      const intervalId = setInterval(
-        () => this.checkNewEmails(oauth2Client, integration),
-        this.pollingInterval,
-      );
+      const intervalId = setInterval(async () => {
+        try {
+          // Check and refresh tokens if needed before checking emails
+          await this.refreshTokensIfNeeded(oauth2Client, integration);
+          await this.checkNewEmails(oauth2Client, integration);
+        } catch (error) {
+          console.error(`Error in polling interval for ${email}:`, error);
+          if (error.code === 401) {
+            // Handle token refresh failure
+            integration.isActive = false;
+            await integration.save();
+            clearInterval(intervalId);
+            this.activeListeners.delete(`${workspaceId}-${email}`);
+          }
+        }
+      }, this.pollingInterval);
 
       // Store interval ID for cleanup
       this.activeListeners.set(`${workspaceId}-${email}`, intervalId);
 
       // Do initial check
+      await this.refreshTokensIfNeeded(oauth2Client, integration);
       await this.checkNewEmails(oauth2Client, integration);
 
       return true;
     } catch (error) {
-      console.error(`Error setting up Gmail listener for ${integration.email}:`, error);
+      console.error(`Error setting up Gmail listener for ${integration.email}`);
       return false;
     }
   }
@@ -173,7 +219,75 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
-      console.log('123');
+      // Get the full message
+      const message = await gmail.users.messages.get({
+        userId: 'me',
+        id: messageId,
+        format: 'full',
+      });
+
+      // Extract headers
+      const headers = message.data.payload.headers;
+      const getHeader = (name) =>
+        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+      // Process email body and attachments
+      const { body, attachments, inlineImages } = await processEmailParts(
+        [message.data.payload],
+        gmail,
+        messageId,
+      );
+
+      // Extract email details
+      const from = getHeader('From');
+      const to = getHeader('To')
+        .split(',')
+        .map((email) => email.trim());
+      const cc = getHeader('Cc')
+        ? getHeader('Cc')
+            .split(',')
+            .map((email) => email.trim())
+        : [];
+      const bcc = getHeader('Bcc')
+        ? getHeader('Bcc')
+            .split(',')
+            .map((email) => email.trim())
+        : [];
+      const subject = getHeader('Subject');
+      const threadId = message.data.threadId;
+      const sentAt = new Date(getHeader('Date'));
+
+      // Get project ID for this email
+      const projectId = await this.getProjectIdForEmail({
+        from,
+        to,
+        subject,
+        threadId,
+        workspace: integration.workspace,
+      });
+
+      // Create email document
+      const email = new Email({
+        projectId,
+        subject,
+        body,
+        bodyText: body.replace(/<[^>]*>/g, ''), // Strip HTML tags for plain text version
+        to,
+        cc,
+        bcc,
+        from,
+        attachments: attachments.map((att) => ({
+          name: att.filename,
+          size: att.size,
+          type: att.mimeType,
+          url: att.downloadUrl,
+        })),
+        direction: 'inbound',
+        status: 'received',
+        sentAt,
+      });
+
+      await email.save();
     } catch (error) {
       console.error(`Error processing email ${messageId}:`, error);
     }
