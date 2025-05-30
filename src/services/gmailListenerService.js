@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { processEmailParts } from '../controllers/integrations/gmail/getGmailClientEmails.js';
 import Email from '../models/Email.js';
 import GmailIntegration from '../models/GmailIntegration.js';
 
