@@ -4,7 +4,7 @@ import Client from '../../../models/Client.js';
 import GmailIntegration from '../../../models/GmailIntegration.js';
 
 // Helper function to decode base64url encoded strings
-const decodeBase64Url = (str) => {
+export const decodeBase64Url = (str) => {
   if (!str) return '';
   str = str.replace(/-/g, '+').replace(/_/g, '/');
   while (str.length % 4) str += '=';
@@ -12,12 +12,12 @@ const decodeBase64Url = (str) => {
 };
 
 // Helper function to get image data URL
-const getImageDataUrl = (mimeType, data) => {
+export const getImageDataUrl = (mimeType, data) => {
   return `data:${mimeType};base64,${data}`;
 };
 
 // Helper function to recursively find attachments and body in MIME parts
-const processEmailParts = async (parts, gmail, messageId) => {
+export const processEmailParts = async (parts, gmail, messageId) => {
   if (!parts) return { body: '', attachments: [], inlineImages: [] };
 
   const attachments = [];
