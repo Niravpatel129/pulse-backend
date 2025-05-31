@@ -1,16 +1,17 @@
 import { google } from 'googleapis';
 import GmailIntegration from '../../models/GmailIntegration.js';
 import Invoice2 from '../../models/invoice2.js';
+import { invoiceEmail } from '../../services/emailTemplates/invoiceEmail.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 
 export const sendInvoice = catchAsync(async (req, res, next) => {
   try {
-    const { to, from, subject, message, sendCopy, attachPdf } = req.body;
+    const { to, from, subject, message, sendCopy, attachPdf, paymentUrl } = req.body;
     const { id } = req.params;
 
     // Validate required fields
-    if (!to || !from || !subject || !message) {
+    if (!to || !from || !subject || !message || !paymentUrl) {
       return next(new AppError('Missing required fields', 400));
     }
 
@@ -28,6 +29,13 @@ export const sendInvoice = catchAsync(async (req, res, next) => {
     // Validate subject length
     if (subject.length > 200) {
       return next(new AppError('Subject cannot exceed 200 characters', 400));
+    }
+
+    // Validate payment URL
+    try {
+      new URL(paymentUrl);
+    } catch (error) {
+      return next(new AppError('Invalid payment URL format', 400));
     }
 
     // Find the invoice
@@ -67,6 +75,18 @@ export const sendInvoice = catchAsync(async (req, res, next) => {
     // Create Gmail client
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
+    // Generate email content using the template
+    const emailContent = invoiceEmail({
+      customerName: invoice.customer?.name || 'Customer',
+      invoiceNumber: invoice.invoiceNumber,
+      currency: invoice.settings?.currency || 'USD',
+      total: invoice.totals?.total || 0,
+      dueDate: invoice.dueDate,
+      message,
+      fromName: req.workspace.name,
+      paymentUrl,
+    });
+
     // Prepare email content with proper HTML formatting
     const emailLines = [
       `From: ${from}`,
@@ -75,7 +95,7 @@ export const sendInvoice = catchAsync(async (req, res, next) => {
       'Content-Type: text/html; charset=utf-8',
       'MIME-Version: 1.0',
       '',
-      `<html><body>${message}</body></html>`,
+      emailContent.html,
     ];
 
     // If sendCopy is true, add CC
@@ -126,6 +146,7 @@ export const sendInvoice = catchAsync(async (req, res, next) => {
         message,
         sendCopy,
         attachPdf,
+        paymentUrl,
       },
     };
 
