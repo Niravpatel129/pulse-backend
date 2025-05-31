@@ -115,13 +115,21 @@ const invoice2Schema = new mongoose.Schema(
     invoiceTitle: {
       type: String,
     },
-    attachments: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'File',
-        required: false,
+    attachments: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'File',
+          required: false,
+        },
+      ],
+      validate: {
+        validator: function (v) {
+          return v.length <= 10;
+        },
+        message: 'Attachments cannot exceed 10 items',
       },
-    ],
+    },
     customer: {
       id: {
         type: mongoose.Schema.Types.ObjectId,
@@ -167,27 +175,35 @@ const invoice2Schema = new mongoose.Schema(
       enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled'],
       default: 'draft',
     },
-    statusHistory: [
-      {
-        status: {
-          type: String,
-          enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled', 'seen'],
-          required: true,
+    statusHistory: {
+      type: [
+        {
+          status: {
+            type: String,
+            enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled', 'seen'],
+            required: true,
+          },
+          changedAt: {
+            type: Date,
+            default: Date.now,
+          },
+          changedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: false,
+          },
+          reason: {
+            type: String,
+          },
         },
-        changedAt: {
-          type: Date,
-          default: Date.now,
+      ],
+      validate: {
+        validator: function (v) {
+          return v.length <= 50;
         },
-        changedBy: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'User',
-          required: false,
-        },
-        reason: {
-          type: String,
-        },
+        message: 'Status history cannot exceed 50 entries',
       },
-    ],
+    },
     statusChangedAt: {
       type: Date,
     },
@@ -210,6 +226,7 @@ const invoice2Schema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
+      index: true,
     },
     requireDeposit: {
       type: Boolean,

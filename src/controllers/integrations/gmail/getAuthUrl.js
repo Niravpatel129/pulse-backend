@@ -19,7 +19,8 @@ const getAuthUrl = asyncHandler(async (req, res) => {
 
     // Define the scopes we need for Gmail
     const scopes = [
-      'https://www.googleapis.com/auth/gmail.readonly', // Read-only access to Gmail
+      'https://www.googleapis.com/auth/gmail.send', // Send emails
+      'https://www.googleapis.com/auth/gmail.readonly', // Read emails
       'https://www.googleapis.com/auth/userinfo.email', // User email address
     ];
 

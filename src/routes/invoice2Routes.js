@@ -11,6 +11,7 @@ import { getInvoiceSummary } from '../controllers/invoice2/getInvoiceSummary.js'
 import { getLastInvoiceSettings } from '../controllers/invoice2/getLastInvoiceSettings.js';
 import { handlePaymentSuccess } from '../controllers/invoice2/handlePaymentSuccess.js';
 import { markInvoiceAsPaid } from '../controllers/invoice2/markInvoiceAsPaid.js';
+import { sendInvoice } from '../controllers/invoice2/sendInvoice.js';
 import { updateInternalNote } from '../controllers/invoice2/updateInternalNote.js';
 import { updateInvoice } from '../controllers/invoice2/updateInvoice.js';
 import { updateInvoiceStatus } from '../controllers/invoice2/updateInvoiceStatus.js';
@@ -46,5 +47,6 @@ router.route('/:id/download').get(downloadInvoice);
 router.route('/:id/internal-note').patch(updateInternalNote);
 router.route('/:id/attachments').post(addAttachment);
 router.route('/:id/attachments/:fileId').delete(deleteAttachment);
+router.route('/:id/send').post(sendInvoice);
 
 export default router;
