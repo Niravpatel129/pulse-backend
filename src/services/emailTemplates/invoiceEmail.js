@@ -55,14 +55,6 @@ export const invoiceEmail = ({
               .map((line) => `<p class="leading-tight">${line || '\u00A0'}</p>`)
               .join('')}
           </div>
-
-          <div class="mt-4 pt-3 border-t border-gray-100 dark:border-neutral-800 text-center space-y-1">
-            <p class="text-xs text-gray-400 dark:text-gray-500">Invoice ${invoiceNumber}</p>
-            <a href="${paymentUrl}" class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-              View invoice
-            </a>
-            <p class="text-xs text-gray-400 dark:text-gray-500">${customerName}</p>
-          </div>
         </div>
       </div>
     `,
