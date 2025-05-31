@@ -128,7 +128,17 @@ export const sendInvoice = catchAsync(async (req, res, next) => {
 
     // Update invoice status and add timeline entry
     invoice.status = 'sent';
+    invoice.statusChangedAt = new Date();
+
     invoice.dateSent = new Date();
+
+    // Add to status history
+    invoice.statusHistory.push({
+      status: 'sent',
+      changedAt: new Date(),
+      changedBy: req.user.userId,
+      reason: `Invoice sent to ${to}`,
+    });
 
     // Add timeline entry
     const timelineEntry = {
