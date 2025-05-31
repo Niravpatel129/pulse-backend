@@ -102,6 +102,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
 
     // Update invoice status
     invoice.status = newStatus;
+    invoice.statusChangedAt = new Date();
     await invoice.save();
 
     // Create a payment record
