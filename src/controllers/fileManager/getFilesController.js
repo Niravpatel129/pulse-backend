@@ -2,26 +2,40 @@ import FileItem from '../../models/FileManager.js';
 
 export const getFiles = async (req, res) => {
   try {
-    const { section, path = [] } = req.query;
+    const { section, path } = req.query;
     const workspaceId = req.workspace.id;
-
-    // Validate section parameter
-    if (!section) {
-      return res.status(400).json({
-        error: true,
-        message: 'Section parameter is required (workspace or private)',
-      });
-    }
 
     console.log('Query params:', { section, path, workspaceId });
 
     // Build query
     const query = {
       workspaceId,
-      section,
       status: 'active',
-      path: path, // Use the provided path parameter
     };
+
+    // Add section to query if provided
+    if (section) {
+      query.section = section;
+    }
+
+    // Parse path parameter if it exists
+    if (path) {
+      try {
+        // If path is a string representation of an array, parse it
+        const parsedPath = JSON.parse(path);
+        if (Array.isArray(parsedPath)) {
+          query.path = parsedPath;
+        } else {
+          query.path = [path]; // If it's a single string, wrap it in an array
+        }
+      } catch (e) {
+        // If parsing fails, treat it as a single path segment
+        query.path = [path];
+      }
+    } else {
+      // For root level items, path should be an empty array
+      query.path = [];
+    }
 
     console.log('MongoDB query:', JSON.stringify(query, null, 2));
 

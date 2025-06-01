@@ -19,6 +19,9 @@ router.use(extractWorkspace);
 // Get files and folders
 router.get('/', getFiles);
 
+// Get file structure
+router.get('/structure', getFiles);
+
 // Create a new folder
 router.post('/folders', createFolder);
 

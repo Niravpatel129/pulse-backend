@@ -2,14 +2,17 @@ import FileItem from '../../models/FileManager.js';
 
 export const createFolder = async (req, res) => {
   try {
-    const { name, section, path = [] } = req.body;
+    const { name, section, path } = req.body;
     const workspaceId = req.workspace.id;
+
+    // For root level folders, ensure path is an empty array
+    const folderPath = path && path.length > 0 ? path : [];
 
     // Check if folder already exists in the same path
     const existingFolder = await FileItem.findOne({
       name,
       type: 'folder',
-      path,
+      path: folderPath,
       section,
       workspaceId,
       status: 'active',
@@ -27,7 +30,7 @@ export const createFolder = async (req, res) => {
       name,
       type: 'folder',
       section,
-      path,
+      path: folderPath,
       workspaceId,
       createdBy: req.user.id,
     });
