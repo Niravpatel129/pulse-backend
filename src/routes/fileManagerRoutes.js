@@ -1,0 +1,33 @@
+import express from 'express';
+import {
+  createFolder,
+  deleteItem,
+  getFiles,
+  moveItem,
+  uploadFile,
+} from '../controllers/fileManager/index.js';
+import { authenticate } from '../middleware/auth.js';
+import { extractWorkspace } from '../middleware/workspace.js';
+
+const router = express.Router();
+
+// Apply authentication and workspace middleware to all routes
+router.use(authenticate);
+router.use(extractWorkspace);
+
+// Get files and folders
+router.get('/', getFiles);
+
+// Create a new folder
+router.post('/folders', createFolder);
+
+// Upload files
+router.post('/upload', uploadFile);
+
+// Move a file or folder
+router.put('/:itemId/move', moveItem);
+
+// Delete a file or folder
+router.delete('/:itemId', deleteItem);
+
+export default router;

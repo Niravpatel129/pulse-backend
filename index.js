@@ -29,6 +29,7 @@ import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
 import externalInvoiceRoutes from './src/routes/externalInvoiceRoutes.js';
 import figmaRoutes from './src/routes/figmaRoutes.js';
+import fileManagerRoutes from './src/routes/fileManagerRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
 import gmailRoutes from './src/routes/gmailRoutes.js';
 import integrationRoutes from './src/routes/integrationRoutes.js';
@@ -203,6 +204,9 @@ app.use(`${routesPrefix}/api-keys`, apiKeyRoutes);
 
 // External API Routes (API Key protected)
 app.use(`${routesPrefix}/external/invoices`, externalInvoiceRoutes);
+
+// File Manager
+app.use(`${routesPrefix}/file-manager`, fileManagerRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
