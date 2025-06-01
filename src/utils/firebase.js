@@ -188,14 +188,25 @@ export const fileUtils = {
    * Creates a file object for storage
    */
   createFileObject(file, firebaseUrl, storagePath) {
+    const fileExtension = file.originalname.split('.').pop();
     return {
-      name: file.originalname,
-      type: this.getType(file.mimetype),
-      size: file.size,
-      firebaseUrl,
       storagePath,
+      downloadURL: firebaseUrl,
       contentType: file.mimetype,
-      uploadedAt: new Date(),
+      originalName: file.originalname,
+      fileExtension,
+      fileHash: null, // To be implemented with file hashing
+      dimensions: {
+        width: null,
+        height: null,
+      },
+      duration: null,
+      thumbnailUrl: null,
+      processingStatus: 'completed',
+      processingError: null,
+      compressionStatus: 'none',
+      encryptionStatus: 'none',
+      version: 1,
     };
   },
 };

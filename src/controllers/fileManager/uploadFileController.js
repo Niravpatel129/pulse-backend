@@ -36,22 +36,46 @@ export const uploadFile = async (req, res) => {
 
     const uploadedFiles = await Promise.all(
       req.files.map(async (file) => {
-        // Check if file already exists in the same path
-        const existingFile = await FileItem.findOne({
-          name: file.originalname,
-          type: 'file',
-          path: parentPath,
+        // Function to generate a unique filename
+        const generateUniqueFilename = async (originalName, path, section, workspaceId) => {
+          let counter = 1;
+          let newName = originalName;
+          const nameParts = originalName.split('.');
+          const extension = nameParts.pop();
+          const baseName = nameParts.join('.');
+
+          while (true) {
+            const existingFile = await FileItem.findOne({
+              name: newName,
+              type: 'file',
+              path: path,
+              section,
+              workspaceId,
+              status: 'active',
+            });
+
+            if (!existingFile) {
+              return newName;
+            }
+
+            newName = `${baseName} (${counter}).${extension}`;
+            counter++;
+          }
+        };
+
+        // Generate unique filename
+        const uniqueFilename = await generateUniqueFilename(
+          file.originalname,
+          parentPath,
           section,
           workspaceId,
-          status: 'active',
-        });
+        );
 
-        if (existingFile) {
-          throw new Error(`A file named "${file.originalname}" already exists in this location`);
-        }
+        // Update the file object with the unique name
+        file.originalname = uniqueFilename;
 
         // Upload to Firebase
-        const storagePath = firebaseStorage.generatePath(workspaceId, file.originalname);
+        const storagePath = firebaseStorage.generatePath(workspaceId, uniqueFilename);
         const { url, storagePath: firebasePath } = await firebaseStorage.uploadFile(
           file.buffer,
           storagePath,
@@ -61,9 +85,9 @@ export const uploadFile = async (req, res) => {
         // Create file record using fileUtils
         const fileDetails = fileUtils.createFileObject(file, url, firebasePath);
         const fileItem = await FileItem.create({
-          name: file.originalname,
+          name: uniqueFilename,
           type: 'file',
-          size: fileDetails.size,
+          size: file.size.toString(),
           section,
           path: parentPath,
           workspaceId,
