@@ -15,6 +15,7 @@ export const uploadFile = async (req, res) => {
 
     // If parentId is provided, verify it exists and belongs to the workspace
     let parent = null;
+    let parentPath = [];
     if (parentId) {
       parent = await FileItem.findOne({
         _id: parentId,
@@ -28,15 +29,18 @@ export const uploadFile = async (req, res) => {
           message: 'Parent folder not found or you do not have access to it',
         });
       }
+
+      // Get the parent's path and add the parent's name to it
+      parentPath = [...(parent.path || []), parent.name];
     }
 
     const uploadedFiles = await Promise.all(
       req.files.map(async (file) => {
-        // Check if file already exists in the same parent
+        // Check if file already exists in the same path
         const existingFile = await FileItem.findOne({
           name: file.originalname,
           type: 'file',
-          parent: parentId || null,
+          path: parentPath,
           section,
           workspaceId,
           status: 'active',
@@ -61,7 +65,7 @@ export const uploadFile = async (req, res) => {
           type: 'file',
           size: fileDetails.size,
           section,
-          parent: parentId || null,
+          path: parentPath,
           workspaceId,
           createdBy: req.user.id,
           fileDetails,

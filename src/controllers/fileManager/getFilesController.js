@@ -20,13 +20,19 @@ export const getFiles = async (req, res) => {
       workspaceId,
       section,
       status: 'active',
-      path: [], // Directly match empty array for root items
+      path: path, // Use the provided path parameter
     };
 
     console.log('MongoDB query:', JSON.stringify(query, null, 2));
 
-    // Get files and folders
-    const items = await FileItem.find(query).populate('children').sort({ type: 1, name: 1 }); // Folders first, then files, alphabetically
+    // Get files and folders with populated children
+    const items = await FileItem.find(query)
+      .populate({
+        path: 'children',
+        match: { status: 'active' },
+        options: { sort: { type: 1, name: 1 } }, // Sort children: folders first, then files alphabetically
+      })
+      .sort({ type: 1, name: 1 }); // Sort parent items: folders first, then files alphabetically
 
     console.log('Found items:', items.length);
     console.log(
