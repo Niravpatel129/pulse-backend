@@ -4,8 +4,9 @@ export const getFiles = async (req, res) => {
   try {
     const { section, path } = req.query;
     const workspaceId = req.workspace.id;
+    const isStructureRequest = req.originalUrl.includes('/structure');
 
-    console.log('Query params:', { section, path, workspaceId });
+    console.log('Query params:', { section, path, workspaceId, isStructureRequest });
 
     // Build query
     const query = {
@@ -18,8 +19,8 @@ export const getFiles = async (req, res) => {
       query.section = section;
     }
 
-    // Parse path parameter if it exists
-    if (path) {
+    // Only apply path filtering if not a structure request
+    if (!isStructureRequest && path) {
       try {
         // If path is a string representation of an array, parse it
         const parsedPath = JSON.parse(path);
@@ -32,8 +33,8 @@ export const getFiles = async (req, res) => {
         // If parsing fails, treat it as a single path segment
         query.path = [path];
       }
-    } else {
-      // For root level items, path should be an empty array
+    } else if (!isStructureRequest) {
+      // For root level items, path should be an empty array (only for non-structure requests)
       query.path = [];
     }
 
