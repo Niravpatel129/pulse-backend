@@ -4,6 +4,7 @@ export const getFiles = async (req, res) => {
   try {
     const { section, path } = req.query;
     const workspaceId = req.workspace.id;
+    const workspaceShortid = req.workspace.shortid;
     const isStructureRequest = req.originalUrl.includes('/structure');
 
     // Build query
@@ -37,13 +38,26 @@ export const getFiles = async (req, res) => {
     }
 
     // Get files and folders with populated children
-    const items = await FileItem.find(query)
+    let items = await FileItem.find(query)
       .populate({
         path: 'children',
         match: { status: 'active' },
         options: { sort: { type: 1, name: 1 } }, // Sort children: folders first, then files alphabetically
       })
       .sort({ type: 1, name: 1 }); // Sort parent items: folders first, then files alphabetically
+
+    // Add workspaceShortid to each item and its children
+    items = items.map((item) => {
+      const itemObj = item.toObject();
+      itemObj.workspaceShortid = workspaceShortid;
+      if (itemObj.children) {
+        itemObj.children = itemObj.children.map((child) => ({
+          ...child,
+          workspaceShortid,
+        }));
+      }
+      return itemObj;
+    });
 
     res.status(200).json({
       success: true,

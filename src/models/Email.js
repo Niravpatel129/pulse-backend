@@ -28,7 +28,7 @@ const emailSchema = new mongoose.Schema(
     },
     subject: {
       type: String,
-      required: true,
+      default: '(No Subject)',
     },
     body: {
       type: String,

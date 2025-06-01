@@ -77,6 +77,11 @@ const fileItemSchema = new mongoose.Schema(
       ref: 'Workspace',
       required: true,
     },
+    workspaceShortid: {
+      type: String,
+      ref: 'Workspace',
+      required: true,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

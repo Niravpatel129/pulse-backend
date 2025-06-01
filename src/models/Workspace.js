@@ -1,7 +1,13 @@
 import mongoose from 'mongoose';
+import { nanoid } from 'nanoid';
 
 const workspaceSchema = new mongoose.Schema(
   {
+    shortid: {
+      type: String,
+      default: () => nanoid(8),
+      unique: true,
+    },
     name: {
       type: String,
       required: true,
@@ -26,7 +32,7 @@ const workspaceSchema = new mongoose.Schema(
     },
     subdomain: {
       type: String,
-      required: true,
+      required: false,
       trim: true,
       unique: true,
     },

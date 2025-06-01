@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import Email from '../models/Email.js';
 import FileItem from '../models/FileManager.js';
 import User from '../models/User.js';
+import Workspace from '../models/Workspace.js';
 import { fileUtils, firebaseStorage } from '../utils/firebase.js';
 
 dotenv.config();
@@ -72,11 +73,114 @@ class EmailListenerService {
       console.log('📧 Recipient address:', toEmail);
       console.log('👤 Extracted username:', username);
 
-      // Parse the email address to extract workspaceId and parentId
+      // Check if this is a direct workspace email
+      if (username.startsWith('ws-')) {
+        const workspaceId = username.replace('ws-', '');
+
+        // Find the workspace by its shortid
+        const workspace = await Workspace.findOne({ shortid: workspaceId });
+        if (!workspace) {
+          console.log('Workspace not found for short ID:', workspaceId);
+          return;
+        }
+
+        // Use the replyTo address if available, otherwise use the from address
+        const emailOfTheUser = mail.replyTo?.[0]?.address || fromEmail;
+
+        console.log('🚀 emailOfTheUser:', emailOfTheUser);
+        // Find the user
+        let user = await User.findOne({
+          email: emailOfTheUser,
+        });
+
+        // If user doesn't exist, create a new one
+        if (!user && emailOfTheUser) {
+          user = await User.create({
+            email: emailOfTheUser,
+            name: fromEmail.split('@')[0] || 'Unknown User',
+            password: nanoid(),
+            isActivated: false,
+          });
+        }
+
+        // Process attachments if any
+        if (attachments && attachments.length > 0) {
+          for (const attachment of attachments) {
+            try {
+              // Generate unique filename
+              const uniqueFilename = await this.generateUniqueFilename(
+                attachment.filename,
+                [], // Empty path for root level
+                'workspace', // Use workspace section for direct workspace emails
+                workspace._id,
+              );
+
+              // Upload to Firebase
+              const storagePath = firebaseStorage.generatePath(workspace._id, uniqueFilename);
+              const { url, storagePath: firebasePath } = await firebaseStorage.uploadFile(
+                attachment.content,
+                storagePath,
+                attachment.contentType,
+              );
+
+              // Create file record
+              const fileDetails = fileUtils.createFileObject(
+                {
+                  originalname: uniqueFilename,
+                  size: attachment.size,
+                  mimetype: attachment.contentType,
+                  buffer: attachment.content,
+                },
+                url,
+                firebasePath,
+              );
+
+              const fileItem = await FileItem.create({
+                name: uniqueFilename,
+                type: 'file',
+                size: attachment.size.toString(),
+                section: 'workspace', // Use workspace section for direct workspace emails
+                path: [],
+                workspaceId: workspace._id,
+                createdBy: user?._id,
+                fileDetails,
+              });
+            } catch (error) {
+              console.error('Error processing attachment:', error);
+            }
+          }
+        }
+
+        // Create base email data
+        const emailData = {
+          from: fromEmail,
+          projectId: workspace._id,
+          to: toEmail,
+          subject,
+          sentBy: user?._id,
+          body: html || text,
+          bodyText: text,
+          sentAt: date,
+          status: 'received',
+          direction: 'inbound',
+        };
+
+        const email = await Email.create(emailData);
+        return email;
+      }
+
+      // Parse the email address to extract workspaceId and parentId for project emails
       const [prefix, workspaceId, parentId] = username.split('-');
 
       if (!workspaceId || !parentId) {
         console.log('Invalid email format, missing workspaceId or parentId');
+        return;
+      }
+
+      // Find the workspace by its shortid
+      const workspace = await Workspace.findOne({ shortid: workspaceId });
+      if (!workspace) {
+        console.log('Workspace not found for short ID:', workspaceId);
         return;
       }
 
@@ -108,11 +212,11 @@ class EmailListenerService {
               attachment.filename,
               [], // Empty path for root level
               'files', // Default section
-              workspaceId,
+              workspace._id, // Use the actual workspace ObjectId
             );
 
             // Upload to Firebase
-            const storagePath = firebaseStorage.generatePath(workspaceId, uniqueFilename);
+            const storagePath = firebaseStorage.generatePath(workspace._id, uniqueFilename);
             const { url, storagePath: firebasePath } = await firebaseStorage.uploadFile(
               attachment.content,
               storagePath,
@@ -137,7 +241,7 @@ class EmailListenerService {
               size: attachment.size.toString(),
               section: 'files',
               path: [],
-              workspaceId,
+              workspaceId: workspace._id, // Use the actual workspace ObjectId
               createdBy: user?._id,
               fileDetails,
             });
@@ -157,7 +261,7 @@ class EmailListenerService {
       // Create base email data
       const emailData = {
         from: fromEmail,
-        projectId: workspaceId,
+        projectId: workspace._id, // Use the actual workspace ObjectId
         to: toEmail,
         subject,
         sentBy: user?._id,
@@ -177,11 +281,14 @@ class EmailListenerService {
   }
 
   async generateUniqueFilename(originalName, path, section, workspaceId) {
+    if (!originalName) {
+      originalName = 'unnamed_file';
+    }
     let counter = 1;
     let newName = originalName;
     const nameParts = originalName.split('.');
-    const extension = nameParts.pop();
-    const baseName = nameParts.join('.');
+    const extension = nameParts.pop() || '';
+    const baseName = nameParts.join('.') || originalName;
 
     while (true) {
       const existingFile = await FileItem.findOne({

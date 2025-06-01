@@ -15,24 +15,18 @@ class GmailListenerService {
    */
   async start() {
     try {
-      console.log('Starting Gmail listener service...');
-
       // Find all active Gmail integrations
       const integrations = await GmailIntegration.find({ isActive: true }).populate(
         'workspace',
         'name',
       );
 
-      console.log(`Found ${integrations.length} active Gmail integrations`);
-
       // Set up listeners for each integration
       for (const integration of integrations) {
         await this.setupListenerForIntegration(integration);
       }
-
-      console.log('Gmail listener service started successfully');
     } catch (error) {
-      console.error('Error starting Gmail listener service:', error);
+      // Error starting Gmail listener service
     }
   }
 
@@ -47,7 +41,6 @@ class GmailListenerService {
         Date.now() >= new Date(integration.tokenExpiry).getTime() - 5 * 60 * 1000;
 
       if (isTokenExpired) {
-        console.log(`Refreshing tokens for ${integration.email}`);
         const { tokens } = await oauth2Client.refreshToken(integration.refreshToken);
 
         // Update tokens in database
@@ -64,7 +57,6 @@ class GmailListenerService {
         });
       }
     } catch (error) {
-      console.error(`Error refreshing tokens for ${integration.email}`);
       throw error;
     }
   }
@@ -81,10 +73,6 @@ class GmailListenerService {
       if (this.activeListeners.has(`${workspaceId}-${email}`)) {
         return;
       }
-
-      console.log(
-        `Setting up Gmail listener for workspace: ${integration.workspace.name}, email: ${email}`,
-      );
 
       // Create OAuth client
       const oauth2Client = new google.auth.OAuth2(
@@ -119,7 +107,6 @@ class GmailListenerService {
           await this.refreshTokensIfNeeded(oauth2Client, integration);
           await this.checkNewEmails(oauth2Client, integration);
         } catch (error) {
-          console.error(`Error in polling interval for ${email}`);
           if (error.code === 401) {
             // Handle token refresh failure
             integration.isActive = false;
@@ -139,7 +126,6 @@ class GmailListenerService {
 
       return true;
     } catch (error) {
-      console.error(`Error setting up Gmail listener for ${integration.email}`);
       return false;
     }
   }
@@ -199,9 +185,6 @@ class GmailListenerService {
     } catch (error) {
       // If token expired or invalid, deactivate the integration
       if (error.code === 401) {
-        console.log(
-          `Deactivating Gmail integration for ${integration.email} due to authentication error`,
-        );
         integration.isActive = false;
         await integration.save();
 
@@ -290,7 +273,10 @@ class GmailListenerService {
 
       await email.save();
     } catch (error) {
-      console.error(`Error processing email ${messageId}:`, error);
+      // Handle 404 errors gracefully (email not found)
+      if (error.code === 404) {
+        return;
+      }
     }
   }
 
@@ -370,7 +356,6 @@ class GmailListenerService {
       // Alternatively, you could create an "Inbox" project for unassigned emails
       return null;
     } catch (error) {
-      console.error('Error determining project for email:', error);
       return null;
     }
   }
@@ -399,15 +384,12 @@ class GmailListenerService {
    * Stop all Gmail listeners
    */
   stop() {
-    console.log('Stopping Gmail listener service...');
-
     // Clear all intervals
     for (const intervalId of this.activeListeners.values()) {
       clearInterval(intervalId);
     }
 
     this.activeListeners.clear();
-    console.log('Gmail listener service stopped');
   }
 
   /**
