@@ -1,8 +1,8 @@
-import File from '../../models/fileModel.js';
+import FileItem from '../../models/FileManager.js';
 
 export const getFiles = async (req, res) => {
   try {
-    const { moduleId } = req.query;
+    const { parentId, section } = req.query;
     const workspaceId = req.workspace.id;
 
     // Build query
@@ -11,19 +11,27 @@ export const getFiles = async (req, res) => {
       status: 'active',
     };
 
-    // Add moduleId to query if provided
-    if (moduleId) {
-      query.moduleId = moduleId;
+    // Add section to query if provided
+    if (section) {
+      query.section = section;
     }
 
-    // Get files from database
-    const files = await File.find(query)
-      .populate('uploadedBy', 'name email')
-      .sort({ createdAt: -1 });
+    // Add parentId to query if provided, otherwise get root level items
+    if (parentId) {
+      query.parent = parentId;
+    } else {
+      query.parent = null; // Get root level items
+    }
+
+    // Get files and folders from database
+    const items = await FileItem.find(query)
+      .populate('createdBy', 'name email')
+      .populate('children')
+      .sort({ type: 1, name: 1 }); // Sort folders first, then files alphabetically
 
     res.status(200).json({
       success: true,
-      files,
+      items,
     });
   } catch (error) {
     console.error('Error getting files:', error);
