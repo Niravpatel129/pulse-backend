@@ -6,8 +6,6 @@ export const getFiles = async (req, res) => {
     const workspaceId = req.workspace.id;
     const isStructureRequest = req.originalUrl.includes('/structure');
 
-    console.log('Query params:', { section, path, workspaceId, isStructureRequest });
-
     // Build query
     const query = {
       workspaceId,
@@ -38,8 +36,6 @@ export const getFiles = async (req, res) => {
       query.path = [];
     }
 
-    console.log('MongoDB query:', JSON.stringify(query, null, 2));
-
     // Get files and folders with populated children
     const items = await FileItem.find(query)
       .populate({
@@ -48,12 +44,6 @@ export const getFiles = async (req, res) => {
         options: { sort: { type: 1, name: 1 } }, // Sort children: folders first, then files alphabetically
       })
       .sort({ type: 1, name: 1 }); // Sort parent items: folders first, then files alphabetically
-
-    console.log('Found items:', items.length);
-    console.log(
-      'First item if exists:',
-      items[0] ? JSON.stringify(items[0].toObject(), null, 2) : 'No items found',
-    );
 
     res.status(200).json({
       success: true,

@@ -2,7 +2,9 @@ import dotenv from 'dotenv';
 import MailListener from 'mail-listener2';
 import { nanoid } from 'nanoid';
 import Email from '../models/Email.js';
+import FileItem from '../models/FileManager.js';
 import User from '../models/User.js';
+import { fileUtils, firebaseStorage } from '../utils/firebase.js';
 
 dotenv.config();
 
@@ -58,7 +60,7 @@ class EmailListenerService {
 
   async processIncomingEmail(mail) {
     try {
-      const { from, to, subject, text, html, date } = mail;
+      const { from, to, subject, text, html, date, attachments } = mail;
       console.log('🚀 mail:', mail);
 
       // Extract sender's email
@@ -66,16 +68,15 @@ class EmailListenerService {
 
       // Extract recipient's email and check for tracking data
       const toEmail = typeof to === 'string' ? to : to[0].address;
-      // based on the trackerAddress example, extract out the shortEmailId
-      const shortEmailId = toEmail.split('@')[0].split('+')[1];
+      const username = toEmail.split('@')[0];
+      console.log('📧 Recipient address:', toEmail);
+      console.log('👤 Extracted username:', username);
 
-      // find the email Id from shortEmailId
-      const checkEmail = await Email.findOne({ shortEmailId }).populate('sentBy', 'email');
+      // Parse the email address to extract workspaceId and parentId
+      const [prefix, workspaceId, parentId] = username.split('-');
 
-      console.log('🚀 checkEmail:', checkEmail);
-
-      if (!checkEmail) {
-        console.log('No email found, error');
+      if (!workspaceId || !parentId) {
+        console.log('Invalid email format, missing workspaceId or parentId');
         return;
       }
 
@@ -98,11 +99,66 @@ class EmailListenerService {
         });
       }
 
+      // Process attachments if any
+      if (attachments && attachments.length > 0) {
+        for (const attachment of attachments) {
+          try {
+            // Generate unique filename
+            const uniqueFilename = await this.generateUniqueFilename(
+              attachment.filename,
+              [], // Empty path for root level
+              'files', // Default section
+              workspaceId,
+            );
+
+            // Upload to Firebase
+            const storagePath = firebaseStorage.generatePath(workspaceId, uniqueFilename);
+            const { url, storagePath: firebasePath } = await firebaseStorage.uploadFile(
+              attachment.content,
+              storagePath,
+              attachment.contentType,
+            );
+
+            // Create file record
+            const fileDetails = fileUtils.createFileObject(
+              {
+                originalname: uniqueFilename,
+                size: attachment.size,
+                mimetype: attachment.contentType,
+                buffer: attachment.content,
+              },
+              url,
+              firebasePath,
+            );
+
+            const fileItem = await FileItem.create({
+              name: uniqueFilename,
+              type: 'file',
+              size: attachment.size.toString(),
+              section: 'files',
+              path: [],
+              workspaceId,
+              createdBy: user?._id,
+              fileDetails,
+            });
+
+            // If there's a parent, add this file to its children array
+            if (parentId) {
+              await FileItem.findByIdAndUpdate(parentId, {
+                $push: { children: fileItem._id },
+              });
+            }
+          } catch (error) {
+            console.error('Error processing attachment:', error);
+          }
+        }
+      }
+
       // Create base email data
       const emailData = {
         from: fromEmail,
-        projectId: checkEmail?.projectId,
-        to: checkEmail?.sentBy?.email,
+        projectId: workspaceId,
+        to: toEmail,
         subject,
         sentBy: user?._id,
         body: html || text,
@@ -110,15 +166,39 @@ class EmailListenerService {
         sentAt: date,
         status: 'received',
         direction: 'inbound',
-        replyEmailId: checkEmail?._id,
       };
 
       const email = await Email.create(emailData);
-
       return email;
     } catch (error) {
       console.error('Failed to process incoming email:', error);
       throw error;
+    }
+  }
+
+  async generateUniqueFilename(originalName, path, section, workspaceId) {
+    let counter = 1;
+    let newName = originalName;
+    const nameParts = originalName.split('.');
+    const extension = nameParts.pop();
+    const baseName = nameParts.join('.');
+
+    while (true) {
+      const existingFile = await FileItem.findOne({
+        name: newName,
+        type: 'file',
+        path: path,
+        section,
+        workspaceId,
+        status: 'active',
+      });
+
+      if (!existingFile) {
+        return newName;
+      }
+
+      newName = `${baseName} (${counter}).${extension}`;
+      counter++;
     }
   }
 
