@@ -4,6 +4,7 @@ import {
   deleteItem,
   getFiles,
   moveItem,
+  renameItem,
   uploadFile,
 } from '../controllers/fileManager/index.js';
 import { authenticate } from '../middleware/auth.js';
@@ -30,6 +31,9 @@ router.post('/upload', upload('files'), uploadFile);
 
 // Move a file or folder
 router.put('/:itemId/move', moveItem);
+
+// Rename a file or folder
+router.put('/:itemId/rename', renameItem);
 
 // Delete a file or folder
 router.delete('/:itemId', deleteItem);
