@@ -1,7 +1,13 @@
 import mongoose from 'mongoose';
+import { nanoid } from 'nanoid';
 
 const fileItemSchema = new mongoose.Schema(
   {
+    shortid: {
+      type: String,
+      default: () => nanoid(10),
+      unique: true,
+    },
     name: {
       type: String,
       required: true,
