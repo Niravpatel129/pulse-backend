@@ -7,6 +7,7 @@ import {
   uploadFile,
 } from '../controllers/fileManager/index.js';
 import { authenticate } from '../middleware/auth.js';
+import upload from '../middleware/upload.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
@@ -22,7 +23,7 @@ router.get('/', getFiles);
 router.post('/folders', createFolder);
 
 // Upload files
-router.post('/upload', uploadFile);
+router.post('/upload', upload('files'), uploadFile);
 
 // Move a file or folder
 router.put('/:itemId/move', moveItem);

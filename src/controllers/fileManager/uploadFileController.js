@@ -31,17 +31,17 @@ export const uploadFile = async (req, res) => {
 
         // Upload to Firebase
         const storagePath = firebaseStorage.generatePath(workspaceId, file.originalname);
-        const { url, storagePath: path } = await firebaseStorage.uploadFile(
+        const { url, storagePath: firebasePath } = await firebaseStorage.uploadFile(
           file.buffer,
           storagePath,
           file.mimetype,
         );
 
         // Create file record using fileUtils
-        const fileDetails = fileUtils.createFileObject(file, url, path);
+        const fileDetails = fileUtils.createFileObject(file, url, firebasePath);
         const fileItem = await FileItem.create({
           name: file.originalname,
-          type: fileUtils.getType(file.mimetype),
+          type: 'file',
           size: fileDetails.size,
           section,
           path,
