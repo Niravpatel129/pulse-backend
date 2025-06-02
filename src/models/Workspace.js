@@ -5,7 +5,8 @@ const workspaceSchema = new mongoose.Schema(
   {
     shortid: {
       type: String,
-      default: () => nanoid(8),
+      default: () =>
+        nanoid(10, { alphabet: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ' }),
       unique: true,
     },
     name: {

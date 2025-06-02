@@ -5,7 +5,8 @@ const fileItemSchema = new mongoose.Schema(
   {
     shortid: {
       type: String,
-      default: () => nanoid(10),
+      default: () =>
+        nanoid(10, { alphabet: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ' }),
       unique: true,
     },
     name: {

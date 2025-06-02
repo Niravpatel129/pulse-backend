@@ -100,6 +100,9 @@ app.use(
         'pay.bolocreate.com',
         'http://pay.bolocreate.com',
         'https://pay.bolocreate.com',
+        'http://workspace1.toastify.io:3000',
+        'https://workspace1.toastify.io:3000',
+        'workspace1.toastify.io:3000',
       ];
       if (
         !origin ||

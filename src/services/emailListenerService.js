@@ -75,19 +75,55 @@ class EmailListenerService {
 
       // Check if this is a direct workspace email
       if (username.startsWith('ws-')) {
-        const workspaceId = username.replace('ws-', '');
+        // Extract workspaceId and parentId from the format ws-workspaceId-parentId
+        const parts = username.split('-');
+        const workspaceId = parts[1]; // Get the workspaceId part
+        const parentId = parts[2]; // Get the parentId part
+
+        console.log('📧 Processing direct workspace email:', {
+          workspaceId,
+          parentId,
+          toEmail,
+        });
 
         // Find the workspace by its shortid
         const workspace = await Workspace.findOne({ shortid: workspaceId });
         if (!workspace) {
-          console.log('Workspace not found for short ID:', workspaceId);
+          console.log('❌ Workspace not found for short ID:', workspaceId);
           return;
+        }
+        console.log('✅ Found workspace:', workspace._id);
+
+        // Find the parent folder if parentId is provided
+        let parentFolder = null;
+        let filePath = [];
+        if (parentId) {
+          console.log('🔍 Looking for parent folder with shortid:', parentId);
+          parentFolder = await FileItem.findOne({
+            shortid: parentId,
+            workspaceId: workspace._id,
+            status: 'active',
+          });
+          if (parentFolder) {
+            filePath = [...parentFolder.path, parentFolder.name];
+            console.log('✅ Found parent folder:', {
+              folderId: parentFolder._id,
+              folderName: parentFolder.name,
+              path: filePath,
+            });
+          } else {
+            console.log('⚠️ Parent folder not found with shortid:', parentId);
+          }
         }
 
         // Use the replyTo address if available, otherwise use the from address
         const emailOfTheUser = mail.replyTo?.[0]?.address || fromEmail;
 
-        console.log('🚀 emailOfTheUser:', emailOfTheUser);
+        console.log('👤 Processing user:', {
+          email: emailOfTheUser,
+          fromEmail,
+        });
+
         // Find the user
         let user = await User.findOne({
           email: emailOfTheUser,
@@ -95,33 +131,45 @@ class EmailListenerService {
 
         // If user doesn't exist, create a new one
         if (!user && emailOfTheUser) {
+          console.log('➕ Creating new user for email:', emailOfTheUser);
           user = await User.create({
             email: emailOfTheUser,
             name: fromEmail.split('@')[0] || 'Unknown User',
             password: nanoid(),
             isActivated: false,
           });
+          console.log('✅ Created new user:', user._id);
         }
 
         // Process attachments if any
         if (attachments && attachments.length > 0) {
+          console.log(`📎 Processing ${attachments.length} attachments`);
           for (const attachment of attachments) {
             try {
+              console.log('📄 Processing attachment:', {
+                name: attachment.fileName || attachment.generatedFileName,
+                size: attachment.size,
+                type: attachment.contentType,
+              });
+
               // Generate unique filename
               const uniqueFilename = await this.generateUniqueFilename(
                 attachment.fileName || attachment.generatedFileName || 'unnamed_file',
-                [], // Empty path for root level
-                'workspace', // Use workspace section for direct workspace emails
+                filePath,
+                'workspace',
                 workspace._id,
               );
+              console.log('📝 Generated unique filename:', uniqueFilename);
 
               // Upload to Firebase
               const storagePath = firebaseStorage.generatePath(workspace._id, uniqueFilename);
+              console.log('📤 Uploading to Firebase:', storagePath);
               const { url, storagePath: firebasePath } = await firebaseStorage.uploadFile(
                 attachment.content,
                 storagePath,
                 attachment.contentType,
               );
+              console.log('✅ File uploaded successfully:', url);
 
               // Create file record
               const fileDetails = fileUtils.createFileObject(
@@ -139,17 +187,37 @@ class EmailListenerService {
                 name: uniqueFilename,
                 type: 'file',
                 size: (attachment.size || 0).toString(),
-                section: 'workspace', // Use workspace section for direct workspace emails
-                path: [],
+                section: 'workspace',
+                path: filePath,
                 workspaceId: workspace._id,
                 workspaceShortid: workspace.shortid,
                 createdBy: user?._id,
                 fileDetails,
               });
+              console.log('✅ Created file record:', {
+                fileId: fileItem._id,
+                name: fileItem.name,
+                path: fileItem.path,
+              });
+
+              // If there's a parent folder, add this file to its children array
+              if (parentFolder) {
+                console.log('📁 Adding file to parent folder:', {
+                  parentId: parentFolder._id,
+                  fileId: fileItem._id,
+                });
+                await FileItem.findByIdAndUpdate(parentFolder._id, {
+                  $push: { children: fileItem._id },
+                  $inc: { items: 1 },
+                });
+                console.log('✅ Updated parent folder');
+              }
             } catch (error) {
-              console.error('Error processing attachment:', error);
+              console.error('❌ Error processing attachment:', error);
             }
           }
+        } else {
+          console.log('ℹ️ No attachments found in email');
         }
 
         // Create base email data
