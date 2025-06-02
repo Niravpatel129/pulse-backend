@@ -62,7 +62,6 @@ class EmailListenerService {
   async processIncomingEmail(mail) {
     try {
       const { from, to, subject, text, html, date, attachments } = mail;
-      console.log('🚀 mail:', mail);
 
       // Extract sender's email
       const fromEmail = typeof from === 'string' ? from : from[0].address;
