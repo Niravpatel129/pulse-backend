@@ -109,7 +109,7 @@ class EmailListenerService {
             try {
               // Generate unique filename
               const uniqueFilename = await this.generateUniqueFilename(
-                attachment.filename,
+                attachment.fileName || attachment.generatedFileName || 'unnamed_file',
                 [], // Empty path for root level
                 'workspace', // Use workspace section for direct workspace emails
                 workspace._id,
@@ -138,10 +138,11 @@ class EmailListenerService {
               const fileItem = await FileItem.create({
                 name: uniqueFilename,
                 type: 'file',
-                size: attachment.size.toString(),
+                size: (attachment.size || 0).toString(),
                 section: 'workspace', // Use workspace section for direct workspace emails
                 path: [],
                 workspaceId: workspace._id,
+                workspaceShortid: workspace.shortid,
                 createdBy: user?._id,
                 fileDetails,
               });
@@ -209,7 +210,7 @@ class EmailListenerService {
           try {
             // Generate unique filename
             const uniqueFilename = await this.generateUniqueFilename(
-              attachment.filename,
+              attachment.fileName || attachment.generatedFileName || 'unnamed_file',
               [], // Empty path for root level
               'files', // Default section
               workspace._id, // Use the actual workspace ObjectId
@@ -238,10 +239,11 @@ class EmailListenerService {
             const fileItem = await FileItem.create({
               name: uniqueFilename,
               type: 'file',
-              size: attachment.size.toString(),
+              size: (attachment.size || 0).toString(),
               section: 'files',
               path: [],
               workspaceId: workspace._id, // Use the actual workspace ObjectId
+              workspaceShortid: workspace.shortid,
               createdBy: user?._id,
               fileDetails,
             });
