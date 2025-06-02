@@ -4,6 +4,7 @@ export const createFolder = async (req, res) => {
   try {
     const { name, section, path } = req.body;
     const workspaceId = req.workspace.id;
+    const workspaceShortid = req.workspace.shortid;
 
     // For root level folders, ensure path is an empty array
     const folderPath = path && path.length > 0 ? path : [];
@@ -33,6 +34,7 @@ export const createFolder = async (req, res) => {
       path: folderPath,
       workspaceId,
       createdBy: req.user.id,
+      workspaceShortid,
     });
 
     res.status(201).json({

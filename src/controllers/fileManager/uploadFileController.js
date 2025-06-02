@@ -12,6 +12,7 @@ export const uploadFile = async (req, res) => {
 
     const { section, parentId } = req.body;
     const workspaceId = req.workspace.id;
+    const workspaceShortid = req.workspace.shortid;
 
     // If parentId is provided, verify it exists and belongs to the workspace
     let parent = null;
@@ -91,6 +92,7 @@ export const uploadFile = async (req, res) => {
           section,
           path: parentPath,
           workspaceId,
+          workspaceShortid,
           createdBy: req.user.id,
           fileDetails,
         });
