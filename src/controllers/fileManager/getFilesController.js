@@ -24,18 +24,21 @@ export const getFiles = async (req, res) => {
         // If path is a string representation of an array, parse it
         const parsedPath = JSON.parse(path);
         if (Array.isArray(parsedPath)) {
-          query.path = parsedPath;
+          // Check if the path array contains the specified path segment
+          query.path = { $in: parsedPath };
         } else {
-          query.path = [path]; // If it's a single string, wrap it in an array
+          query.path = { $in: [path] }; // If it's a single string, wrap it in an array
         }
       } catch (e) {
         // If parsing fails, treat it as a single path segment
-        query.path = [path];
+        query.path = { $in: [path] };
       }
     } else if (!isStructureRequest) {
       // For root level items, path should be an empty array (only for non-structure requests)
       query.path = [];
     }
+
+    console.log('Query being executed:', JSON.stringify(query, null, 2));
 
     // Get files and folders with populated children
     let items = await FileItem.find(query)
@@ -45,6 +48,12 @@ export const getFiles = async (req, res) => {
         options: { sort: { type: 1, name: 1 } }, // Sort children: folders first, then files alphabetically
       })
       .sort({ type: 1, name: 1 }); // Sort parent items: folders first, then files alphabetically
+
+    console.log('Number of items found:', items.length);
+    console.log(
+      'First item if any:',
+      items.length > 0 ? JSON.stringify(items[0].toObject(), null, 2) : 'No items found',
+    );
 
     // Add workspaceShortid to each item and its children
     items = items.map((item) => {
