@@ -24,8 +24,13 @@ export const getFiles = async (req, res) => {
         // If path is a string representation of an array, parse it
         const parsedPath = JSON.parse(path);
         if (Array.isArray(parsedPath)) {
-          // Check if the path array contains the specified path segment
-          query.path = { $in: parsedPath };
+          if (parsedPath.length === 0) {
+            // For root level items, path should be an empty array
+            query.path = [];
+          } else {
+            // Check if the path array contains the specified path segment
+            query.path = { $in: parsedPath };
+          }
         } else {
           query.path = { $in: [path] }; // If it's a single string, wrap it in an array
         }
