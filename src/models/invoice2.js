@@ -213,9 +213,9 @@ const invoice2Schema = new mongoose.Schema(
       ],
       validate: {
         validator: function (v) {
-          return v.length <= 50;
+          return v.length <= 350;
         },
-        message: 'Status history cannot exceed 50 entries',
+        message: 'Status history cannot exceed 350 entries',
       },
     },
     statusChangedAt: {
