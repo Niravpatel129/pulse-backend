@@ -186,7 +186,7 @@ const invoice2Schema = new mongoose.Schema(
     settings: invoiceSettingsSchema,
     status: {
       type: String,
-      enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled'],
+      enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled', 'partially_paid'],
       default: 'draft',
     },
     statusHistory: {
@@ -194,7 +194,16 @@ const invoice2Schema = new mongoose.Schema(
         {
           status: {
             type: String,
-            enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled', 'seen'],
+            enum: [
+              'draft',
+              'open',
+              'sent',
+              'paid',
+              'overdue',
+              'cancelled',
+              'seen',
+              'partially_paid',
+            ],
             required: true,
           },
           changedAt: {
@@ -242,10 +251,12 @@ const invoice2Schema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    // @deprecated
     requireDeposit: {
       type: Boolean,
       default: false,
     },
+    // @deprecated
     depositPercentage: {
       type: Number,
       default: 50,

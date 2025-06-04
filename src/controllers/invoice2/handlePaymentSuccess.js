@@ -49,14 +49,32 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
   }
 
   const paymentAmount = paymentIntentDetails.amount / 100;
-  const isFullPayment = true; // we don't support partial payments yet
+  const invoiceTotal = invoice.totals.total;
 
+  // Determine payment type and status
+  const isFullPayment = Math.abs(paymentAmount - invoiceTotal) < 0.01;
   const isDepositPayment =
-    invoice.requireDeposit &&
-    Math.abs(paymentAmount - (invoice.totals.total * invoice.depositPercentage) / 100) < 0.01;
+    invoice.settings.deposit.enabled &&
+    Math.abs(paymentAmount - (invoiceTotal * invoice.settings.deposit.percentage) / 100) < 0.01;
 
-  // Determine new status
-  const newStatus = 'paid';
+  // Validate deposit payment
+  if (isDepositPayment && !invoice.settings.deposit.enabled) {
+    return res.status(400).json({
+      success: false,
+      message: 'Deposit payments are not enabled for this invoice',
+    });
+  }
+
+  // Determine new status based on payment type and current status
+  let newStatus = invoice.status;
+  if (isFullPayment) {
+    newStatus = 'paid';
+  } else if (isDepositPayment) {
+    newStatus = 'partially_paid';
+  } else if (paymentAmount > 0) {
+    newStatus = 'partially_paid';
+  }
+
   // Add status change to history
   if (req.user?.userId) {
     const statusChangeEntry = {
@@ -73,13 +91,36 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     invoice.statusHistory.push(statusChangeEntry);
   }
 
-  // Update invoice status
+  // Update invoice status and payment details
   invoice.status = newStatus;
   if (isFullPayment) {
     invoice.paidAt = new Date();
-    invoice.paidBy = req.user?.userId || 'system';
+    invoice.paidBy = req.user?.userId || null;
+  }
+  invoice.statusChangedAt = new Date();
+  if (req.user?.userId) {
+    invoice.statusChangedBy = req.user.userId;
   }
   await invoice.save();
+
+  // Get existing payments to calculate payment number and remaining balance
+  const existingPayments = await Payment.find({ invoice: invoice._id })
+    .sort({ paymentNumber: -1 })
+    .limit(1);
+
+  const paymentNumber = existingPayments.length > 0 ? existingPayments[0].paymentNumber + 1 : 1;
+  const previousPayment = existingPayments.length > 0 ? existingPayments[0]._id : null;
+
+  // Calculate remaining balance
+  const totalPaid =
+    existingPayments.reduce((sum, payment) => {
+      if (payment.type === 'payment' || payment.type === 'deposit') {
+        return sum + payment.amount;
+      }
+      return sum;
+    }, 0) + paymentAmount;
+
+  const remainingBalance = Math.max(0, invoiceTotal - totalPaid);
 
   // Create a payment record
   const payment = await Payment.create({
@@ -89,8 +130,9 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     method: paymentIntentDetails.payment_method_types[0] || 'credit-card',
     workspace: invoice.workspace,
     createdBy: invoice.createdBy,
-    paymentNumber: (await Payment.countDocuments({ invoice: invoice._id })) + 1,
-    remainingBalance: invoice.totals.total - paymentAmount,
+    paymentNumber,
+    previousPayment,
+    remainingBalance,
     type: isDepositPayment ? 'deposit' : 'payment',
     status: 'completed',
     memo: `Stripe Payment ID: ${paymentIntent}`,
@@ -121,6 +163,7 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
       invoice,
       payment,
       paymentIntent: paymentIntentDetails,
+      remainingBalance,
     },
   });
 });
