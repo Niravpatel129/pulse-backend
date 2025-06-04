@@ -250,6 +250,10 @@ const invoice2Schema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    depositPaymentAmount: {
+      type: Number,
+      default: 0,
+    },
     paymentIntentId: {
       type: String,
       unique: true,
