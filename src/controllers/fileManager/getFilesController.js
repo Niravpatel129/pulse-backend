@@ -28,15 +28,16 @@ export const getFiles = async (req, res) => {
             // For root level items, path should be an empty array
             query.path = [];
           } else {
-            // Check if the path array contains the specified path segment
-            query.path = { $in: parsedPath };
+            // For nested items, match items that are direct children of this path
+            query.path = { $size: parsedPath.length + 1, $all: parsedPath };
           }
         } else {
-          query.path = { $in: [path] }; // If it's a single string, wrap it in an array
+          // If it's a single string, match items that are direct children of this path
+          query.path = { $size: 2, $all: [path] };
         }
       } catch (e) {
         // If parsing fails, treat it as a single path segment
-        query.path = { $in: [path] };
+        query.path = { $size: 2, $all: [path] };
       }
     } else if (!isStructureRequest) {
       // For root level items, path should be an empty array (only for non-structure requests)
