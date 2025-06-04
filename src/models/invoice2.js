@@ -211,11 +211,6 @@ const invoice2Schema = new mongoose.Schema(
             type: Date,
             default: Date.now,
           },
-          changedBy: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User',
-            required: false,
-          },
           reason: {
             type: String,
           },

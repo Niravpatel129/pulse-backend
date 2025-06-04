@@ -116,20 +116,17 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
   }
 
   // Add status change to history
-  if (req.user?.userId) {
-    const statusChangeEntry = {
-      status: newStatus,
-      changedAt: new Date(),
-      changedBy: req.user.userId,
-      reason: isFullPayment
-        ? `Payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received - Invoice paid in full`
-        : isDepositPayment
-        ? `Deposit payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`
-        : `Partial payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`,
-    };
+  const statusChangeEntry = {
+    status: newStatus,
+    changedAt: new Date(),
+    reason: isFullPayment
+      ? `Payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received - Invoice paid in full`
+      : isDepositPayment
+      ? `Deposit payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`
+      : `Partial payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} received`,
+  };
 
-    invoice.statusHistory.push(statusChangeEntry);
-  }
+  invoice.statusHistory.push(statusChangeEntry);
 
   // Update invoice status and payment details
   invoice.status = newStatus;
@@ -142,9 +139,6 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     invoice.paidBy = req.user?.userId || null;
   }
   invoice.statusChangedAt = new Date();
-  if (req.user?.userId) {
-    invoice.statusChangedBy = req.user.userId;
-  }
   await invoice.save();
 
   // Generate receipt number
