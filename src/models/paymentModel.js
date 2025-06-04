@@ -82,6 +82,74 @@ const paymentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    // Receipt information
+    receipt: {
+      number: {
+        type: String,
+        required: true,
+        unique: true,
+      },
+      type: {
+        type: String,
+        enum: ['payment_receipt', 'deposit_receipt'],
+        required: true,
+      },
+      date: {
+        type: Date,
+        required: true,
+      },
+      status: {
+        type: String,
+        enum: ['generated', 'sent', 'viewed'],
+        default: 'generated',
+      },
+      sentAt: Date,
+      viewedAt: Date,
+    },
+    // Enhanced metadata for better tracking
+    metadata: {
+      isDeposit: {
+        type: Boolean,
+        default: false,
+      },
+      depositPercentage: {
+        type: Number,
+        default: null,
+      },
+      depositDueDate: {
+        type: Date,
+        default: null,
+      },
+      paymentSequence: {
+        number: {
+          type: Number,
+          required: true,
+        },
+        total: {
+          type: Number,
+          required: true,
+        },
+        isFinal: {
+          type: Boolean,
+          default: false,
+        },
+      },
+      currency: {
+        type: String,
+        required: true,
+      },
+      paymentMethod: {
+        type: {
+          type: String,
+          enum: ['credit_card', 'debit_card', 'bank_transfer', 'cash', 'check', 'other'],
+          required: true,
+        },
+        details: {
+          type: mongoose.Schema.Types.Mixed,
+          default: {},
+        },
+      },
+    },
   },
   {
     timestamps: true,
@@ -95,6 +163,9 @@ paymentSchema.index({ date: 1 });
 paymentSchema.index({ paymentNumber: 1 });
 paymentSchema.index({ type: 1 });
 paymentSchema.index({ status: 1 });
+paymentSchema.index({ 'receipt.number': 1 });
+paymentSchema.index({ 'metadata.isDeposit': 1 });
+paymentSchema.index({ 'metadata.paymentSequence.number': 1 });
 
 const Payment = mongoose.model('Payment', paymentSchema);
 

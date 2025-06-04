@@ -111,7 +111,7 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
   const paymentNumber = existingPayments.length > 0 ? existingPayments[0].paymentNumber + 1 : 1;
   const previousPayment = existingPayments.length > 0 ? existingPayments[0]._id : null;
 
-  // Calculate remaining balance
+  // Calculate remaining balance and payment sequence
   const totalPaid =
     existingPayments.reduce((sum, payment) => {
       if (payment.type === 'payment' || payment.type === 'deposit') {
@@ -121,6 +121,26 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     }, 0) + paymentAmount;
 
   const remainingBalance = Math.max(0, invoiceTotal - totalPaid);
+
+  // Generate receipt number
+  const receiptNumber = `RCP-${invoice.invoiceNumber}-${paymentNumber.toString().padStart(3, '0')}`;
+
+  // Create payment metadata
+  const paymentMetadata = {
+    isDeposit: isDepositPayment,
+    depositPercentage: isDepositPayment ? invoice.settings.deposit.percentage : null,
+    depositDueDate: isDepositPayment ? invoice.settings.deposit.dueDate : null,
+    paymentSequence: {
+      number: paymentNumber,
+      total: existingPayments.length + 1,
+      isFinal: isFullPayment,
+    },
+    receipt: {
+      number: receiptNumber,
+      type: isDepositPayment ? 'deposit_receipt' : 'payment_receipt',
+      date: new Date(),
+    },
+  };
 
   // Create a payment record
   const payment = await Payment.create({
@@ -135,7 +155,12 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     remainingBalance,
     type: isDepositPayment ? 'deposit' : 'payment',
     status: 'completed',
-    memo: `Stripe Payment ID: ${paymentIntent}`,
+    memo: isDepositPayment
+      ? `Deposit payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} (${
+          invoice.settings.deposit.percentage
+        }%)`
+      : `Payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()}`,
+    metadata: paymentMetadata,
     stripePaymentDetails: {
       id: paymentIntent,
       amount: paymentIntentDetails.amount,
@@ -164,6 +189,11 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
       payment,
       paymentIntent: paymentIntentDetails,
       remainingBalance,
+      receipt: {
+        number: receiptNumber,
+        type: paymentMetadata.receipt.type,
+        date: paymentMetadata.receipt.date,
+      },
     },
   });
 });
