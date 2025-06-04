@@ -3,6 +3,18 @@ import Invoice2 from '../../models/invoice2.js';
 import Payment from '../../models/paymentModel.js';
 import StripeService from '../../services/stripeService.js';
 
+// Helper function to handle decimal comparisons
+const isAmountEqual = (amount1, amount2) => {
+  const rounded1 = Math.round(amount1 * 100) / 100;
+  const rounded2 = Math.round(amount2 * 100) / 100;
+  return Math.abs(rounded1 - rounded2) < 0.01;
+};
+
+// Helper function to round to 2 decimal places
+const roundToTwoDecimals = (amount) => {
+  return Math.round(amount * 100) / 100;
+};
+
 // @desc    Handle successful payment for an invoice
 // @route   POST /api/invoices2/:id/payment-success
 // @access  Public
@@ -48,14 +60,22 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     });
   }
 
-  const paymentAmount = paymentIntentDetails.amount / 100;
-  const invoiceTotal = invoice.totals.total;
+  const paymentAmount = roundToTwoDecimals(paymentIntentDetails.amount / 100);
+  const invoiceTotal = roundToTwoDecimals(invoice.totals.total);
+
+  // Validate payment amount
+  if (paymentAmount <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid payment amount',
+    });
+  }
 
   // Determine payment type and status
-  const isFullPayment = Math.abs(paymentAmount - invoiceTotal) < 0.01;
+  const isFullPayment = isAmountEqual(paymentAmount, invoiceTotal);
   const isDepositPayment =
     invoice.settings.deposit.enabled &&
-    Math.abs(paymentAmount - (invoiceTotal * invoice.settings.deposit.percentage) / 100) < 0.01;
+    isAmountEqual(paymentAmount, (invoiceTotal * invoice.settings.deposit.percentage) / 100);
 
   // Validate deposit payment
   if (isDepositPayment && !invoice.settings.deposit.enabled) {
@@ -65,9 +85,29 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     });
   }
 
+  // Get existing payments to calculate payment number and remaining balance
+  const existingPayments = await Payment.find({ invoice: invoice._id })
+    .sort({ paymentNumber: -1 })
+    .limit(1);
+
+  const paymentNumber = existingPayments.length > 0 ? existingPayments[0].paymentNumber + 1 : 1;
+  const previousPayment = existingPayments.length > 0 ? existingPayments[0]._id : null;
+
+  // Calculate remaining balance and payment sequence
+  const totalPaid = roundToTwoDecimals(
+    existingPayments.reduce((sum, payment) => {
+      if (payment.type === 'payment' || payment.type === 'deposit') {
+        return sum + payment.amount;
+      }
+      return sum;
+    }, 0) + paymentAmount,
+  );
+
+  const remainingBalance = roundToTwoDecimals(Math.max(0, invoiceTotal - totalPaid));
+
   // Determine new status based on payment type and current status
   let newStatus = invoice.status;
-  if (isFullPayment) {
+  if (isFullPayment || isAmountEqual(remainingBalance, 0)) {
     newStatus = 'paid';
   } else if (isDepositPayment) {
     newStatus = 'partially_paid';
@@ -102,25 +142,6 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     invoice.statusChangedBy = req.user.userId;
   }
   await invoice.save();
-
-  // Get existing payments to calculate payment number and remaining balance
-  const existingPayments = await Payment.find({ invoice: invoice._id })
-    .sort({ paymentNumber: -1 })
-    .limit(1);
-
-  const paymentNumber = existingPayments.length > 0 ? existingPayments[0].paymentNumber + 1 : 1;
-  const previousPayment = existingPayments.length > 0 ? existingPayments[0]._id : null;
-
-  // Calculate remaining balance and payment sequence
-  const totalPaid =
-    existingPayments.reduce((sum, payment) => {
-      if (payment.type === 'payment' || payment.type === 'deposit') {
-        return sum + payment.amount;
-      }
-      return sum;
-    }, 0) + paymentAmount;
-
-  const remainingBalance = Math.max(0, invoiceTotal - totalPaid);
 
   // Generate receipt number
   const receiptNumber = `RCP-${invoice.invoiceNumber}-${paymentNumber.toString().padStart(3, '0')}`;
@@ -162,7 +183,7 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
       paymentSequence: {
         number: paymentNumber,
         total: existingPayments.length + 1,
-        isFinal: isFullPayment,
+        isFinal: remainingBalance === 0,
       },
       currency: paymentIntentDetails.currency.toUpperCase(),
       paymentMethod: {
