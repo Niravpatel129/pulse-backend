@@ -59,6 +59,16 @@ const invoiceSettingsSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  deposit: {
+    enabled: {
+      type: Boolean,
+      required: true,
+    },
+    percentage: {
+      type: Number,
+      required: true,
+    },
+  },
   salesTax: {
     enabled: {
       type: Boolean,
