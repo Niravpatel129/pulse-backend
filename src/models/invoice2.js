@@ -184,6 +184,7 @@ const invoice2Schema = new mongoose.Schema(
       type: String,
     },
     settings: invoiceSettingsSchema,
+
     status: {
       type: String,
       enum: ['draft', 'open', 'sent', 'paid', 'overdue', 'cancelled', 'partially_paid'],
@@ -244,6 +245,10 @@ const invoice2Schema = new mongoose.Schema(
     },
     paidAt: {
       type: Date,
+    },
+    depositPaidAt: {
+      type: Date,
+      default: null,
     },
     paymentIntentId: {
       type: String,

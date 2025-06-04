@@ -133,6 +133,9 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
 
   // Update invoice status and payment details
   invoice.status = newStatus;
+  if (isDepositPayment) {
+    invoice.depositPaidAt = new Date();
+  }
   if (isFullPayment) {
     invoice.paidAt = new Date();
     invoice.paidBy = req.user?.userId || null;
