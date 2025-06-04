@@ -125,29 +125,16 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
   // Generate receipt number
   const receiptNumber = `RCP-${invoice.invoiceNumber}-${paymentNumber.toString().padStart(3, '0')}`;
 
-  // Create payment metadata
-  const paymentMetadata = {
-    isDeposit: isDepositPayment,
-    depositPercentage: isDepositPayment ? invoice.settings.deposit.percentage : null,
-    depositDueDate: isDepositPayment ? invoice.settings.deposit.dueDate : null,
-    paymentSequence: {
-      number: paymentNumber,
-      total: existingPayments.length + 1,
-      isFinal: isFullPayment,
-    },
-    receipt: {
-      number: receiptNumber,
-      type: isDepositPayment ? 'deposit_receipt' : 'payment_receipt',
-      date: new Date(),
-    },
-  };
+  // Determine payment method type from Stripe details
+  const paymentMethodType = paymentIntentDetails.payment_method_types?.[0] || 'credit_card';
+  const normalizedPaymentMethod = paymentMethodType === 'card' ? 'credit_card' : paymentMethodType;
 
   // Create a payment record
   const payment = await Payment.create({
     invoice: invoice._id,
     amount: paymentAmount,
     date: new Date(paymentIntentDetails.created * 1000),
-    method: paymentIntentDetails.payment_method_types[0] || 'credit-card',
+    method: normalizedPaymentMethod,
     workspace: invoice.workspace,
     createdBy: invoice.createdBy,
     paymentNumber,
@@ -160,7 +147,36 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
           invoice.settings.deposit.percentage
         }%)`
       : `Payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()}`,
-    metadata: paymentMetadata,
+    // Add receipt information
+    receipt: {
+      number: receiptNumber,
+      type: isDepositPayment ? 'deposit_receipt' : 'payment_receipt',
+      date: new Date(),
+      status: 'generated',
+    },
+    // Add metadata
+    metadata: {
+      isDeposit: isDepositPayment,
+      depositPercentage: isDepositPayment ? invoice.settings.deposit.percentage : null,
+      depositDueDate: isDepositPayment ? invoice.settings.deposit.dueDate : null,
+      paymentSequence: {
+        number: paymentNumber,
+        total: existingPayments.length + 1,
+        isFinal: isFullPayment,
+      },
+      currency: paymentIntentDetails.currency.toUpperCase(),
+      paymentMethod: {
+        type: normalizedPaymentMethod,
+        details: {
+          stripePaymentMethodId: paymentIntentDetails.payment_method,
+          stripePaymentIntentId: paymentIntent,
+          last4: paymentIntentDetails.payment_method_details?.card?.last4,
+          brand: paymentIntentDetails.payment_method_details?.card?.brand,
+          expMonth: paymentIntentDetails.payment_method_details?.card?.exp_month,
+          expYear: paymentIntentDetails.payment_method_details?.card?.exp_year,
+        },
+      },
+    },
     stripePaymentDetails: {
       id: paymentIntent,
       amount: paymentIntentDetails.amount,
@@ -191,8 +207,8 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
       remainingBalance,
       receipt: {
         number: receiptNumber,
-        type: paymentMetadata.receipt.type,
-        date: paymentMetadata.receipt.date,
+        type: payment.receipt.type,
+        date: payment.receipt.date,
       },
     },
   });
