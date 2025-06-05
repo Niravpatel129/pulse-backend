@@ -221,6 +221,15 @@ class GmailListenerService {
 
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
+      // Get current profile to check history ID
+      const profile = await gmail.users.getProfile({ userId: 'me' });
+      console.log('[Gmail Push] Current Gmail profile:', {
+        email: profile.data.emailAddress,
+        currentHistoryId: profile.data.historyId,
+        ourHistoryId: historyId,
+        difference: Number(profile.data.historyId) - Number(historyId),
+      });
+
       // List changes since last history ID
       console.log('[Gmail Push] Fetching history since:', historyId);
       const history = await gmail.users.history.list({
@@ -234,6 +243,7 @@ class GmailListenerService {
         console.log('[Gmail Push] Updating history ID:', {
           oldHistoryId: historyId,
           newHistoryId: history.data.historyId,
+          difference: Number(history.data.historyId) - Number(historyId),
         });
         integration.historyId = history.data.historyId;
         await integration.save();
@@ -241,7 +251,11 @@ class GmailListenerService {
 
       // No changes
       if (!history.data.history || !history.data.history.length) {
-        console.log('[Gmail Push] No new changes found');
+        console.log('[Gmail Push] No new changes found. History response:', {
+          historyId: history.data.historyId,
+          historyLength: history.data.history?.length || 0,
+          nextPageToken: history.data.nextPageToken ? 'present' : 'none',
+        });
         return;
       }
 

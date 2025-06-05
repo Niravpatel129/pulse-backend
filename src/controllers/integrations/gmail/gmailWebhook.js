@@ -12,11 +12,11 @@ const gmailWebhook = asyncHandler(async (req, res) => {
     // Decode the base64 message data
     const message = Buffer.from(req.body.message.data, 'base64').toString();
     const data = JSON.parse(message);
-    const { emailAddress, historyId } = data;
+    const { emailAddress, historyId: webhookHistoryId } = data;
 
     console.log('[Gmail Webhook] Received notification:', {
       emailAddress,
-      historyId,
+      webhookHistoryId,
       timestamp: new Date().toISOString(),
     });
 
@@ -27,8 +27,16 @@ const gmailWebhook = asyncHandler(async (req, res) => {
       return res.status(200).send('OK'); // Still return 200 to acknowledge receipt
     }
 
-    // Process the notification
-    await gmailListenerService.handlePushNotification(integration, historyId);
+    // Log the stored history ID for debugging
+    console.log('[Gmail Webhook] Integration details:', {
+      email: integration.email,
+      storedHistoryId: integration.historyId,
+      webhookHistoryId,
+      lastSynced: integration.lastSynced,
+    });
+
+    // Process the notification using the integration's stored historyId
+    await gmailListenerService.handlePushNotification(integration, integration.historyId);
 
     res.status(200).send('OK');
   } catch (err) {
