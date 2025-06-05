@@ -36,6 +36,14 @@ const GmailIntegrationSchema = new mongoose.Schema(
       default: true,
       description: 'Indicates if this is the primary email for the workspace',
     },
+    watchExpiration: {
+      type: Date,
+      description: 'Expiration time for Gmail push notifications watch',
+    },
+    historyId: {
+      type: String,
+      description: 'Gmail history ID for tracking changes',
+    },
   },
   {
     timestamps: true,

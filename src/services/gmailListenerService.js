@@ -136,11 +136,14 @@ class GmailListenerService {
    * Set up watch for a specific Gmail integration
    */
   async setupWatchForIntegration(integration) {
+    console.log('🚀 integration:', integration);
     try {
+      console.log('🚀 integration:', integration.watchExpiration);
       const shouldRefresh =
         !integration.watchExpiration ||
         new Date(integration.watchExpiration).getTime() < Date.now() + 24 * 60 * 60 * 1000;
 
+      console.log('🚀 shouldRefresh:', shouldRefresh);
       if (!shouldRefresh || !integration.isActive) {
         console.log(`[Gmail Watch] Skipping: ${integration.email}`);
         return;
@@ -258,6 +261,15 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
+      // Log new incoming email
+      console.info('[Gmail] New email received:', {
+        messageId,
+        workspaceId: integration.workspace._id,
+        workspaceName: integration.workspace.name,
+        email: integration.email,
+        timestamp: new Date().toISOString(),
+      });
+
       // Try to acquire lock before processing
       const lockAcquired = await this.acquireLock(messageId, integration.workspace._id);
       if (!lockAcquired) {
