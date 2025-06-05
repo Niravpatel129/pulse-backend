@@ -9,6 +9,12 @@ const getInboxEmailById = async (req, res) => {
       return res.status(404).json({ message: 'Email thread not found' });
     }
 
+    // Mark thread and latest message as read if not already
+    if (!email.isRead) {
+      await email.markAsRead();
+      await email.markLatestMessageAsRead();
+    }
+
     res.status(200).json(email);
   } catch (error) {
     console.error(error);
