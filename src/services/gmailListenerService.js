@@ -510,6 +510,7 @@ class GmailListenerService {
               snippet: message.data.snippet || '',
               userId: integration.workspace._id.toString(),
               isSpam: message.data.labelIds?.includes('SPAM') || false,
+              stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
             },
           },
           {
