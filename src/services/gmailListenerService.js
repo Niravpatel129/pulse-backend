@@ -174,7 +174,7 @@ class GmailListenerService {
       console.log(`[Gmail Watch] Registered for ${integration.email}`);
       return true;
     } catch (error) {
-      console.error(`[Gmail Watch] Failed for ${integration.email}:`, error.message);
+      console.error(`[Gmail Watch] Failed ${integration.email}:`, error.message);
       return false;
     }
   }
