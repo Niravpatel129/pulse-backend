@@ -410,18 +410,40 @@ class GmailListenerService {
 
       await email.save();
 
-      // Handle thread creation/update
+      // Handle thread creation/update with enhanced threading logic
       let thread = await EmailThread.findOne({ threadId });
 
       if (!thread) {
-        // Create new thread with title derived from subject
-        const threadTitle = this.generateThreadTitle(subject, from);
-        thread = new EmailThread({
-          threadId,
-          workspaceId: integration.workspace._id,
-          title: threadTitle,
-          subject: subject || '(No Subject)',
-          participants: [
+        // Look for potential existing threads
+        const potentialThreads = await EmailThread.findPotentialThreads(email);
+        let matchingThread = null;
+
+        // Check each potential thread
+        for (const potentialThread of potentialThreads) {
+          if (potentialThread.shouldIncludeEmail(email)) {
+            matchingThread = potentialThread;
+            break;
+          }
+        }
+
+        if (matchingThread) {
+          // Add email to existing thread
+          thread = matchingThread;
+          thread.emails.push(email._id);
+          thread.lastActivity = sentAt;
+          thread.lastMessageDate = sentAt;
+          thread.messageCount = thread.emails.length;
+
+          // Update latest message
+          await thread.updateLatestMessage({
+            content: message.data.snippet || this.generateMessagePreview(body),
+            sender: from.name || from.email,
+            timestamp: sentAt,
+            type: 'email',
+          });
+
+          // Update participants
+          const allParticipants = [
             { email: from.email, name: from.name, role: 'sender', isInternal: false },
             ...to.map((t) => ({
               email: t.email,
@@ -431,20 +453,70 @@ class GmailListenerService {
             })),
             ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
             ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
-          ],
-          emails: [email._id],
-          lastActivity: sentAt,
-          latestMessage: {
-            content: message.data.snippet || this.generateMessagePreview(body),
-            sender: from.name || from.email,
-            timestamp: sentAt,
-            type: 'email',
-          },
-        });
+          ];
+
+          allParticipants.forEach((participant) => {
+            if (!thread.participants.some((p) => p.email === participant.email)) {
+              thread.participants.push(participant);
+            }
+          });
+
+          // Update message references
+          thread.messageReferences.push({
+            messageId: messageIdHeader,
+            inReplyTo: getHeader('In-Reply-To'),
+            references: getHeader('References')?.split(/\s+/) || [],
+          });
+        } else {
+          // Create new thread
+          const threadTitle = this.generateThreadTitle(subject, from);
+          const cleanSubject = this.cleanSubjectFromSubject(subject);
+          const allParticipants = [
+            { email: from.email, name: from.name, role: 'sender', isInternal: false },
+            ...to.map((t) => ({
+              email: t.email,
+              name: t.name,
+              role: 'recipient',
+              isInternal: false,
+            })),
+            ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
+            ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
+          ];
+
+          thread = new EmailThread({
+            threadId,
+            workspaceId: integration.workspace._id,
+            title: threadTitle,
+            subject: subject || '(No Subject)',
+            cleanSubject,
+            participants: allParticipants,
+            participantHash: this.generateParticipantHash(allParticipants),
+            emails: [email._id],
+            messageReferences: [
+              {
+                messageId: messageIdHeader,
+                inReplyTo: getHeader('In-Reply-To'),
+                references: getHeader('References')?.split(/\s+/) || [],
+              },
+            ],
+            firstMessageDate: sentAt,
+            lastMessageDate: sentAt,
+            messageCount: 1,
+            lastActivity: sentAt,
+            latestMessage: {
+              content: message.data.snippet || this.generateMessagePreview(body),
+              sender: from.name || from.email,
+              timestamp: sentAt,
+              type: 'email',
+            },
+          });
+        }
       } else {
         // Update existing thread
         thread.emails.push(email._id);
         thread.lastActivity = sentAt;
+        thread.lastMessageDate = sentAt;
+        thread.messageCount = thread.emails.length;
 
         // Update latest message
         await thread.updateLatestMessage({
@@ -454,7 +526,7 @@ class GmailListenerService {
           type: 'email',
         });
 
-        // Update participants if new ones are found
+        // Update participants
         const allParticipants = [
           { email: from.email, name: from.name, role: 'sender', isInternal: false },
           ...to.map((t) => ({
@@ -467,11 +539,17 @@ class GmailListenerService {
           ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
         ];
 
-        // Add new participants that aren't already in the thread
         allParticipants.forEach((participant) => {
           if (!thread.participants.some((p) => p.email === participant.email)) {
             thread.participants.push(participant);
           }
+        });
+
+        // Update message references
+        thread.messageReferences.push({
+          messageId: messageIdHeader,
+          inReplyTo: getHeader('In-Reply-To'),
+          references: getHeader('References')?.split(/\s+/) || [],
         });
       }
 
@@ -985,6 +1063,27 @@ class GmailListenerService {
 
     // Truncate to 200 characters and add ellipsis if needed
     return plainText.length > 200 ? plainText.substring(0, 197) + '...' : plainText;
+  }
+
+  /**
+   * Clean subject by removing prefixes
+   */
+  cleanSubjectFromSubject(subject) {
+    return subject
+      .replace(/^(Re|Fwd|Fw|R|F):\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Generate participant hash
+   */
+  generateParticipantHash(participants) {
+    const sortedEmails = participants
+      .map((p) => p.email.toLowerCase())
+      .sort()
+      .join('|');
+    return require('crypto').createHash('sha256').update(sortedEmails).digest('hex');
   }
 }
 

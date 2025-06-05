@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 
 // Schema for custom notes/annotations
@@ -86,6 +87,27 @@ const threadLabelSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// Add schema for message references
+const messageReferenceSchema = new mongoose.Schema(
+  {
+    messageId: {
+      type: String,
+      required: true,
+    },
+    inReplyTo: {
+      type: String,
+      default: null,
+    },
+    references: [
+      {
+        type: String,
+        default: [],
+      },
+    ],
+  },
+  { _id: false },
+);
+
 const emailThreadSchema = new mongoose.Schema(
   {
     threadId: {
@@ -109,6 +131,11 @@ const emailThreadSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    cleanSubject: {
+      type: String,
+      required: true,
+      index: true,
+    },
     participants: [threadParticipantSchema],
     emails: [
       {
@@ -116,6 +143,24 @@ const emailThreadSchema = new mongoose.Schema(
         ref: 'Email',
       },
     ],
+    messageReferences: [messageReferenceSchema],
+    participantHash: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    firstMessageDate: {
+      type: Date,
+      required: true,
+    },
+    lastMessageDate: {
+      type: Date,
+      required: true,
+    },
+    messageCount: {
+      type: Number,
+      default: 1,
+    },
     latestMessage: {
       content: {
         type: String,
@@ -350,6 +395,143 @@ emailThreadSchema.statics.findByLabel = function (workspaceId, labelName) {
 // Static method to find threads by participant
 emailThreadSchema.statics.findByParticipant = function (workspaceId, email) {
   return this.find({ workspaceId, 'participants.email': email }).sort({ lastActivity: -1 });
+};
+
+// Move cleanSubjectFromSubject to be a static method
+emailThreadSchema.statics.cleanSubjectFromSubject = function (subject) {
+  return subject
+    .replace(/^(Re|Fwd|Fw|R|F):\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+// Add method to get all participant emails from an email
+emailThreadSchema.statics.getParticipantEmails = function (email) {
+  const participants = new Set();
+
+  if (email.from?.email) participants.add(email.from.email);
+  if (email.to) email.to.forEach((t) => t.email && participants.add(t.email));
+  if (email.cc) email.cc.forEach((c) => c.email && participants.add(c.email));
+  if (email.bcc) email.bcc.forEach((b) => b.email && participants.add(b.email));
+
+  return Array.from(participants);
+};
+
+// Add method to generate participant hash
+emailThreadSchema.statics.generateParticipantHash = function (participants) {
+  const sortedEmails = participants
+    .filter((p) => p && p.email) // Filter out null/undefined participants and those without email
+    .map((p) => p.email.toLowerCase())
+    .sort()
+    .join('|');
+  return crypto.createHash('sha256').update(sortedEmails).digest('hex');
+};
+
+// Add static method to find potential thread matches
+emailThreadSchema.statics.findPotentialThreads = async function (email) {
+  if (!email || !email.subject) {
+    return [];
+  }
+
+  const cleanSubject = this.cleanSubjectFromSubject(email.subject);
+  const participantEmails = this.getParticipantEmails(email);
+
+  if (!participantEmails || participantEmails.length === 0) {
+    return [];
+  }
+
+  const participantHash = this.generateParticipantHash(
+    participantEmails.map((email) => ({ email })),
+  );
+
+  // Find threads with matching subject and significant participant overlap
+  return this.find({
+    cleanSubject,
+    participantHash,
+    workspaceId: email.workspaceId,
+    status: 'active',
+  });
+};
+
+// Add method to check if email belongs to this thread
+emailThreadSchema.methods.shouldIncludeEmail = function (email) {
+  // Check subject match (ignoring prefixes)
+  const emailCleanSubject = EmailThread.cleanSubjectFromSubject(email.subject);
+  if (emailCleanSubject !== this.cleanSubject) {
+    return false;
+  }
+
+  // Check participant overlap
+  const emailParticipants = EmailThread.getParticipantEmails(email);
+  const threadParticipants = this.participants.map((p) => p.email);
+
+  // Calculate participant overlap percentage
+  const overlap = emailParticipants.filter((email) => threadParticipants.includes(email));
+  const overlapPercentage =
+    overlap.length / Math.max(emailParticipants.length, threadParticipants.length);
+
+  // If less than 50% overlap, likely a different thread
+  if (overlapPercentage < 0.5) {
+    return false;
+  }
+
+  // Check time proximity (if more than 30 days apart, likely new thread)
+  const timeDiff = Math.abs(email.sentAt - this.firstMessageDate);
+  if (timeDiff > 30 * 24 * 60 * 60 * 1000) {
+    // 30 days in milliseconds
+    return false;
+  }
+
+  // Check message references
+  if (
+    email.messageId &&
+    this.messageReferences.some(
+      (ref) =>
+        ref.messageId === email.messageId ||
+        ref.references.includes(email.messageId) ||
+        email.inReplyTo === ref.messageId,
+    )
+  ) {
+    return true;
+  }
+
+  return true;
+};
+
+// Add method to merge threads
+emailThreadSchema.methods.mergeThread = async function (otherThread) {
+  // Merge emails
+  this.emails = [...new Set([...this.emails, ...otherThread.emails])];
+
+  // Merge participants
+  const allParticipants = [...this.participants];
+  otherThread.participants.forEach((p) => {
+    if (!allParticipants.some((existing) => existing.email === p.email)) {
+      allParticipants.push(p);
+    }
+  });
+  this.participants = allParticipants;
+
+  // Update participant hash
+  this.participantHash = EmailThread.generateParticipantHash(allParticipants);
+
+  // Merge message references
+  this.messageReferences = [...this.messageReferences, ...otherThread.messageReferences];
+
+  // Update dates
+  this.firstMessageDate = Math.min(this.firstMessageDate, otherThread.firstMessageDate);
+  this.lastMessageDate = Math.max(this.lastMessageDate, otherThread.lastMessageDate);
+
+  // Update message count
+  this.messageCount = this.emails.length;
+
+  // Update latest message if other thread's is newer
+  if (otherThread.latestMessage.timestamp > this.latestMessage.timestamp) {
+    this.latestMessage = otherThread.latestMessage;
+  }
+
+  await this.save();
+  return this;
 };
 
 const EmailThread = mongoose.model('EmailThread', emailThreadSchema);
