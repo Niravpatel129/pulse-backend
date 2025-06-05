@@ -198,7 +198,6 @@ class GmailListenerService {
         const profile = await gmail.users.getProfile({ userId: 'me' });
         historyId = profile.data.historyId;
         this.historyIds.set(`${workspaceId}-${email}`, historyId);
-        console.log(`Initialized historyId for ${email}: ${historyId}`);
         return; // Skip first run, just initialize the history ID
       }
 
@@ -253,11 +252,6 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
-      console.log('📧 Processing Gmail message:', {
-        messageId,
-        workspace: integration.workspace._id,
-      });
-
       // Get the full message
       const message = await gmail.users.messages.get({
         userId: 'me',
@@ -280,12 +274,10 @@ class GmailListenerService {
       });
 
       if (existingEmail) {
-        console.log(`⏭️ Email ${messageId} already processed, skipping`);
         return;
       }
 
       // Process email body and attachments
-      console.log('📝 Processing email parts and attachments');
       const {
         body,
         attachments = [],
@@ -320,15 +312,6 @@ class GmailListenerService {
       const to = toHeader ? toHeader.split(',').map(formatEmailAddress) : [];
       const cc = ccHeader ? ccHeader.split(',').map(formatEmailAddress) : [];
       const bcc = bccHeader ? bccHeader.split(',').map(formatEmailAddress) : [];
-
-      console.log('📨 Email details:', {
-        from,
-        to,
-        subject,
-        threadId,
-        attachmentsCount: attachments.length,
-        inlineImagesCount: inlineImages.length,
-      });
 
       // Format attachments with required fields
       const formattedAttachments = attachments.map((att) => ({
@@ -390,7 +373,7 @@ class GmailListenerService {
       });
 
       await email.save();
-      console.log('✅ Gmail email processed successfully:', {
+      console.info('[Gmail] Email processed successfully:', {
         emailId: email._id,
         workspaceId: email.workspaceId,
         attachmentsCount: formattedAttachments.length,
@@ -399,10 +382,10 @@ class GmailListenerService {
     } catch (error) {
       // Handle 404 errors gracefully (email not found)
       if (error.code === 404) {
-        console.log('⚠️ Email not found:', messageId);
+        console.warn('[Gmail] Email not found:', messageId);
         return;
       }
-      console.error('❌ Error processing Gmail email:', error);
+      console.error('[Gmail] Error processing email:', error);
       throw error;
     }
   }
@@ -531,7 +514,7 @@ class GmailListenerService {
 
       // Check file size
       if (decodedData.length > MAX_ATTACHMENT_SIZE) {
-        console.warn(`Attachment too large (${decodedData.length} bytes), skipping upload`);
+        console.warn(`[Gmail] Attachment too large (${decodedData.length} bytes), skipping upload`);
         return {
           filename: this.extractFilename(part),
           mimeType: part.mimeType,
@@ -567,7 +550,7 @@ class GmailListenerService {
         ),
       };
     } catch (error) {
-      console.error('Error processing attachment:', error);
+      console.error('[Gmail] Error processing attachment:', error);
       throw error;
     }
   }
