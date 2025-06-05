@@ -1425,13 +1425,6 @@ class GmailListenerService {
    * @returns {boolean} - Whether the email is considered empty
    */
   isEmailEmpty(body, snippet, attachments = []) {
-    // If there are attachments, the email is not empty
-    if (attachments && attachments.length > 0) {
-      return false;
-    }
-
-    if (!body && !snippet) return true;
-
     // Check for common empty email patterns
     const emptyPatterns = [
       '', // Empty string
@@ -1471,21 +1464,20 @@ class GmailListenerService {
       .trim();
 
     // Check if either text or HTML content matches empty patterns
-    if (
+    const hasContent = !(
       emptyPatterns.includes(textContent) ||
       emptyPatterns.includes(cleanText) ||
       emptyPatterns.includes(htmlContent) ||
-      emptyPatterns.includes(cleanHtml)
-    ) {
-      return true;
-    }
+      emptyPatterns.includes(cleanHtml) ||
+      !snippet ||
+      snippet.trim() === ''
+    );
 
-    // Check if snippet is empty or just whitespace
-    if (!snippet || snippet.trim() === '') {
-      return true;
-    }
+    // If there are attachments, the email is not empty
+    const hasAttachments = attachments && attachments.length > 0;
 
-    return false;
+    // Email is empty only if it has no content AND no attachments
+    return !hasContent && !hasAttachments;
   }
 }
 
