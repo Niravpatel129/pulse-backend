@@ -253,6 +253,11 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
+      console.log('📧 Processing Gmail message:', {
+        messageId,
+        workspace: integration.workspace._id,
+      });
+
       // Get the full message
       const message = await gmail.users.messages.get({
         userId: 'me',
@@ -271,56 +276,90 @@ class GmailListenerService {
       // Check for existing email to prevent duplicates
       const existingEmail = await Email.findOne({
         $or: [{ gmailMessageId: messageId }, { messageId: messageIdHeader }],
-        workspace: integration.workspace._id,
+        workspaceId: integration.workspace._id,
       });
 
       if (existingEmail) {
-        console.log(`Email ${messageId} already processed, skipping`);
+        console.log(`⏭️ Email ${messageId} already processed, skipping`);
         return;
       }
 
       // Process email body and attachments
-      const { body, attachments, inlineImages } = await this.processEmailParts(
+      console.log('📝 Processing email parts and attachments');
+      const {
+        body,
+        attachments = [],
+        inlineImages = [],
+      } = await this.processEmailParts(
         gmail,
         messageId,
         message.data.payload,
         integration.workspace._id.toString(),
       );
 
-      // Extract email details
-      const from = getHeader('From');
-      const to = getHeader('To')
-        .split(',')
-        .map((email) => email.trim());
-      const cc = getHeader('Cc')
-        ? getHeader('Cc')
-            .split(',')
-            .map((email) => email.trim())
-        : [];
-      const bcc = getHeader('Bcc')
-        ? getHeader('Bcc')
-            .split(',')
-            .map((email) => email.trim())
-        : [];
+      // Extract and format email details
+      const fromHeader = getHeader('From');
+      const toHeader = getHeader('To');
+      const ccHeader = getHeader('Cc');
+      const bccHeader = getHeader('Bcc');
       const subject = getHeader('Subject');
       const threadId = message.data.threadId;
       const sentAt = new Date(getHeader('Date'));
 
-      // Get project ID for this email
-      const projectId = await this.getProjectIdForEmail({
+      // Format email addresses
+      const formatEmailAddress = (emailStr) => {
+        if (!emailStr) return { name: '', email: '' };
+        const match = emailStr.match(/(.*?)\s*<([^>]+)>/) || [null, null, emailStr];
+        return {
+          name: match[1]?.trim() || '',
+          email: match[2]?.trim() || match[3]?.trim() || emailStr.trim(),
+        };
+      };
+
+      const from = formatEmailAddress(fromHeader);
+      const to = toHeader ? toHeader.split(',').map(formatEmailAddress) : [];
+      const cc = ccHeader ? ccHeader.split(',').map(formatEmailAddress) : [];
+      const bcc = bccHeader ? bccHeader.split(',').map(formatEmailAddress) : [];
+
+      console.log('📨 Email details:', {
         from,
         to,
         subject,
         threadId,
-        workspace: integration.workspace,
+        attachmentsCount: attachments.length,
+        inlineImagesCount: inlineImages.length,
       });
+
+      // Format attachments with required fields
+      const formattedAttachments = attachments.map((att) => ({
+        filename: att.filename || 'unnamed_file',
+        size: att.size || 0,
+        type: att.type || 'unknown',
+        mimeType: att.mimeType || 'application/octet-stream',
+        storageUrl: att.downloadUrl || '',
+        attachmentId: att.attachmentId || messageId,
+        isInline: att.isInline || false,
+        error: att.error || null,
+        skipped: att.skipped || false,
+      }));
+
+      // Format inline images
+      const formattedInlineImages = inlineImages.map((img) => ({
+        filename: img.filename || 'unnamed_image',
+        size: img.size || 0,
+        type: img.type || 'image',
+        mimeType: img.mimeType || 'image/jpeg',
+        storageUrl: img.downloadUrl || '',
+        contentId: img.contentId || '',
+      }));
 
       // Create email document
       const email = new Email({
-        projectId,
-        subject,
-        body,
-        bodyText: body.replace(/<[^>]*>/g, ''), // Strip HTML tags for plain text version
+        subject: subject || '(No Subject)',
+        body: {
+          html: body || '',
+          text: body ? body.replace(/<[^>]*>/g, '') : '', // Strip HTML tags for plain text version
+        },
         to,
         cc,
         bcc,
@@ -328,37 +367,42 @@ class GmailListenerService {
         gmailMessageId: messageId,
         messageId: messageIdHeader,
         threadId,
-        attachments: attachments.map((att) => ({
-          name: att.filename,
-          size: att.size,
-          type: att.type,
-          mimeType: att.mimeType,
-          storagePath: att.storagePath,
-          downloadUrl: att.downloadUrl,
-          isInline: att.isInline,
-          error: att.error,
-          skipped: att.skipped,
-        })),
-        inlineImages: inlineImages.map((img) => ({
-          name: img.filename,
-          size: img.size,
-          type: img.type,
-          mimeType: img.mimeType,
-          storagePath: img.storagePath,
-          downloadUrl: img.downloadUrl,
-          contentId: img.contentId,
-        })),
+        attachments: formattedAttachments,
+        inlineImages: formattedInlineImages,
         direction: 'inbound',
         status: 'received',
         sentAt,
+        workspaceId: integration.workspace._id,
+        // Gmail specific fields
+        token: {
+          id: messageId,
+          type: 'gmail',
+          accessToken: integration.accessToken,
+          refreshToken: integration.refreshToken,
+          scope: 'https://www.googleapis.com/auth/gmail.readonly',
+          expiryDate: integration.tokenExpiry,
+        },
+        threadPart: parseInt(threadId, 16) || 0, // Convert hex to number
+        historyId: message.data.historyId,
+        internalDate: message.data.internalDate,
+        snippet: message.data.snippet || '',
+        userId: integration.workspace._id.toString(),
       });
 
       await email.save();
+      console.log('✅ Gmail email processed successfully:', {
+        emailId: email._id,
+        workspaceId: email.workspaceId,
+        attachmentsCount: formattedAttachments.length,
+        inlineImagesCount: formattedInlineImages.length,
+      });
     } catch (error) {
       // Handle 404 errors gracefully (email not found)
       if (error.code === 404) {
+        console.log('⚠️ Email not found:', messageId);
         return;
       }
+      console.error('❌ Error processing Gmail email:', error);
       throw error;
     }
   }

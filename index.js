@@ -6,7 +6,6 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/api-docs.js';
 import connectDB from './src/config/db.js';
 import passport from './src/config/passport.js';
-import { initializeEmailListener } from './src/init/emailListener.js';
 import { initializeGmailListener } from './src/init/gmailListener.js';
 import { initializeProjectInactivityChecker } from './src/init/projectInactivityChecker.js';
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
@@ -62,9 +61,6 @@ dotenv.config();
 
 // Connect to database
 connectDB();
-
-// Initialize email listener
-initializeEmailListener();
 
 // Initialize Gmail listener
 initializeGmailListener();

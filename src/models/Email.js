@@ -152,6 +152,11 @@ const emailSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    workspaceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Workspace',
+      required: true,
+    },
     from: {
       type: emailAddressSchema,
       required: true,
