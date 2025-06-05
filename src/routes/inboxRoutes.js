@@ -6,6 +6,7 @@ import { markAsSpam } from '../controllers/inbox/markAsSpam.js';
 import { moveToTrash } from '../controllers/inbox/moveToTrash.js';
 import { summarizeThread } from '../controllers/inbox/summarizeThread.js';
 import { updateReadStatus } from '../controllers/inbox/updateReadStatus.js';
+import { updateThreadStage } from '../controllers/inbox/updateThreadStage.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
@@ -21,5 +22,6 @@ router.post('/:threadId/trash', moveToTrash);
 router.post('/:threadId/spam', markAsSpam);
 router.post('/:threadId/archive', archiveThread);
 router.post('/:threadId/summarize', summarizeThread);
+router.post('/:threadId/stage', updateThreadStage);
 
 export default router;
