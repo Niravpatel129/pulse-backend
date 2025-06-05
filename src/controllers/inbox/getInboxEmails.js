@@ -8,10 +8,16 @@ const getInboxEmails = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Get total count for pagination
-    const total = await EmailThread.countDocuments({ workspaceId: req.workspace._id, stage });
+    const total = await EmailThread.countDocuments({
+      workspaceId: req.workspace._id,
+      $or: [{ stage }, { stage: { $exists: false } }],
+    });
 
     // Get paginated emails
-    const inbox = await EmailThread.find({ workspaceId: req.workspace._id, stage })
+    const inbox = await EmailThread.find({
+      workspaceId: req.workspace._id,
+      $or: [{ stage }, { stage: { $exists: false } }],
+    })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
