@@ -847,9 +847,6 @@ class GmailListenerService {
         return result;
       }
 
-      // Handle single part messages
-      const contentType = part.mimeType || 'text/plain';
-      const contentId = part.headers?.find((h) => h.name.toLowerCase() === 'content-id')?.value;
       const contentDisposition =
         part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
       const isAttachment = contentDisposition.toLowerCase().includes('attachment');
