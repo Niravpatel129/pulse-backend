@@ -1,4 +1,4 @@
-import Email from '../../models/Email.js';
+import EmailThread from '../../models/Email/EmailThreadModel.js';
 
 const getInboxEmails = async (req, res) => {
   try {
@@ -7,10 +7,10 @@ const getInboxEmails = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Get total count for pagination
-    const total = await Email.countDocuments({ workspaceId: req.workspace._id });
+    const total = await EmailThread.countDocuments({ workspaceId: req.workspace._id });
 
     // Get paginated emails
-    const inbox = await Email.find({ workspaceId: req.workspace._id })
+    const inbox = await EmailThread.find({ workspaceId: req.workspace._id })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
