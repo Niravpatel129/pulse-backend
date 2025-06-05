@@ -395,7 +395,7 @@ class GmailListenerService {
         );
 
         // Enhanced empty email detection
-        const isEmptyEmail = this.isEmailEmpty(body, message.data.snippet);
+        const isEmptyEmail = this.isEmailEmpty(body, message.data.snippet, attachments);
         if (isEmptyEmail) {
           console.log('[Gmail] Skipping empty email:', {
             messageId,
@@ -403,6 +403,7 @@ class GmailListenerService {
             timestamp: new Date().toISOString(),
             snippet: message.data.snippet,
             bodyLength: body?.length,
+            attachmentsCount: attachments.length,
           });
           return;
         }
@@ -1422,9 +1423,15 @@ class GmailListenerService {
    * Check if an email is empty
    * @param {string|object} body - The email body content (can be string or object with text/html)
    * @param {string} snippet - The email snippet from Gmail
+   * @param {Array} attachments - The array of attachments for the email
    * @returns {boolean} - Whether the email is considered empty
    */
-  isEmailEmpty(body, snippet) {
+  isEmailEmpty(body, snippet, attachments = []) {
+    // If there are attachments, the email is not empty
+    if (attachments && attachments.length > 0) {
+      return false;
+    }
+
     if (!body && !snippet) return true;
 
     // Check for common empty email patterns
