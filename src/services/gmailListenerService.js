@@ -563,6 +563,7 @@ class GmailListenerService {
               $set: {
                 lastMessageDate: sentAt,
                 lastActivity: sentAt,
+                isRead: false,
                 latestMessage: {
                   content: message.data.snippet || this.generateMessagePreview(body),
                   sender: from.name || from.email,
