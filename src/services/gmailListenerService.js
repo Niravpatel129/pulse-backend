@@ -1,13 +1,61 @@
+import createDOMPurify from 'dompurify';
 import { google } from 'googleapis';
-import { processEmailParts } from '../controllers/integrations/gmail/getGmailClientEmails.js';
+import { JSDOM } from 'jsdom';
 import Email from '../models/Email.js';
 import GmailIntegration from '../models/GmailIntegration.js';
+import { fileUtils, firebaseStorage } from '../utils/firebase.js';
+
+// Initialize DOMPurify
+const window = new JSDOM('').window;
+const DOMPurify = createDOMPurify(window);
+
+// Constants
+const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024; // 20MB
+
+// MIME type to extension mapping
+const MIME_EXTENSION_MAP = {
+  'application/pdf': 'pdf',
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'application/zip': 'zip',
+  'application/x-rar-compressed': 'rar',
+  'application/json': 'json',
+  'text/html': 'html',
+  'text/xml': 'xml',
+  'application/xml': 'xml',
+};
 
 class GmailListenerService {
   constructor() {
     this.activeListeners = new Map(); // Map of workspaceId -> polling interval
     this.pollingInterval = 60000; // 1 minute by default
     this.historyIds = new Map(); // Track last history ID per email to avoid reprocessing
+  }
+
+  /**
+   * Sanitize HTML content
+   */
+  sanitizeHtml(html) {
+    try {
+      return DOMPurify.sanitize(html, {
+        ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'em', 'strong', 'a', 'img', 'ul', 'ol', 'li'],
+        ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
+        ALLOW_DATA_ATTR: false,
+      });
+    } catch (error) {
+      console.error('HTML sanitization failed:', error);
+      return html; // Return original if sanitization fails
+    }
   }
 
   /**
@@ -150,6 +198,7 @@ class GmailListenerService {
         const profile = await gmail.users.getProfile({ userId: 'me' });
         historyId = profile.data.historyId;
         this.historyIds.set(`${workspaceId}-${email}`, historyId);
+        console.log(`Initialized historyId for ${email}: ${historyId}`);
         return; // Skip first run, just initialize the history ID
       }
 
@@ -195,6 +244,7 @@ class GmailListenerService {
           this.activeListeners.delete(key);
         }
       }
+      throw error;
     }
   }
 
@@ -215,11 +265,26 @@ class GmailListenerService {
       const getHeader = (name) =>
         headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
+      // Get message ID from headers
+      const messageIdHeader = getHeader('Message-ID');
+
+      // Check for existing email to prevent duplicates
+      const existingEmail = await Email.findOne({
+        $or: [{ gmailMessageId: messageId }, { messageId: messageIdHeader }],
+        workspace: integration.workspace._id,
+      });
+
+      if (existingEmail) {
+        console.log(`Email ${messageId} already processed, skipping`);
+        return;
+      }
+
       // Process email body and attachments
-      const { body, attachments, inlineImages } = await processEmailParts(
-        [message.data.payload],
+      const { body, attachments, inlineImages } = await this.processEmailParts(
         gmail,
         messageId,
+        message.data.payload,
+        integration.workspace._id.toString(),
       );
 
       // Extract email details
@@ -260,11 +325,28 @@ class GmailListenerService {
         cc,
         bcc,
         from,
+        gmailMessageId: messageId,
+        messageId: messageIdHeader,
+        threadId,
         attachments: attachments.map((att) => ({
           name: att.filename,
           size: att.size,
-          type: att.mimeType,
-          url: att.downloadUrl,
+          type: att.type,
+          mimeType: att.mimeType,
+          storagePath: att.storagePath,
+          downloadUrl: att.downloadUrl,
+          isInline: att.isInline,
+          error: att.error,
+          skipped: att.skipped,
+        })),
+        inlineImages: inlineImages.map((img) => ({
+          name: img.filename,
+          size: img.size,
+          type: img.type,
+          mimeType: img.mimeType,
+          storagePath: img.storagePath,
+          downloadUrl: img.downloadUrl,
+          contentId: img.contentId,
         })),
         direction: 'inbound',
         status: 'received',
@@ -277,7 +359,194 @@ class GmailListenerService {
       if (error.code === 404) {
         return;
       }
+      throw error;
     }
+  }
+
+  /**
+   * Process email parts including attachments
+   */
+  async processEmailParts(gmail, messageId, part, workspaceId, options = {}) {
+    const result = {
+      body: '',
+      attachments: [],
+      inlineImages: [],
+      errors: [],
+    };
+
+    try {
+      if (!part) {
+        throw new Error('Invalid email part');
+      }
+
+      // Extract body content first
+      result.body = this.extractFirstMatching(part);
+
+      // Sanitize HTML content
+      if (result.body) {
+        result.body = this.sanitizeHtml(result.body);
+      }
+
+      // Handle multipart messages
+      if (part.mimeType && part.mimeType.startsWith('multipart/')) {
+        if (!part.parts || !Array.isArray(part.parts)) {
+          throw new Error(`Invalid multipart structure: ${part.mimeType}`);
+        }
+
+        // Process each subpart
+        for (const subpart of part.parts) {
+          const subpartResult = await this.processEmailParts(
+            gmail,
+            messageId,
+            subpart,
+            workspaceId,
+            options,
+          );
+
+          // Merge results
+          result.attachments.push(...subpartResult.attachments);
+          result.inlineImages.push(...subpartResult.inlineImages);
+          result.errors.push(...subpartResult.errors);
+        }
+
+        return result;
+      }
+
+      // Handle single part messages
+      const contentType = part.mimeType || 'text/plain';
+      const contentId = part.headers?.find((h) => h.name.toLowerCase() === 'content-id')?.value;
+      const contentDisposition =
+        part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
+      const isAttachment = contentDisposition.toLowerCase().includes('attachment');
+      const isInline = contentDisposition.toLowerCase().includes('inline');
+
+      // Process attachments
+      if (isAttachment || isInline) {
+        try {
+          const attachment = await this.processAttachment(gmail, messageId, part, workspaceId);
+
+          if (attachment) {
+            if (isInline && contentId) {
+              result.inlineImages.push(attachment);
+            } else {
+              result.attachments.push(attachment);
+            }
+          }
+        } catch (error) {
+          result.errors.push({
+            part: part.mimeType,
+            error: `Attachment processing failed: ${error.message}`,
+          });
+        }
+      }
+
+      return result;
+    } catch (error) {
+      result.errors.push({
+        part: part.mimeType,
+        error: error.message,
+      });
+      return result;
+    }
+  }
+
+  /**
+   * Extract first matching content type from email parts
+   */
+  extractFirstMatching(part, types = ['text/html', 'text/plain']) {
+    if (types.includes(part.mimeType) && part.body?.data) {
+      return Buffer.from(part.body.data, 'base64url').toString();
+    }
+    if (part.parts?.length) {
+      for (const sub of part.parts) {
+        const res = this.extractFirstMatching(sub, types);
+        if (res) return res;
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Process a single attachment
+   */
+  async processAttachment(gmail, messageId, part, workspaceId) {
+    try {
+      // Get attachment data if not already present
+      let attachmentData = part.body.data;
+      if (!attachmentData && part.body.attachmentId) {
+        const response = await gmail.users.messages.attachments.get({
+          userId: 'me',
+          messageId: messageId,
+          id: part.body.attachmentId,
+        });
+        attachmentData = response.data.data;
+      }
+
+      // Decode base64url data
+      const decodedData = Buffer.from(attachmentData, 'base64url');
+
+      // Check file size
+      if (decodedData.length > MAX_ATTACHMENT_SIZE) {
+        console.warn(`Attachment too large (${decodedData.length} bytes), skipping upload`);
+        return {
+          filename: this.extractFilename(part),
+          mimeType: part.mimeType,
+          size: decodedData.length,
+          error: 'File too large',
+          skipped: true,
+        };
+      }
+
+      // Generate storage path
+      const filename = this.extractFilename(part);
+      const storagePath = firebaseStorage.generatePath(workspaceId, filename);
+
+      // Upload to Firebase Storage
+      const { url: downloadUrl, storagePath: finalStoragePath } = await firebaseStorage.uploadFile(
+        decodedData,
+        storagePath,
+        part.mimeType,
+      );
+
+      return {
+        filename,
+        mimeType: part.mimeType,
+        size: decodedData.length,
+        attachmentId: part.body.attachmentId,
+        storagePath: finalStoragePath,
+        downloadUrl,
+        type: fileUtils.getType(part.mimeType),
+        isInline: part.headers?.some(
+          (h) =>
+            h.name.toLowerCase() === 'content-disposition' &&
+            h.value.toLowerCase().includes('inline'),
+        ),
+      };
+    } catch (error) {
+      console.error('Error processing attachment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract filename from email part
+   */
+  extractFilename(part) {
+    const contentDisposition =
+      part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
+
+    const filenameMatch =
+      contentDisposition.match(/filename="([^"]+)"/) ||
+      contentDisposition.match(/filename=([^;]+)/);
+
+    if (filenameMatch) {
+      return filenameMatch[1].trim();
+    }
+
+    // Fallback to content type if no filename found
+    const contentType = part.mimeType || '';
+    const extension = MIME_EXTENSION_MAP[contentType] || 'bin';
+    return `attachment.${extension}`;
   }
 
   /**

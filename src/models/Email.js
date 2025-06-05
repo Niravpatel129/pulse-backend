@@ -1,100 +1,239 @@
+import { google } from 'googleapis';
 import mongoose from 'mongoose';
 
 const attachmentSchema = new mongoose.Schema(
   {
-    name: String,
-    size: Number,
-    type: String,
-    url: String,
+    filename: {
+      type: String,
+      required: true,
+      get: function (v) {
+        return base64Utils.decode(v);
+      },
+      set: function (v) {
+        return v;
+      },
+    },
+    mimeType: {
+      type: String,
+      required: true,
+    },
+    size: {
+      type: Number,
+      required: true,
+    },
+    attachmentId: {
+      type: String,
+      required: true,
+    },
+    storageUrl: {
+      type: String,
+      required: true,
+    },
+    data: {
+      type: String,
+      get: function (v) {
+        return base64Utils.decodeToBuffer(v);
+      },
+      set: function (v) {
+        return v;
+      },
+    },
+  },
+  { _id: false },
+);
+
+const emailAddressSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+    },
+    email: {
+      type: String,
+      required: true,
+    },
+  },
+  { _id: false },
+);
+
+const emailBodySchema = new mongoose.Schema(
+  {
+    text: {
+      type: String,
+      required: true,
+      get: function (v) {
+        return base64Utils.decode(v);
+      },
+      set: function (v) {
+        return v;
+      },
+    },
+    html: {
+      type: String,
+      required: true,
+      get: function (v) {
+        return base64Utils.decode(v);
+      },
+      set: function (v) {
+        return v;
+      },
+    },
+  },
+  { _id: false },
+);
+
+// Add token management schema
+const tokenSchema = new mongoose.Schema(
+  {
+    accessToken: {
+      type: String,
+      required: true,
+    },
+    refreshToken: {
+      type: String,
+      required: true,
+    },
+    expiryDate: {
+      type: Date,
+      required: true,
+    },
+    scope: {
+      type: String,
+      required: true,
+    },
+  },
+  { _id: false },
+);
+
+// Add watch management schema
+const watchSchema = new mongoose.Schema(
+  {
+    historyId: {
+      type: String,
+      required: true,
+    },
+    expiration: {
+      type: Date,
+      required: true,
+    },
+    topicName: {
+      type: String,
+      required: true,
+    },
+    lastRenewed: {
+      type: Date,
+      default: Date.now,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'expired', 'failed'],
+      default: 'active',
+    },
   },
   { _id: false },
 );
 
 const emailSchema = new mongoose.Schema(
   {
-    projectId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Project',
-      required: function () {
-        return this.direction === 'outbound';
-      },
-    },
-    shortEmailId: {
-      type: String,
-    },
-    replyEmailId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Email',
-    },
-    subject: {
-      type: String,
-      default: '(No Subject)',
-    },
-    body: {
+    gmailMessageId: {
       type: String,
       required: true,
+      unique: true,
+      index: true,
     },
-    bodyText: {
+    threadId: {
       type: String,
+      required: true,
+      index: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    from: {
+      type: emailAddressSchema,
+      required: true,
     },
     to: [
       {
-        type: String,
+        type: emailAddressSchema,
         required: true,
       },
     ],
     cc: [
       {
-        type: String,
+        type: emailAddressSchema,
+        default: [],
       },
     ],
     bcc: [
       {
-        type: String,
+        type: emailAddressSchema,
+        default: [],
       },
     ],
-    from: {
+    subject: {
       type: String,
       required: true,
     },
-    attachments: [attachmentSchema],
-    sentBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: function () {
-        return this.direction === 'outbound';
-      },
+    body: {
+      type: emailBodySchema,
+      required: true,
     },
-    sentAt: {
+    labels: [
+      {
+        type: String,
+        default: [],
+      },
+    ],
+    snippet: {
+      type: String,
+      required: true,
+    },
+    internalDate: {
+      type: Date,
+      required: true,
+    },
+    attachments: [
+      {
+        type: attachmentSchema,
+        default: [],
+      },
+    ],
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+    syncedAt: {
       type: Date,
       default: Date.now,
     },
-    status: {
+    historyId: {
       type: String,
-      enum: ['sent', 'failed', 'draft', 'received'],
-      default: 'sent',
-    },
-
-    trackingAddress: {
-      type: String,
-    },
-
-    readBy: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
-    direction: {
-      type: String,
-      enum: ['outbound', 'inbound'],
       required: true,
-      default: 'outbound',
     },
-    openedAt: Date,
-    openCount: {
+    threadPart: {
       type: Number,
-      default: 0,
+      required: true,
+    },
+    messageSource: {
+      type: String,
+      enum: ['gmail'],
+      default: 'gmail',
+    },
+    rawHeaders: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+    token: {
+      type: tokenSchema,
+      required: true,
+    },
+    watch: {
+      type: watchSchema,
     },
   },
   {
@@ -102,16 +241,1129 @@ const emailSchema = new mongoose.Schema(
   },
 );
 
-// Add indexes for common queries
-emailSchema.index({ projectId: 1, sentAt: -1 });
-emailSchema.index({ sentBy: 1, sentAt: -1 });
-emailSchema.index({ threadId: 1, sentAt: -1 });
-emailSchema.index({ messageId: 1 });
-emailSchema.index({ trackingAddress: 1 });
-emailSchema.index({ 'trackingData.shortProjectId': 1 });
-emailSchema.index({ 'trackingData.shortThreadId': 1 });
-emailSchema.index({ 'trackingData.shortUserId': 1 });
-emailSchema.index({ unmatched: 1, createdAt: -1 });
+// Indexes for common queries
+emailSchema.index({ userId: 1, internalDate: -1 });
+emailSchema.index({ threadId: 1, threadPart: 1 });
+emailSchema.index({ userId: 1, isRead: 1 });
+emailSchema.index({ userId: 1, labels: 1 });
+
+// Virtual for getting the email thread
+emailSchema.virtual('thread', {
+  ref: 'Email',
+  localField: 'threadId',
+  foreignField: 'threadId',
+});
+
+// Method to mark email as read
+emailSchema.methods.markAsRead = async function () {
+  this.isRead = true;
+  return this.save();
+};
+
+// Method to add label
+emailSchema.methods.addLabel = async function (label) {
+  if (!this.labels.includes(label)) {
+    this.labels.push(label);
+    return this.save();
+  }
+  return this;
+};
+
+// Method to remove label
+emailSchema.methods.removeLabel = async function (label) {
+  this.labels = this.labels.filter((l) => l !== label);
+  return this.save();
+};
+
+// Static method to find emails in a thread
+emailSchema.statics.findThread = function (threadId) {
+  return this.find({ threadId }).sort({ threadPart: 1 });
+};
+
+// Static method to find unread emails for a user
+emailSchema.statics.findUnread = function (userId) {
+  return this.find({ userId, isRead: false }).sort({ internalDate: -1 });
+};
+
+// Add pre-save middleware for deduplication
+emailSchema.pre('save', async function (next) {
+  try {
+    // Only check for duplicates if this is a new document
+    if (this.isNew) {
+      const existingEmail = await this.constructor.findOne({
+        gmailMessageId: this.gmailMessageId,
+      });
+
+      if (existingEmail) {
+        // If email exists, update it instead of creating a new one
+        const updateData = {
+          labels: this.labels,
+          isRead: this.isRead,
+          syncedAt: new Date(),
+          historyId: this.historyId,
+        };
+
+        // Only update fields that have changed
+        Object.keys(updateData).forEach((key) => {
+          if (JSON.stringify(existingEmail[key]) !== JSON.stringify(updateData[key])) {
+            existingEmail[key] = updateData[key];
+          }
+        });
+
+        // Save the updated document
+        await existingEmail.save();
+
+        // Prevent the new document from being saved
+        return next(new Error('DUPLICATE_EMAIL'));
+      }
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Add static method for finding or creating email
+emailSchema.statics.findOrCreate = async function (emailData) {
+  try {
+    // First try to find existing email
+    let email = await this.findOne({
+      gmailMessageId: emailData.gmailMessageId,
+    });
+
+    if (email) {
+      // Update existing email with new data
+      Object.assign(email, emailData);
+      email.syncedAt = new Date();
+      await email.save();
+      return email;
+    }
+
+    // If no existing email found, create new one
+    email = new this(emailData);
+    await email.save();
+    return email;
+  } catch (error) {
+    if (error.message === 'DUPLICATE_EMAIL') {
+      // If we hit the duplicate error from pre-save hook,
+      // find and return the existing email
+      return await this.findOne({
+        gmailMessageId: emailData.gmailMessageId,
+      });
+    }
+    throw error;
+  }
+};
+
+// Add method to check if email exists
+emailSchema.statics.exists = async function (gmailMessageId) {
+  return await this.exists({ gmailMessageId });
+};
+
+// Add token refresh methods
+emailSchema.methods.refreshToken = async function () {
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    oauth2Client.setCredentials({
+      access_token: this.token.accessToken,
+      refresh_token: this.token.refreshToken,
+      expiry_date: this.token.expiryDate.getTime(),
+    });
+
+    const { tokens } = await oauth2Client.refreshToken(this.token.refreshToken);
+
+    // Update token information
+    this.token = {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || this.token.refreshToken, // Keep existing refresh token if not provided
+      expiryDate: new Date(tokens.expiry_date),
+      scope: tokens.scope,
+    };
+
+    await this.save();
+    return this.token;
+  } catch (error) {
+    throw new Error(`Token refresh failed: ${error.message}`);
+  }
+};
+
+emailSchema.methods.isTokenExpired = function () {
+  // Consider token expired if it's within 5 minutes of expiry
+  const fiveMinutes = 5 * 60 * 1000;
+  return Date.now() >= this.token.expiryDate.getTime() - fiveMinutes;
+};
+
+emailSchema.methods.getValidToken = async function () {
+  if (this.isTokenExpired()) {
+    await this.refreshToken();
+  }
+  return this.token;
+};
+
+// Add static method to handle token refresh for multiple emails
+emailSchema.statics.refreshTokens = async function (emails) {
+  const refreshPromises = emails.map((email) => email.refreshToken());
+  return Promise.all(refreshPromises);
+};
+
+// Add index for token expiry
+emailSchema.index({ 'token.expiryDate': 1 });
+
+// Add method to check token validity
+emailSchema.methods.validateToken = async function () {
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    oauth2Client.setCredentials({
+      access_token: this.token.accessToken,
+      refresh_token: this.token.refreshToken,
+      expiry_date: this.token.expiryDate.getTime(),
+    });
+
+    // Make a test API call to validate token
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    await gmail.users.getProfile({ userId: 'me' });
+
+    return true;
+  } catch (error) {
+    if (error.code === 401) {
+      // Token is invalid, try to refresh
+      try {
+        await this.refreshToken();
+        return true;
+      } catch (refreshError) {
+        return false;
+      }
+    }
+    return false;
+  }
+};
+
+// Add method to handle token errors
+emailSchema.methods.handleTokenError = async function (error) {
+  if (error.code === 401) {
+    try {
+      await this.refreshToken();
+      return true;
+    } catch (refreshError) {
+      // If refresh fails, mark the email as needing reauthorization
+      this.needsReauthorization = true;
+      await this.save();
+      return false;
+    }
+  }
+  return false;
+};
+
+// Add Base64 decoding utilities
+const base64Utils = {
+  /**
+   * Decode Base64 string, handling both standard and URL-safe encoding
+   * @param {string} base64String - The Base64 string to decode
+   * @returns {string} - The decoded string
+   */
+  decode: function (base64String) {
+    if (!base64String) return '';
+
+    try {
+      // Replace URL-safe characters with standard Base64 characters
+      const standardBase64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
+
+      // Add padding if needed
+      const paddedBase64 = standardBase64.padEnd(
+        standardBase64.length + ((4 - (standardBase64.length % 4)) % 4),
+        '=',
+      );
+
+      // Decode the string
+      return Buffer.from(paddedBase64, 'base64').toString('utf-8');
+    } catch (error) {
+      console.error('Base64 decoding error:', error);
+      return '';
+    }
+  },
+
+  /**
+   * Decode Base64 string to Buffer, handling both standard and URL-safe encoding
+   * @param {string} base64String - The Base64 string to decode
+   * @returns {Buffer} - The decoded buffer
+   */
+  decodeToBuffer: function (base64String) {
+    if (!base64String) return Buffer.from('');
+
+    try {
+      // Replace URL-safe characters with standard Base64 characters
+      const standardBase64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
+
+      // Add padding if needed
+      const paddedBase64 = standardBase64.padEnd(
+        standardBase64.length + ((4 - (standardBase64.length % 4)) % 4),
+        '=',
+      );
+
+      return Buffer.from(paddedBase64, 'base64');
+    } catch (error) {
+      console.error('Base64 decoding error:', error);
+      return Buffer.from('');
+    }
+  },
+};
+
+// Add method to extract and decode email parts
+emailSchema.methods.extractEmailParts = function (payload) {
+  const parts = [];
+
+  function processPart(part) {
+    if (part.parts) {
+      part.parts.forEach(processPart);
+    } else {
+      const content = part.body.data ? base64Utils.decode(part.body.data) : '';
+      const contentType = part.mimeType || 'text/plain';
+
+      parts.push({
+        content,
+        contentType,
+        filename: part.filename ? base64Utils.decode(part.filename) : null,
+      });
+    }
+  }
+
+  processPart(payload);
+  return parts;
+};
+
+// Add method to get email content in a specific format
+emailSchema.methods.getContent = function (format = 'html') {
+  const parts = this.extractEmailParts(this.payload);
+
+  if (format === 'html') {
+    return parts.find((p) => p.contentType === 'text/html')?.content || '';
+  }
+
+  if (format === 'text') {
+    return parts.find((p) => p.contentType === 'text/plain')?.content || '';
+  }
+
+  return '';
+};
+
+// Add method to get attachments
+emailSchema.methods.getAttachments = function () {
+  const parts = this.extractEmailParts(this.payload);
+  return parts.filter(
+    (p) => p.filename && p.contentType !== 'text/plain' && p.contentType !== 'text/html',
+  );
+};
+
+// Add watch management methods
+emailSchema.methods.setupWatch = async function () {
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    oauth2Client.setCredentials({
+      access_token: this.token.accessToken,
+      refresh_token: this.token.refreshToken,
+      expiry_date: this.token.expiryDate.getTime(),
+    });
+
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+    // First stop any existing watch
+    await this.stopWatch();
+
+    // Set up new watch
+    const watchResponse = await gmail.users.watch({
+      userId: 'me',
+      requestBody: {
+        labelIds: ['INBOX'],
+        topicName: `projects/${process.env.GOOGLE_PROJECT_ID}/topics/${process.env.GOOGLE_PUBSUB_TOPIC}`,
+      },
+    });
+
+    // Update watch information
+    this.watch = {
+      historyId: watchResponse.data.historyId,
+      expiration: new Date(watchResponse.data.expiration),
+      topicName: `projects/${process.env.GOOGLE_PROJECT_ID}/topics/${process.env.GOOGLE_PUBSUB_TOPIC}`,
+      lastRenewed: new Date(),
+      status: 'active',
+    };
+
+    await this.save();
+    return this.watch;
+  } catch (error) {
+    this.watch = {
+      ...this.watch,
+      status: 'failed',
+    };
+    await this.save();
+    throw new Error(`Watch setup failed: ${error.message}`);
+  }
+};
+
+emailSchema.methods.stopWatch = async function () {
+  try {
+    if (!this.watch) return;
+
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    oauth2Client.setCredentials({
+      access_token: this.token.accessToken,
+      refresh_token: this.token.refreshToken,
+      expiry_date: this.token.expiryDate.getTime(),
+    });
+
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    await gmail.users.stop({ userId: 'me' });
+
+    this.watch = {
+      ...this.watch,
+      status: 'expired',
+    };
+    await this.save();
+  } catch (error) {
+    console.error('Error stopping watch:', error);
+  }
+};
+
+emailSchema.methods.isWatchExpired = function () {
+  if (!this.watch) return true;
+
+  // Consider watch expired if it's within 5 minutes of expiration
+  const fiveMinutes = 5 * 60 * 1000;
+  return Date.now() >= this.watch.expiration.getTime() - fiveMinutes;
+};
+
+emailSchema.methods.ensureActiveWatch = async function () {
+  if (!this.watch || this.isWatchExpired()) {
+    await this.setupWatch();
+  }
+  return this.watch;
+};
+
+// Add static method to find emails with expired watches
+emailSchema.statics.findExpiredWatches = function () {
+  const fiveMinutes = 5 * 60 * 1000;
+  return this.find({
+    'watch.expiration': { $lt: new Date(Date.now() + fiveMinutes) },
+    'watch.status': 'active',
+  });
+};
+
+// Add static method to renew all expired watches
+emailSchema.statics.renewExpiredWatches = async function () {
+  const expiredWatches = await this.findExpiredWatches();
+  const renewalPromises = expiredWatches.map((email) => email.setupWatch());
+  return Promise.all(renewalPromises);
+};
+
+// Add index for watch expiration
+emailSchema.index({ 'watch.expiration': 1 });
+
+// Add email parsing utilities
+const emailParser = {
+  /**
+   * Recursively extract content from email parts
+   * @param {Object} part - The email part to process
+   * @param {Object} options - Processing options
+   * @returns {Object} - Extracted content
+   */
+  extractContent: async function (gmail, messageId, part, options = {}) {
+    const result = {
+      text: '',
+      html: '',
+      attachments: [],
+      inlineImages: [],
+      errors: [],
+    };
+
+    try {
+      if (!part) {
+        throw new Error('Invalid email part');
+      }
+
+      // Handle multipart messages
+      if (part.mimeType && part.mimeType.startsWith('multipart/')) {
+        if (!part.parts || !Array.isArray(part.parts)) {
+          throw new Error(`Invalid multipart structure: ${part.mimeType}`);
+        }
+
+        // Process each subpart
+        for (const subpart of part.parts) {
+          const subpartResult = await this.extractContent(gmail, messageId, subpart, options);
+
+          // Merge results
+          result.text = result.text || subpartResult.text;
+          result.html = result.html || subpartResult.html;
+          result.attachments.push(...subpartResult.attachments);
+          result.inlineImages.push(...subpartResult.inlineImages);
+          result.errors.push(...subpartResult.errors);
+        }
+
+        return result;
+      }
+
+      // Handle single part messages
+      const content = part.body?.data ? base64Utils.decode(part.body.data) : '';
+      const contentType = part.mimeType || 'text/plain';
+      const contentId = part.headers?.find((h) => h.name.toLowerCase() === 'content-id')?.value;
+      const contentDisposition =
+        part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
+      const isAttachment = contentDisposition.toLowerCase().includes('attachment');
+      const isInline = contentDisposition.toLowerCase().includes('inline');
+
+      // Process based on content type
+      if (contentType === 'text/plain') {
+        result.text = content;
+      } else if (contentType === 'text/html') {
+        result.html = content;
+      } else if (isAttachment || isInline) {
+        try {
+          const attachment = await attachmentHandler.processAttachment(gmail, messageId, part);
+
+          if (isInline && contentId) {
+            result.inlineImages.push(attachment);
+          } else {
+            result.attachments.push(attachment);
+          }
+        } catch (error) {
+          result.errors.push({
+            part: part.mimeType,
+            error: `Attachment processing failed: ${error.message}`,
+          });
+        }
+      }
+
+      return result;
+    } catch (error) {
+      result.errors.push({
+        part: part.mimeType,
+        error: error.message,
+      });
+      return result;
+    }
+  },
+
+  /**
+   * Extract filename from email part
+   * @param {Object} part - The email part
+   * @returns {string} - The filename
+   */
+  extractFilename: function (part) {
+    try {
+      // Try to get filename from Content-Disposition header
+      const contentDisposition = part.headers?.find(
+        (h) => h.name.toLowerCase() === 'content-disposition',
+      )?.value;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+        if (filenameMatch) {
+          return base64Utils.decode(filenameMatch[1]);
+        }
+      }
+
+      // Try to get filename from Content-Type header
+      const contentType = part.headers?.find((h) => h.name.toLowerCase() === 'content-type')?.value;
+      if (contentType) {
+        const nameMatch = contentType.match(/name="([^"]+)"/);
+        if (nameMatch) {
+          return base64Utils.decode(nameMatch[1]);
+        }
+      }
+
+      // Fallback to part filename
+      return part.filename ? base64Utils.decode(part.filename) : 'unnamed-file';
+    } catch (error) {
+      return 'unnamed-file';
+    }
+  },
+
+  /**
+   * Parse email headers
+   * @param {Array} headers - The email headers
+   * @returns {Object} - Parsed headers
+   */
+  parseHeaders: function (headers) {
+    const result = {
+      from: { name: '', email: '' },
+      to: [],
+      cc: [],
+      bcc: [],
+      subject: '',
+      date: null,
+      messageId: '',
+      inReplyTo: '',
+      references: [],
+      errors: [],
+    };
+
+    try {
+      if (!Array.isArray(headers)) {
+        throw new Error('Invalid headers array');
+      }
+
+      headers.forEach((header) => {
+        try {
+          const name = header.name.toLowerCase();
+          const value = header.value;
+
+          switch (name) {
+            case 'from':
+              result.from = this.parseEmailAddress(value);
+              break;
+            case 'to':
+              result.to = this.parseEmailAddresses(value);
+              break;
+            case 'cc':
+              result.cc = this.parseEmailAddresses(value);
+              break;
+            case 'bcc':
+              result.bcc = this.parseEmailAddresses(value);
+              break;
+            case 'subject':
+              result.subject = this.decodeHeader(value);
+              break;
+            case 'date':
+              result.date = dateParser.parseDate(value);
+              break;
+            case 'message-id':
+              result.messageId = value;
+              break;
+            case 'in-reply-to':
+              result.inReplyTo = value;
+              break;
+            case 'references':
+              result.references = value.split(/\s+/).filter(Boolean);
+              break;
+          }
+        } catch (error) {
+          result.errors.push({
+            header: header.name,
+            error: error.message,
+          });
+        }
+      });
+
+      return result;
+    } catch (error) {
+      result.errors.push({
+        error: `Header parsing failed: ${error.message}`,
+      });
+      return result;
+    }
+  },
+
+  /**
+   * Parse email address string
+   * @param {string} address - The email address string
+   * @returns {Object} - Parsed email address
+   */
+  parseEmailAddress: function (address) {
+    try {
+      const match = address.match(/^(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)$/);
+      return {
+        name: match ? this.decodeHeader(match[1] || '') : '',
+        email: match ? match[2].toLowerCase() : address.toLowerCase(),
+      };
+    } catch (error) {
+      return { name: '', email: address.toLowerCase() };
+    }
+  },
+
+  /**
+   * Parse multiple email addresses
+   * @param {string} addresses - The email addresses string
+   * @returns {Array} - Array of parsed email addresses
+   */
+  parseEmailAddresses: function (addresses) {
+    try {
+      return addresses.split(',').map((addr) => this.parseEmailAddress(addr.trim()));
+    } catch (error) {
+      return [];
+    }
+  },
+
+  /**
+   * Decode email header
+   * @param {string} header - The header value
+   * @returns {string} - Decoded header
+   */
+  decodeHeader: function (header) {
+    try {
+      // Handle quoted-printable encoding
+      if (header.includes('=?') && header.includes('?=')) {
+        return header.replace(
+          /=\?([^?]+)\?([BQ])\?([^?]*)\?=/gi,
+          (match, charset, encoding, text) => {
+            if (encoding.toUpperCase() === 'B') {
+              return Buffer.from(text, 'base64').toString(charset);
+            } else if (encoding.toUpperCase() === 'Q') {
+              return text.replace(/=([0-9A-F]{2})/gi, (_, hex) =>
+                String.fromCharCode(parseInt(hex, 16)),
+              );
+            }
+            return match;
+          },
+        );
+      }
+      return header;
+    } catch (error) {
+      return header;
+    }
+  },
+};
+
+// Add date parsing utilities
+const dateParser = {
+  /**
+   * Parse email date with fallbacks
+   * @param {string} dateStr - The date string to parse
+   * @param {Object} message - The full Gmail message object
+   * @returns {Date} - Parsed date or fallback
+   */
+  parseDate: function (dateStr, message) {
+    try {
+      // Try parsing the date string
+      if (dateStr) {
+        // Handle common email date formats
+        const parsedDate = this.parseEmailDate(dateStr);
+        if (parsedDate && !isNaN(parsedDate.getTime())) {
+          return parsedDate;
+        }
+      }
+
+      // Fallback 1: Use Gmail's internalDate
+      if (message?.internalDate) {
+        const internalDate = new Date(parseInt(message.internalDate));
+        if (!isNaN(internalDate.getTime())) {
+          return internalDate;
+        }
+      }
+
+      // Fallback 2: Use message received time
+      if (message?.payload?.headers) {
+        const receivedHeader = message.payload.headers.find(
+          (h) => h.name.toLowerCase() === 'received',
+        );
+        if (receivedHeader) {
+          const receivedDate = this.parseReceivedHeader(receivedHeader.value);
+          if (receivedDate && !isNaN(receivedDate.getTime())) {
+            return receivedDate;
+          }
+        }
+      }
+
+      // Fallback 3: Use current time
+      return new Date();
+    } catch (error) {
+      console.error('Date parsing error:', error);
+      return new Date();
+    }
+  },
+
+  /**
+   * Parse email date string
+   * @param {string} dateStr - The date string to parse
+   * @returns {Date} - Parsed date
+   */
+  parseEmailDate: function (dateStr) {
+    try {
+      // Remove any comments in parentheses
+      dateStr = dateStr.replace(/\([^)]*\)/g, '').trim();
+
+      // Handle common email date formats
+      const formats = [
+        // RFC 2822 format
+        /^(?:\w+,\s+)?(\d{1,2})\s+(\w+)\s+(\d{4})\s+(\d{2}):(\d{2}):(\d{2})\s+(?:([+-]\d{4})|(\w+))$/,
+        // RFC 822 format
+        /^(?:\w+,\s+)?(\d{1,2})\s+(\w+)\s+(\d{2})\s+(\d{2}):(\d{2}):(\d{2})\s+(?:([+-]\d{4})|(\w+))$/,
+        // ISO format
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/,
+        // Simple format
+        /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/,
+      ];
+
+      for (const format of formats) {
+        const match = dateStr.match(format);
+        if (match) {
+          if (format === formats[0] || format === formats[1]) {
+            // RFC 2822/822 format
+            const [_, day, month, year, hour, minute, second, tzOffset, tzName] = match;
+            const monthIndex = this.getMonthIndex(month);
+            if (monthIndex === -1) continue;
+
+            const date = new Date(
+              parseInt(year),
+              monthIndex,
+              parseInt(day),
+              parseInt(hour),
+              parseInt(minute),
+              parseInt(second),
+            );
+
+            // Apply timezone offset if present
+            if (tzOffset) {
+              const offset = parseInt(tzOffset);
+              date.setMinutes(date.getMinutes() - offset);
+            } else if (tzName) {
+              // Handle timezone names (simplified)
+              const offset = this.getTimezoneOffset(tzName);
+              if (offset !== null) {
+                date.setMinutes(date.getMinutes() - offset);
+              }
+            }
+
+            return date;
+          } else if (format === formats[2]) {
+            // ISO format
+            return new Date(dateStr);
+          } else if (format === formats[3]) {
+            // Simple format
+            const [_, year, month, day, hour, minute, second] = match;
+            return new Date(
+              parseInt(year),
+              parseInt(month) - 1,
+              parseInt(day),
+              parseInt(hour),
+              parseInt(minute),
+              parseInt(second),
+            );
+          }
+        }
+      }
+
+      // Try native Date parsing as last resort
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Email date parsing error:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Parse Received header for date
+   * @param {string} receivedHeader - The Received header value
+   * @returns {Date} - Parsed date
+   */
+  parseReceivedHeader: function (receivedHeader) {
+    try {
+      // Extract the date part from the Received header
+      const dateMatch = receivedHeader.match(/;\s*([^;]+)$/);
+      if (dateMatch) {
+        return this.parseEmailDate(dateMatch[1].trim());
+      }
+      return null;
+    } catch (error) {
+      console.error('Received header parsing error:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Get month index from month name
+   * @param {string} month - Month name
+   * @returns {number} - Month index (0-11)
+   */
+  getMonthIndex: function (month) {
+    const months = {
+      jan: 0,
+      feb: 1,
+      mar: 2,
+      apr: 3,
+      may: 4,
+      jun: 5,
+      jul: 6,
+      aug: 7,
+      sep: 8,
+      oct: 9,
+      nov: 10,
+      dec: 11,
+    };
+    return months[month.toLowerCase().substring(0, 3)] ?? -1;
+  },
+
+  /**
+   * Get timezone offset from timezone name
+   * @param {string} tzName - Timezone name
+   * @returns {number|null} - Timezone offset in minutes
+   */
+  getTimezoneOffset: function (tzName) {
+    // Common timezone abbreviations and their offsets
+    const timezones = {
+      GMT: 0,
+      UTC: 0,
+      EST: -300,
+      EDT: -240,
+      CST: -360,
+      CDT: -300,
+      MST: -420,
+      MDT: -360,
+      PST: -480,
+      PDT: -420,
+      AEST: 600,
+      AEDT: 660,
+      NZST: 720,
+      NZDT: 780,
+    };
+    return timezones[tzName.toUpperCase()] ?? null;
+  },
+};
+
+// Add attachment handling utilities
+const attachmentHandler = {
+  /**
+   * Fetch attachment data from Gmail API
+   * @param {Object} gmail - Gmail API client
+   * @param {string} messageId - Gmail message ID
+   * @param {string} attachmentId - Gmail attachment ID
+   * @returns {Promise<Object>} - Attachment data
+   */
+  fetchAttachment: async function (gmail, messageId, attachmentId) {
+    try {
+      const response = await gmail.users.messages.attachments.get({
+        userId: 'me',
+        messageId: messageId,
+        id: attachmentId,
+      });
+
+      return {
+        data: response.data.data,
+        size: response.data.size,
+      };
+    } catch (error) {
+      console.error('Error fetching attachment:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Process attachment part
+   * @param {Object} gmail - Gmail API client
+   * @param {string} messageId - Gmail message ID
+   * @param {Object} part - Email part containing attachment
+   * @returns {Promise<Object>} - Processed attachment
+   */
+  processAttachment: async function (gmail, messageId, part) {
+    try {
+      // Get attachment data if not already present
+      let attachmentData = part.body.data;
+      if (!attachmentData && part.body.attachmentId) {
+        const fetchedData = await this.fetchAttachment(gmail, messageId, part.body.attachmentId);
+        attachmentData = fetchedData.data;
+      }
+
+      return {
+        filename: emailParser.extractFilename(part),
+        mimeType: part.mimeType,
+        size: part.body.size,
+        attachmentId: part.body.attachmentId,
+        data: attachmentData,
+        isInline: part.headers?.some(
+          (h) =>
+            h.name.toLowerCase() === 'content-disposition' &&
+            h.value.toLowerCase().includes('inline'),
+        ),
+      };
+    } catch (error) {
+      console.error('Error processing attachment:', error);
+      throw error;
+    }
+  },
+};
+
+// Update email parser to handle attachments
+emailParser.extractContent = async function (gmail, messageId, part, options = {}) {
+  const result = {
+    text: '',
+    html: '',
+    attachments: [],
+    inlineImages: [],
+    errors: [],
+  };
+
+  try {
+    if (!part) {
+      throw new Error('Invalid email part');
+    }
+
+    // Handle multipart messages
+    if (part.mimeType && part.mimeType.startsWith('multipart/')) {
+      if (!part.parts || !Array.isArray(part.parts)) {
+        throw new Error(`Invalid multipart structure: ${part.mimeType}`);
+      }
+
+      // Process each subpart
+      for (const subpart of part.parts) {
+        const subpartResult = await this.extractContent(gmail, messageId, subpart, options);
+
+        // Merge results
+        result.text = result.text || subpartResult.text;
+        result.html = result.html || subpartResult.html;
+        result.attachments.push(...subpartResult.attachments);
+        result.inlineImages.push(...subpartResult.inlineImages);
+        result.errors.push(...subpartResult.errors);
+      }
+
+      return result;
+    }
+
+    // Handle single part messages
+    const content = part.body?.data ? base64Utils.decode(part.body.data) : '';
+    const contentType = part.mimeType || 'text/plain';
+    const contentId = part.headers?.find((h) => h.name.toLowerCase() === 'content-id')?.value;
+    const contentDisposition =
+      part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
+    const isAttachment = contentDisposition.toLowerCase().includes('attachment');
+    const isInline = contentDisposition.toLowerCase().includes('inline');
+
+    // Process based on content type
+    if (contentType === 'text/plain') {
+      result.text = content;
+    } else if (contentType === 'text/html') {
+      result.html = content;
+    } else if (isAttachment || isInline) {
+      try {
+        const attachment = await attachmentHandler.processAttachment(gmail, messageId, part);
+
+        if (isInline && contentId) {
+          result.inlineImages.push(attachment);
+        } else {
+          result.attachments.push(attachment);
+        }
+      } catch (error) {
+        result.errors.push({
+          part: part.mimeType,
+          error: `Attachment processing failed: ${error.message}`,
+        });
+      }
+    }
+
+    return result;
+  } catch (error) {
+    result.errors.push({
+      part: part.mimeType,
+      error: error.message,
+    });
+    return result;
+  }
+};
+
+// Update email schema to handle attachments
+emailSchema.methods.parseEmail = async function (message, gmail) {
+  try {
+    if (!message || !message.payload) {
+      throw new Error('Invalid message format');
+    }
+
+    // Parse headers
+    const headers = emailParser.parseHeaders(message.payload.headers);
+
+    // Extract content (now async)
+    const content = await emailParser.extractContent(gmail, message.id, message.payload);
+
+    // Update email document
+    this.from = headers.from;
+    this.to = headers.to;
+    this.cc = headers.cc;
+    this.bcc = headers.bcc;
+    this.subject = headers.subject;
+    this.sentAt = dateParser.parseDate(headers.date, message);
+    this.threadId = message.threadId;
+    this.gmailMessageId = message.id;
+    this.body = {
+      text: content.text,
+      html: content.html,
+    };
+
+    // Process attachments
+    this.attachments = await Promise.all(
+      content.attachments.map(async (att) => ({
+        filename: att.filename,
+        mimeType: att.mimeType,
+        size: att.size,
+        attachmentId: att.attachmentId,
+        data: att.data,
+        isInline: att.isInline,
+      })),
+    );
+
+    // Store inline images separately
+    this.inlineImages = content.inlineImages.map((img) => ({
+      filename: img.filename,
+      mimeType: img.mimeType,
+      size: img.size,
+      contentId: img.attachmentId,
+      data: img.data,
+    }));
+
+    // Store parsing errors if any
+    if (content.errors.length > 0 || headers.errors.length > 0) {
+      this.parsingErrors = [...content.errors, ...headers.errors];
+    }
+
+    return this;
+  } catch (error) {
+    this.parsingErrors = [
+      {
+        error: `Email parsing failed: ${error.message}`,
+      },
+    ];
+    throw error;
+  }
+};
+
+// Add method to fetch attachment data on demand
+emailSchema.methods.getAttachmentData = async function (attachmentId, gmail) {
+  try {
+    const attachment = this.attachments.find((a) => a.attachmentId === attachmentId);
+    if (!attachment) {
+      throw new Error('Attachment not found');
+    }
+
+    // If we already have the data, return it
+    if (attachment.data) {
+      return attachment.data;
+    }
+
+    // Otherwise fetch it from Gmail
+    const response = await gmail.users.messages.attachments.get({
+      userId: 'me',
+      messageId: this.gmailMessageId,
+      id: attachmentId,
+    });
+
+    // Update the attachment data
+    attachment.data = response.data.data;
+    await this.save();
+
+    return attachment.data;
+  } catch (error) {
+    console.error('Error fetching attachment data:', error);
+    throw error;
+  }
+};
 
 const Email = mongoose.model('Email', emailSchema);
 
