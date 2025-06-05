@@ -193,6 +193,13 @@ class GmailListenerService {
    * Handle push notification from Gmail
    */
   async handlePushNotification(integration, historyId) {
+    console.info('[Gmail Push] Starting push notification handling:', {
+      email: integration.email,
+      workspaceId: integration.workspace._id,
+      historyId,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
       // Create OAuth client
       const oauth2Client = new google.auth.OAuth2(
@@ -201,6 +208,8 @@ class GmailListenerService {
         process.env.GOOGLE_REDIRECT_URI,
       );
 
+      console.log('[Gmail Push] OAuth client created');
+
       // Set credentials
       oauth2Client.setCredentials({
         access_token: integration.accessToken,
@@ -208,9 +217,12 @@ class GmailListenerService {
         expiry_date: integration.tokenExpiry?.getTime(),
       });
 
+      console.log('[Gmail Push] OAuth credentials set');
+
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
       // List changes since last history ID
+      console.log('[Gmail Push] Fetching history since:', historyId);
       const history = await gmail.users.history.list({
         userId: 'me',
         startHistoryId: historyId,
@@ -219,18 +231,30 @@ class GmailListenerService {
 
       // Update history ID
       if (history.data.historyId) {
+        console.log('[Gmail Push] Updating history ID:', {
+          oldHistoryId: historyId,
+          newHistoryId: history.data.historyId,
+        });
         integration.historyId = history.data.historyId;
         await integration.save();
       }
 
       // No changes
       if (!history.data.history || !history.data.history.length) {
+        console.log('[Gmail Push] No new changes found');
         return;
       }
+
+      console.log('[Gmail Push] Processing history records:', {
+        recordCount: history.data.history.length,
+      });
 
       // Process each history record
       for (const record of history.data.history) {
         if (record.messagesAdded) {
+          console.log('[Gmail Push] Processing messages:', {
+            messageCount: record.messagesAdded.length,
+          });
           for (const messageAdded of record.messagesAdded) {
             await this.processEmail(gmail, integration, messageAdded.message.id);
           }
@@ -240,9 +264,26 @@ class GmailListenerService {
       // Update last synced timestamp
       integration.lastSynced = new Date();
       await integration.save();
+      console.info('[Gmail Push] Successfully completed push notification handling:', {
+        email: integration.email,
+        workspaceId: integration.workspace._id,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) {
+      console.error('[Gmail Push] Error handling push notification:', {
+        error: error.message,
+        stack: error.stack,
+        email: integration.email,
+        workspaceId: integration.workspace._id,
+        historyId,
+      });
+
       // If token expired or invalid, deactivate the integration
       if (error.code === 401) {
+        console.warn('[Gmail Push] Token expired or invalid, deactivating integration:', {
+          email: integration.email,
+          workspaceId: integration.workspace._id,
+        });
         integration.isActive = false;
         await integration.save();
       }
