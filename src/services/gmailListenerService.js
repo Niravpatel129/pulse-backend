@@ -642,6 +642,7 @@ class GmailListenerService {
             lastMessageDate: sentAt,
             lastActivity: sentAt,
             participantHash,
+            stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
             latestMessage: {
               content: message.data.snippet || this.generateMessagePreview(body),
               sender: from.name || from.email,
