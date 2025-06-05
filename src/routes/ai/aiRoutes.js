@@ -11,6 +11,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { extractWorkspace } from '../../middleware/workspace.js';
 import AIConversation from '../../models/AIConversation.js';
 import { firebaseStorage } from '../../utils/firebase.js';
+import { registerShutdownHandler } from '../../utils/shutdownHandler.js';
 import { clearRetrieverCache, clearUserCache, createQAChain } from './chain.js';
 import documentRoutes from './documentRoutes.js';
 import { processSmartResponse } from './smartResponse.js';
@@ -243,6 +244,16 @@ function estimateQueryCost(query, response) {
           console.error(`Error refreshing vector store for job ${job.id}:`, error);
           throw error;
         }
+      }
+    });
+
+    // Register shutdown handler
+    registerShutdownHandler(async () => {
+      console.log('[AI Routes] Closing Redis connections...');
+      if (isRedisAvailable) {
+        await worker?.close();
+        await aiQueue?.close();
+        await redisClient?.disconnect();
       }
     });
   } catch (err) {
@@ -1179,20 +1190,6 @@ router.post('/smart-response', imageUpload.array('images', 5), async (req, res) 
       error: err.message,
       stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
     });
-  }
-});
-
-// Clean up when shutting down
-process.on('SIGTERM', async () => {
-  if (isRedisAvailable) {
-    try {
-      await worker?.close();
-      await aiQueue?.close();
-      await redisClient?.disconnect();
-      console.log('Worker and queue closed');
-    } catch (err) {
-      console.error('Error during shutdown:', err);
-    }
   }
 });
 

@@ -5,7 +5,6 @@ import multer from 'multer';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/api-docs.js';
 import connectDB from './src/config/db.js';
-import passport from './src/config/passport.js';
 import { initializeGmailListener } from './src/init/gmailListener.js';
 import { initializeProjectInactivityChecker } from './src/init/projectInactivityChecker.js';
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
@@ -36,29 +35,22 @@ import integrationRoutes from './src/routes/integrationRoutes.js';
 import invoice2Routes from './src/routes/invoice2Routes.js';
 import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import invoiceTaxRateRoutes from './src/routes/invoiceTaxRateRoutes.js';
-import kanbanRoutes from './src/routes/kanbanRoutes.js';
 import leadFormRoutes from './src/routes/leadFormRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
-import moduleEmailRoutes from './src/routes/moduleEmail.js';
-import moduleRoutes from './src/routes/moduleRoutes.js';
-import moduleTemplatesRoutes from './src/routes/moduleTemplatesRoutes.js';
-import newAiRoutes from './src/routes/new-ai/newAiRoutes.js';
-import noteRoutes from './src/routes/noteRoutes.js';
-import participantRoutes from './src/routes/participantRoutes.js';
 import paymentRoutes from './src/routes/paymentRoutes.js';
-import pipelineRoutes from './src/routes/pipelineRoutes.js';
 import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
 import projectInvoiceRoutes from './src/routes/projectInvoiceRoutes.js';
-import projectModuleRoutes from './src/routes/projectModuleRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import stripeRoutes from './src/routes/stripeRoutes.js';
 import tablesRoutes from './src/routes/tablesRoutes.js';
-import userRoutes from './src/routes/userRoutes.js';
-import workspaceRoutes from './src/routes/workspaceRoutes.js';
 import AppError from './src/utils/AppError.js';
+import { registerShutdownHandler } from './src/utils/shutdownHandler.js';
 
-// Load env vars
+// Initialize environment variables
 dotenv.config();
+
+// Create Express app
+const app = express();
 
 // Connect to database
 connectDB();
@@ -69,11 +61,12 @@ initializeGmailListener();
 // Initialize project inactivity checker
 initializeProjectInactivityChecker();
 
-const app = express();
-
 // Body parser with increased limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Request logging
+app.use(requestLogger);
 
 // Configure multer for handling multipart/form-data
 const upload = multer({ dest: 'uploads/' });
@@ -117,48 +110,26 @@ app.use(
   }),
 );
 
-// Passport middleware
-app.use(passport.initialize());
+// Routes prefix
+const routesPrefix = '/api/v1';
 
-// Request logging middleware
-app.use(requestLogger);
-
-const routesPrefix = '/api';
-
-// Authentication and user management
+// Authentication routes
 app.use(`${routesPrefix}/auth`, authRoutes);
-app.use(`${routesPrefix}/users`, userRoutes);
-app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
-
-// AI routes
-app.use(`${routesPrefix}/ai`, aiRoutes2);
-app.use(`${routesPrefix}/new-ai`, newAiRoutes);
-app.use(`${routesPrefix}/chat-settings`, chatSettingsRoutes);
-app.use(`${routesPrefix}/clients`, clientRoutes);
-app.use(`${routesPrefix}/agents`, agentRoutes);
 
 // Project management
-// Apply inactivity resolver middleware to project routes
-app.use(`${routesPrefix}/projects`, resolveInactivityAlerts, projectRoutes);
-app.use(`${routesPrefix}/notes`, resolveInactivityAlerts, noteRoutes);
-app.use(`${routesPrefix}/participants`, participantRoutes);
-app.use(`${routesPrefix}/activities`, activityRoutes);
-app.use(`${routesPrefix}/pipeline`, pipelineRoutes);
-app.use(`${routesPrefix}/alerts`, alertRoutes);
+app.use(`${routesPrefix}/projects`, projectRoutes);
 app.use(`${routesPrefix}/deliverables`, deliverableRoutes);
-
-app.use(`${routesPrefix}/kanban`, kanbanRoutes);
-app.use(`${routesPrefix}/ai-settings`, aiSettingsRoutes);
-
-// Modules and templates
-app.use(`${routesPrefix}/modules`, moduleRoutes);
-app.use(`${routesPrefix}/module-templates`, moduleTemplatesRoutes);
-app.use(`${routesPrefix}/project-modules`, resolveInactivityAlerts, projectModuleRoutes);
-app.use(`${routesPrefix}/module-emails`, moduleEmailRoutes);
 app.use(`${routesPrefix}/elements`, elementRoutes);
-
-// Approvals
+app.use(`${routesPrefix}/clients`, clientRoutes);
 app.use(`${routesPrefix}/approvals`, approvalRoutes);
+app.use(`${routesPrefix}/alerts`, alertRoutes);
+app.use(`${routesPrefix}/activities`, activityRoutes);
+
+// AI and agents
+app.use(`${routesPrefix}/ai`, aiRoutes2);
+app.use(`${routesPrefix}/agents`, agentRoutes);
+app.use(`${routesPrefix}/ai-settings`, aiSettingsRoutes);
+app.use(`${routesPrefix}/chat-settings`, chatSettingsRoutes);
 
 // Calendar and scheduling
 app.use(`${routesPrefix}/meetings`, meetingRoutes);
@@ -181,7 +152,7 @@ app.use(`${routesPrefix}/integrations`, integrationRoutes);
 app.use(`${routesPrefix}/gmail`, gmailRoutes);
 app.use(`${routesPrefix}/stripe`, stripeRoutes);
 
-// project invoices
+// Project invoices
 app.use(`${routesPrefix}/project-invoices`, projectInvoiceRoutes);
 
 // Invoices
@@ -227,6 +198,15 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+// Create HTTP server
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});
+
+// Register server shutdown handler
+registerShutdownHandler(async () => {
+  console.log('[Shutdown] Closing HTTP server...');
+  await new Promise((resolve) => {
+    server.close(resolve);
+  });
 });

@@ -8,6 +8,7 @@ import Email from '../models/Email.js';
 import EmailThread from '../models/Email/EmailThreadModel.js';
 import GmailIntegration from '../models/GmailIntegration.js';
 import { fileUtils, firebaseStorage } from '../utils/firebase.js';
+import { registerShutdownHandler } from '../utils/shutdownHandler.js';
 
 // Initialize DOMPurify
 const window = new JSDOM('').window;
@@ -43,6 +44,18 @@ class GmailListenerService {
   constructor() {
     this.serverId = process.env.SERVER_ID || `server-${Date.now()}`; // Unique server identifier
     this.isInitialized = false;
+    this.setupShutdownHandlers();
+  }
+
+  /**
+   * Set up shutdown handlers for graceful termination
+   */
+  setupShutdownHandlers() {
+    // Register with the centralized shutdown handler
+    registerShutdownHandler(async () => {
+      console.info('[Gmail] Initiating graceful shutdown...');
+      await this.stop();
+    });
   }
 
   /**
@@ -910,6 +923,9 @@ class GmailListenerService {
           });
         }
       }
+
+      // Mark service as not initialized
+      this.isInitialized = false;
 
       console.info('[Gmail] Watch service stopped on server:', this.serverId);
     } catch (error) {

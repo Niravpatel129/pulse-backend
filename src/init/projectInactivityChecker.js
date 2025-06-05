@@ -4,6 +4,7 @@ import Note from '../models/Note.js';
 import Project from '../models/Project.js';
 import ProjectAlert from '../models/ProjectAlert.js';
 import { inactivityAlert, reminderAlert } from '../services/emailTemplates/index.js';
+import { registerShutdownHandler } from '../utils/shutdownHandler.js';
 
 // Load env vars
 dotenv.config();
@@ -18,6 +19,8 @@ const CONFIG = {
   // Test project ID that should always be treated as inactive
   testInactiveProjectId: '680a0a86a3558269e39b6835',
 };
+
+let cronJobs = [];
 
 /**
  * Check for inactive projects and create alerts
@@ -384,13 +387,22 @@ export function initializeProjectInactivityChecker() {
   console.log('Initializing project inactivity checker...');
 
   // Schedule to run every day at midnight
-  cron.schedule('0 0 * * *', () => {
+  const dailyJob = cron.schedule('0 0 * * *', () => {
     console.log('Running scheduled project inactivity check');
   });
 
   // Run duplicate alert cleanup weekly (Sunday at 1 AM)
-  cron.schedule('0 1 * * 0', () => {
+  const weeklyJob = cron.schedule('0 1 * * 0', () => {
     console.log('Running scheduled duplicate alert cleanup');
+  });
+
+  // Store jobs for cleanup
+  cronJobs = [dailyJob, weeklyJob];
+
+  // Register shutdown handler
+  registerShutdownHandler(async () => {
+    console.log('[Project Inactivity] Stopping cron jobs...');
+    cronJobs.forEach((job) => job.stop());
   });
 
   console.log('Project inactivity checker initialized successfully');
