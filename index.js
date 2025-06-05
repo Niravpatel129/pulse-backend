@@ -111,7 +111,7 @@ app.use(
 );
 
 // Routes prefix
-const routesPrefix = '/api/v1';
+const routesPrefix = '/api';
 
 // Authentication routes
 app.use(`${routesPrefix}/auth`, authRoutes);
