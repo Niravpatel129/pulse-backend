@@ -1312,7 +1312,7 @@ class GmailListenerService {
 
   /**
    * Check if an email is empty
-   * @param {string} body - The email body content
+   * @param {string|object} body - The email body content (can be string or object with text/html)
    * @param {string} snippet - The email snippet from Gmail
    * @returns {boolean} - Whether the email is considered empty
    */
@@ -1333,15 +1333,37 @@ class GmailListenerService {
       '\t',
     ];
 
-    // Clean the body content
-    const cleanBody = body
-      ?.replace(/<[^>]*>/g, '') // Remove HTML tags
+    // Handle both string and object body formats
+    let textContent = '';
+    let htmlContent = '';
+
+    if (typeof body === 'object' && body !== null) {
+      textContent = body.text || '';
+      htmlContent = body.html || '';
+    } else {
+      textContent = body || '';
+      htmlContent = body || '';
+    }
+
+    // Clean the text content
+    const cleanText = textContent
+      .replace(/\s+/g, ' ') // Replace multiple spaces/newlines with single space
+      .trim();
+
+    // Clean the HTML content
+    const cleanHtml = htmlContent
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
       .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
       .replace(/\s+/g, ' ') // Replace multiple spaces with single space
       .trim();
 
-    // Check if body matches any empty patterns
-    if (emptyPatterns.includes(body) || emptyPatterns.includes(cleanBody)) {
+    // Check if either text or HTML content matches empty patterns
+    if (
+      emptyPatterns.includes(textContent) ||
+      emptyPatterns.includes(cleanText) ||
+      emptyPatterns.includes(htmlContent) ||
+      emptyPatterns.includes(cleanHtml)
+    ) {
       return true;
     }
 
