@@ -476,6 +476,10 @@ const emailSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isSpam: {
+      type: Boolean,
+      default: false,
+    },
     syncedAt: {
       type: Date,
       default: Date.now,

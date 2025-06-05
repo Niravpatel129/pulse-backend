@@ -509,6 +509,7 @@ class GmailListenerService {
               internalDate: message.data.internalDate,
               snippet: message.data.snippet || '',
               userId: integration.workspace._id.toString(),
+              isSpam: message.data.labelIds?.includes('SPAM') || false,
             },
           },
           {
