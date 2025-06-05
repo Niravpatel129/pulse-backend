@@ -44,6 +44,117 @@ class GmailListenerService {
     this.activeListeners = new Map(); // Map of workspaceId -> polling interval
     this.pollingInterval = 60000; // 1 minute by default
     this.historyIds = new Map(); // Track last history ID per email to avoid reprocessing
+    this.serverId = process.env.SERVER_ID || `server-${Date.now()}`; // Unique server identifier
+    this.isInitialized = false;
+  }
+
+  /**
+   * Initialize the service with MongoDB connection
+   */
+  async initialize() {
+    if (this.isInitialized) return;
+
+    try {
+      // Wait for MongoDB connection to be ready
+      if (mongoose.connection.readyState !== 1) {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('MongoDB connection timeout'));
+          }, 30000); // 30 second timeout
+
+          mongoose.connection.once('connected', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+
+          mongoose.connection.once('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+        });
+      }
+
+      // Double check connection is ready
+      if (mongoose.connection.readyState !== 1) {
+        throw new Error('MongoDB connection not ready');
+      }
+
+      // Create indexes for the locks collection
+      const db = mongoose.connection.db;
+      if (!db) {
+        throw new Error('MongoDB database not available');
+      }
+
+      await db.collection('locks').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+      await db.collection('locks').createIndex({ serverId: 1 });
+
+      this.isInitialized = true;
+      console.info('[Gmail] Service initialized successfully');
+    } catch (error) {
+      console.error('[Gmail] Error initializing service:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Acquire a lock for processing a specific email
+   */
+  async acquireLock(messageId, workspaceId, ttl = 300) {
+    // 5 minutes TTL
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    try {
+      const db = mongoose.connection.db;
+      if (!db) {
+        throw new Error('MongoDB database not available');
+      }
+
+      const lockKey = `email-lock:${workspaceId}:${messageId}`;
+      const result = await db.collection('locks').updateOne(
+        {
+          _id: lockKey,
+          expiresAt: { $lt: new Date() }, // Only acquire if expired or doesn't exist
+        },
+        {
+          $set: {
+            serverId: this.serverId,
+            expiresAt: new Date(Date.now() + ttl * 1000),
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
+      return result.modifiedCount > 0 || result.upsertedCount > 0;
+    } catch (error) {
+      console.error('[Gmail] Error acquiring lock:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Release a lock for a specific email
+   */
+  async releaseLock(messageId, workspaceId) {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    try {
+      const db = mongoose.connection.db;
+      if (!db) {
+        throw new Error('MongoDB database not available');
+      }
+
+      const lockKey = `email-lock:${workspaceId}:${messageId}`;
+      await db.collection('locks').deleteOne({
+        _id: lockKey,
+        serverId: this.serverId, // Only release if we own the lock
+      });
+    } catch (error) {
+      console.error('[Gmail] Error releasing lock:', error);
+    }
   }
 
   /**
@@ -67,6 +178,9 @@ class GmailListenerService {
    */
   async start() {
     try {
+      // Initialize the service first
+      await this.initialize();
+
       // Find all active Gmail integrations
       const integrations = await GmailIntegration.find({ isActive: true }).populate(
         'workspace',
@@ -77,8 +191,11 @@ class GmailListenerService {
       for (const integration of integrations) {
         await this.setupListenerForIntegration(integration);
       }
+
+      console.info('[Gmail] Listener service started on server:', this.serverId);
     } catch (error) {
-      // Error starting Gmail listener service
+      console.error('[Gmail] Error starting listener service:', error);
+      throw error;
     }
   }
 
@@ -256,64 +373,210 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
-      // Get the full message
-      const message = await gmail.users.messages.get({
-        userId: 'me',
-        id: messageId,
-        format: 'full',
-      });
+      // Try to acquire lock before processing
+      const lockAcquired = await this.acquireLock(messageId, integration.workspace._id);
+      if (!lockAcquired) {
+        console.log(
+          '[Gmail] Skipping email processing - already being processed by another server:',
+          {
+            messageId,
+            workspaceId: integration.workspace._id,
+          },
+        );
+        return;
+      }
 
-      // Extract headers
-      const headers = message.data.payload.headers;
-      const getHeader = (name) =>
-        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
-
-      // Get message ID from headers
-      const messageIdHeader = getHeader('Message-ID');
-
-      // Check for existing email to prevent duplicates using atomic operation
-      const existingEmail = await Email.findOneAndUpdate(
-        {
-          gmailMessageId: messageId,
-          workspaceId: integration.workspace._id,
-        },
-        { $setOnInsert: { _id: new mongoose.Types.ObjectId() } },
-        {
-          new: false,
-          upsert: false,
-          setDefaultsOnInsert: false,
-        },
-      );
-
-      if (existingEmail) {
-        console.log('[Gmail] Duplicate email detected, attempting to add to thread:', {
-          messageId,
-          gmailMessageId: messageId,
-          workspaceId: integration.workspace._id,
-        });
-
-        // Get the full message to process thread information
+      try {
+        // Get the full message
         const message = await gmail.users.messages.get({
           userId: 'me',
           id: messageId,
           format: 'full',
         });
 
-        // Extract headers for thread processing
+        // Extract headers
         const headers = message.data.payload.headers;
         const getHeader = (name) =>
           headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
-        const threadId = message.data.threadId;
-        const sentAt = new Date(getHeader('Date'));
+        // Get message ID from headers
+        const messageIdHeader = getHeader('Message-ID');
+
+        // Check for existing email to prevent duplicates using atomic operation
+        const existingEmail = await Email.findOneAndUpdate(
+          {
+            gmailMessageId: messageId,
+            workspaceId: integration.workspace._id,
+          },
+          { $setOnInsert: { _id: new mongoose.Types.ObjectId() } },
+          {
+            new: false,
+            upsert: false,
+            setDefaultsOnInsert: false,
+          },
+        );
+
+        if (existingEmail) {
+          console.log('[Gmail] Duplicate email detected, attempting to add to thread:', {
+            messageId,
+            gmailMessageId: messageId,
+            workspaceId: integration.workspace._id,
+          });
+
+          // Get the full message to process thread information
+          const message = await gmail.users.messages.get({
+            userId: 'me',
+            id: messageId,
+            format: 'full',
+          });
+
+          // Extract headers for thread processing
+          const headers = message.data.payload.headers;
+          const getHeader = (name) =>
+            headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+          const threadId = message.data.threadId;
+          const sentAt = new Date(getHeader('Date'));
+          const fromHeader = getHeader('From');
+          const toHeader = getHeader('To');
+          const ccHeader = getHeader('Cc');
+          const bccHeader = getHeader('Bcc');
+          const subject = getHeader('Subject');
+          const messageIdHeader = getHeader('Message-ID');
+
+          // Format email addresses
+          const from = this.formatEmailAddress(fromHeader, 'from');
+          const to = toHeader
+            ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
+            : [];
+          const cc = ccHeader
+            ? ccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'cc'))
+            : [];
+          const bcc = bccHeader
+            ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
+            : [];
+
+          // Update thread with the existing email
+          const thread = await EmailThread.findOneAndUpdate(
+            { threadId },
+            {
+              $setOnInsert: {
+                workspaceId: integration.workspace._id,
+                title: this.generateThreadTitle(subject, from),
+                subject: subject || '(No Subject)',
+                cleanSubject: this.cleanSubjectFromSubject(subject) || '(No Subject)',
+                firstMessageDate: sentAt,
+                participants: [
+                  { email: from.email, name: from.name, role: 'sender', isInternal: false },
+                  ...to.map((t) => ({
+                    email: t.email,
+                    name: t.name,
+                    role: 'recipient',
+                    isInternal: false,
+                  })),
+                  ...cc.map((c) => ({
+                    email: c.email,
+                    name: c.name,
+                    role: 'cc',
+                    isInternal: false,
+                  })),
+                  ...bcc.map((b) => ({
+                    email: b.email,
+                    name: b.name,
+                    role: 'bcc',
+                    isInternal: false,
+                  })),
+                ],
+                messageReferences: [
+                  {
+                    messageId: messageIdHeader,
+                    inReplyTo: getHeader('In-Reply-To'),
+                    references: getHeader('References')?.split(/\s+/) || [],
+                  },
+                ],
+              },
+              $addToSet: { emails: existingEmail._id },
+              $set: {
+                lastMessageDate: sentAt,
+                lastActivity: sentAt,
+                latestMessage: {
+                  content: message.data.snippet || '',
+                  sender: from.name || from.email,
+                  timestamp: sentAt,
+                  type: 'email',
+                },
+              },
+            },
+            {
+              new: true,
+              upsert: true,
+              setDefaultsOnInsert: true,
+            },
+          );
+
+          // Update participant hash after thread update
+          const allParticipants = [
+            { email: from.email, name: from.name, role: 'sender', isInternal: false },
+            ...to.map((t) => ({
+              email: t.email,
+              name: t.name,
+              role: 'recipient',
+              isInternal: false,
+            })),
+            ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
+            ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
+          ];
+
+          // Add new participants if any
+          allParticipants.forEach((participant) => {
+            if (!thread.participants.some((p) => p.email === participant.email)) {
+              thread.participants.push(participant);
+            }
+          });
+
+          // Update participant hash
+          thread.participantHash = this.generateParticipantHash(thread.participants);
+          await thread.save();
+
+          console.info('[Gmail] Duplicate email added to thread:', {
+            emailId: existingEmail._id,
+            threadId: thread._id,
+            workspaceId: integration.workspace._id,
+          });
+
+          return;
+        }
+
+        // Process email body and attachments
+        const {
+          body,
+          attachments = [],
+          inlineImages = [],
+        } = await this.processEmailParts(
+          gmail,
+          messageId,
+          message.data.payload,
+          integration.workspace._id.toString(),
+        );
+
+        console.log('[Gmail Debug] Final body content before storage:', {
+          messageId,
+          hasBody: !!body,
+          bodyLength: body?.length,
+          isHtml: body?.includes('<html') || body?.includes('<body'),
+          preview: body?.substring(0, 100) + '...',
+        });
+
+        // Extract and format email details
         const fromHeader = getHeader('From');
         const toHeader = getHeader('To');
         const ccHeader = getHeader('Cc');
         const bccHeader = getHeader('Bcc');
         const subject = getHeader('Subject');
-        const messageIdHeader = getHeader('Message-ID');
+        const threadId = message.data.threadId;
+        const sentAt = new Date(getHeader('Date'));
 
-        // Format email addresses
+        // Format email addresses using the class method
         const from = this.formatEmailAddress(fromHeader, 'from');
         const to = toHeader
           ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
@@ -325,50 +588,68 @@ class GmailListenerService {
           ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
           : [];
 
-        // Update thread with the existing email
-        const thread = await EmailThread.findOneAndUpdate(
-          { threadId },
+        // Format attachments with required fields
+        const formattedAttachments = attachments.map((att) => ({
+          filename: att.filename || 'unnamed_file',
+          size: att.size || 0,
+          type: att.type || 'unknown',
+          mimeType: att.mimeType || 'application/octet-stream',
+          storageUrl: att.downloadUrl || '',
+          attachmentId: att.attachmentId || messageId,
+          isInline: att.isInline || false,
+          error: att.error || null,
+          skipped: att.skipped || false,
+        }));
+
+        // Format inline images
+        const formattedInlineImages = inlineImages.map((img) => ({
+          filename: img.filename || 'unnamed_image',
+          size: img.size || 0,
+          type: img.type || 'image',
+          mimeType: img.mimeType || 'image/jpeg',
+          storageUrl: img.downloadUrl || '',
+          contentId: img.contentId || '',
+        }));
+
+        // Create email document with atomic operation
+        const email = await Email.findOneAndUpdate(
+          {
+            gmailMessageId: messageId,
+            workspaceId: integration.workspace._id,
+          },
           {
             $setOnInsert: {
-              workspaceId: integration.workspace._id,
-              title: this.generateThreadTitle(subject, from),
               subject: subject || '(No Subject)',
-              cleanSubject: this.cleanSubjectFromSubject(subject) || '(No Subject)',
-              firstMessageDate: sentAt,
-              participants: [
-                { email: from.email, name: from.name, role: 'sender', isInternal: false },
-                ...to.map((t) => ({
-                  email: t.email,
-                  name: t.name,
-                  role: 'recipient',
-                  isInternal: false,
-                })),
-                ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
-                ...bcc.map((b) => ({
-                  email: b.email,
-                  name: b.name,
-                  role: 'bcc',
-                  isInternal: false,
-                })),
-              ],
-              messageReferences: [
-                {
-                  messageId: messageIdHeader,
-                  inReplyTo: getHeader('In-Reply-To'),
-                  references: getHeader('References')?.split(/\s+/) || [],
-                },
-              ],
-            },
-            $addToSet: { emails: existingEmail._id },
-            $set: {
-              lastMessageDate: sentAt,
-              lastActivity: sentAt,
-              latestMessage: {
-                content: message.data.snippet || '',
-                sender: from.name || from.email,
-                timestamp: sentAt,
-                type: 'email',
+              body: {
+                html: body || '',
+                text: body ? body.replace(/<[^>]*>/g, '') : '',
               },
+              to,
+              cc,
+              bcc,
+              from,
+              gmailMessageId: messageId,
+              messageId: messageIdHeader,
+              threadId,
+              attachments: formattedAttachments,
+              inlineImages: formattedInlineImages,
+              direction: 'inbound',
+              status: 'received',
+              sentAt,
+              workspaceId: integration.workspace._id,
+              token: {
+                id: messageId,
+                type: 'gmail',
+                accessToken: integration.accessToken,
+                refreshToken: integration.refreshToken,
+                scope: 'https://www.googleapis.com/auth/gmail.readonly',
+                expiryDate: integration.tokenExpiry,
+              },
+              threadPart: parseInt(threadId, 16) || 0,
+              historyId: message.data.historyId,
+              internalDate: message.data.internalDate,
+              snippet: message.data.snippet || '',
+              userId: integration.workspace._id.toString(),
             },
           },
           {
@@ -378,224 +659,43 @@ class GmailListenerService {
           },
         );
 
-        // Update participant hash after thread update
-        const allParticipants = [
-          { email: from.email, name: from.name, role: 'sender', isInternal: false },
-          ...to.map((t) => ({
-            email: t.email,
-            name: t.name,
-            role: 'recipient',
-            isInternal: false,
-          })),
-          ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
-          ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
-        ];
+        // First check if there's an existing thread with the same subject and participants
+        const potentialThreads = await EmailThread.find({
+          workspaceId: integration.workspace._id,
+          cleanSubject: this.cleanSubjectFromSubject(subject),
+        });
 
-        // Add new participants if any
-        allParticipants.forEach((participant) => {
-          if (!thread.participants.some((p) => p.email === participant.email)) {
-            thread.participants.push(participant);
+        let targetThread = null;
+        for (const potentialThread of potentialThreads) {
+          // Check if this email should be part of the potential thread
+          if (await potentialThread.shouldIncludeEmail(email)) {
+            targetThread = potentialThread;
+            break;
           }
-        });
-
-        // Update participant hash
-        thread.participantHash = this.generateParticipantHash(thread.participants);
-        await thread.save();
-
-        console.info('[Gmail] Duplicate email added to thread:', {
-          emailId: existingEmail._id,
-          threadId: thread._id,
-          workspaceId: integration.workspace._id,
-        });
-
-        return;
-      }
-
-      // Process email body and attachments
-      const {
-        body,
-        attachments = [],
-        inlineImages = [],
-      } = await this.processEmailParts(
-        gmail,
-        messageId,
-        message.data.payload,
-        integration.workspace._id.toString(),
-      );
-
-      console.log('[Gmail Debug] Final body content before storage:', {
-        messageId,
-        hasBody: !!body,
-        bodyLength: body?.length,
-        isHtml: body?.includes('<html') || body?.includes('<body'),
-        preview: body?.substring(0, 100) + '...',
-      });
-
-      // Extract and format email details
-      const fromHeader = getHeader('From');
-      const toHeader = getHeader('To');
-      const ccHeader = getHeader('Cc');
-      const bccHeader = getHeader('Bcc');
-      const subject = getHeader('Subject');
-      const threadId = message.data.threadId;
-      const sentAt = new Date(getHeader('Date'));
-
-      // Format email addresses using the class method
-      const from = this.formatEmailAddress(fromHeader, 'from');
-      const to = toHeader
-        ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
-        : [];
-      const cc = ccHeader
-        ? ccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'cc'))
-        : [];
-      const bcc = bccHeader
-        ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
-        : [];
-
-      // Format attachments with required fields
-      const formattedAttachments = attachments.map((att) => ({
-        filename: att.filename || 'unnamed_file',
-        size: att.size || 0,
-        type: att.type || 'unknown',
-        mimeType: att.mimeType || 'application/octet-stream',
-        storageUrl: att.downloadUrl || '',
-        attachmentId: att.attachmentId || messageId,
-        isInline: att.isInline || false,
-        error: att.error || null,
-        skipped: att.skipped || false,
-      }));
-
-      // Format inline images
-      const formattedInlineImages = inlineImages.map((img) => ({
-        filename: img.filename || 'unnamed_image',
-        size: img.size || 0,
-        type: img.type || 'image',
-        mimeType: img.mimeType || 'image/jpeg',
-        storageUrl: img.downloadUrl || '',
-        contentId: img.contentId || '',
-      }));
-
-      // Create email document with atomic operation
-      const email = await Email.findOneAndUpdate(
-        {
-          gmailMessageId: messageId,
-          workspaceId: integration.workspace._id,
-        },
-        {
-          $setOnInsert: {
-            subject: subject || '(No Subject)',
-            body: {
-              html: body || '',
-              text: body ? body.replace(/<[^>]*>/g, '') : '',
-            },
-            to,
-            cc,
-            bcc,
-            from,
-            gmailMessageId: messageId,
-            messageId: messageIdHeader,
-            threadId,
-            attachments: formattedAttachments,
-            inlineImages: formattedInlineImages,
-            direction: 'inbound',
-            status: 'received',
-            sentAt,
-            workspaceId: integration.workspace._id,
-            token: {
-              id: messageId,
-              type: 'gmail',
-              accessToken: integration.accessToken,
-              refreshToken: integration.refreshToken,
-              scope: 'https://www.googleapis.com/auth/gmail.readonly',
-              expiryDate: integration.tokenExpiry,
-            },
-            threadPart: parseInt(threadId, 16) || 0,
-            historyId: message.data.historyId,
-            internalDate: message.data.internalDate,
-            snippet: message.data.snippet || '',
-            userId: integration.workspace._id.toString(),
-          },
-        },
-        {
-          new: true,
-          upsert: true,
-          setDefaultsOnInsert: true,
-        },
-      );
-
-      // First check if there's an existing thread with the same subject and participants
-      const potentialThreads = await EmailThread.find({
-        workspaceId: integration.workspace._id,
-        cleanSubject: this.cleanSubjectFromSubject(subject),
-      });
-
-      let targetThread = null;
-      for (const potentialThread of potentialThreads) {
-        // Check if this email should be part of the potential thread
-        if (await potentialThread.shouldIncludeEmail(email)) {
-          targetThread = potentialThread;
-          break;
         }
-      }
 
-      // If we found a matching thread, update it
-      if (targetThread) {
-        await EmailThread.findByIdAndUpdate(
-          targetThread._id,
-          {
-            $addToSet: { emails: email._id },
-            $set: {
-              lastMessageDate: sentAt,
-              lastActivity: sentAt,
-              latestMessage: {
-                content: message.data.snippet || this.generateMessagePreview(body),
-                sender: from.name || from.email,
-                timestamp: sentAt,
-                type: 'email',
+        // If we found a matching thread, update it
+        if (targetThread) {
+          await EmailThread.findByIdAndUpdate(
+            targetThread._id,
+            {
+              $addToSet: { emails: email._id },
+              $set: {
+                lastMessageDate: sentAt,
+                lastActivity: sentAt,
+                latestMessage: {
+                  content: message.data.snippet || this.generateMessagePreview(body),
+                  sender: from.name || from.email,
+                  timestamp: sentAt,
+                  type: 'email',
+                },
               },
             },
-          },
-          { new: true },
-        );
+            { new: true },
+          );
 
-        // Update participant hash after thread update
-        const allParticipants = [
-          { email: from.email, name: from.name, role: 'sender', isInternal: false },
-          ...to.map((t) => ({
-            email: t.email,
-            name: t.name,
-            role: 'recipient',
-            isInternal: false,
-          })),
-          ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
-          ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
-        ];
-
-        // Add new participants if any
-        allParticipants.forEach((participant) => {
-          if (!targetThread.participants.some((p) => p.email === participant.email)) {
-            targetThread.participants.push(participant);
-          }
-        });
-
-        // Update participant hash
-        targetThread.participantHash = this.generateParticipantHash(targetThread.participants);
-        await targetThread.save();
-
-        console.info('[Gmail] Email added to existing thread:', {
-          emailId: email._id,
-          threadId: targetThread._id,
-          workspaceId: integration.workspace._id,
-        });
-      } else {
-        // If no matching thread found, create a new one
-        const thread = await EmailThread.create({
-          threadId,
-          workspaceId: integration.workspace._id,
-          title: this.generateThreadTitle(subject, from),
-          subject: subject || '(No Subject)',
-          cleanSubject: this.cleanSubjectFromSubject(subject) || '(No Subject)',
-          participants: [
+          // Update participant hash after thread update
+          const allParticipants = [
             { email: from.email, name: from.name, role: 'sender', isInternal: false },
             ...to.map((t) => ({
               email: t.email,
@@ -605,35 +705,75 @@ class GmailListenerService {
             })),
             ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
             ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
-          ],
-          emails: [email._id],
-          messageReferences: [
-            {
-              messageId: messageIdHeader,
-              inReplyTo: getHeader('In-Reply-To'),
-              references: getHeader('References')?.split(/\s+/) || [],
+          ];
+
+          // Add new participants if any
+          allParticipants.forEach((participant) => {
+            if (!targetThread.participants.some((p) => p.email === participant.email)) {
+              targetThread.participants.push(participant);
+            }
+          });
+
+          // Update participant hash
+          targetThread.participantHash = this.generateParticipantHash(targetThread.participants);
+          await targetThread.save();
+
+          console.info('[Gmail] Email added to existing thread:', {
+            emailId: email._id,
+            threadId: targetThread._id,
+            workspaceId: integration.workspace._id,
+          });
+        } else {
+          // If no matching thread found, create a new one
+          const thread = await EmailThread.create({
+            threadId,
+            workspaceId: integration.workspace._id,
+            title: this.generateThreadTitle(subject, from),
+            subject: subject || '(No Subject)',
+            cleanSubject: this.cleanSubjectFromSubject(subject) || '(No Subject)',
+            participants: [
+              { email: from.email, name: from.name, role: 'sender', isInternal: false },
+              ...to.map((t) => ({
+                email: t.email,
+                name: t.name,
+                role: 'recipient',
+                isInternal: false,
+              })),
+              ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
+              ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
+            ],
+            emails: [email._id],
+            messageReferences: [
+              {
+                messageId: messageIdHeader,
+                inReplyTo: getHeader('In-Reply-To'),
+                references: getHeader('References')?.split(/\s+/) || [],
+              },
+            ],
+            firstMessageDate: sentAt,
+            lastMessageDate: sentAt,
+            lastActivity: sentAt,
+            latestMessage: {
+              content: message.data.snippet || this.generateMessagePreview(body),
+              sender: from.name || from.email,
+              timestamp: sentAt,
+              type: 'email',
             },
-          ],
-          firstMessageDate: sentAt,
-          lastMessageDate: sentAt,
-          lastActivity: sentAt,
-          latestMessage: {
-            content: message.data.snippet || this.generateMessagePreview(body),
-            sender: from.name || from.email,
-            timestamp: sentAt,
-            type: 'email',
-          },
-        });
+          });
 
-        // Generate and set participant hash
-        thread.participantHash = this.generateParticipantHash(thread.participants);
-        await thread.save();
+          // Generate and set participant hash
+          thread.participantHash = this.generateParticipantHash(thread.participants);
+          await thread.save();
 
-        console.info('[Gmail] New thread created:', {
-          emailId: email._id,
-          threadId: thread._id,
-          workspaceId: integration.workspace._id,
-        });
+          console.info('[Gmail] New thread created:', {
+            emailId: email._id,
+            threadId: thread._id,
+            workspaceId: integration.workspace._id,
+          });
+        }
+      } finally {
+        // Always release the lock when done
+        await this.releaseLock(messageId, integration.workspace._id);
       }
     } catch (error) {
       // Handle 404 errors gracefully (email not found)
@@ -1008,13 +1148,30 @@ class GmailListenerService {
   /**
    * Stop all Gmail listeners
    */
-  stop() {
-    // Clear all intervals
-    for (const intervalId of this.activeListeners.values()) {
-      clearInterval(intervalId);
-    }
+  async stop() {
+    try {
+      // Clear all intervals
+      for (const intervalId of this.activeListeners.values()) {
+        clearInterval(intervalId);
+      }
 
-    this.activeListeners.clear();
+      this.activeListeners.clear();
+
+      // Clean up any locks owned by this server
+      if (this.isInitialized && mongoose.connection.readyState === 1) {
+        const db = mongoose.connection.db;
+        if (db) {
+          await db.collection('locks').deleteMany({
+            serverId: this.serverId,
+          });
+        }
+      }
+
+      console.info('[Gmail] Listener service stopped on server:', this.serverId);
+    } catch (error) {
+      console.error('[Gmail] Error stopping listener service:', error);
+      throw error;
+    }
   }
 
   /**
