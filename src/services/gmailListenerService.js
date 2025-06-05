@@ -41,9 +41,6 @@ const MIME_EXTENSION_MAP = {
 
 class GmailListenerService {
   constructor() {
-    this.activeListeners = new Map(); // Map of workspaceId -> polling interval
-    this.pollingInterval = 60000; // 1 minute by default
-    this.historyIds = new Map(); // Track last history ID per email to avoid reprocessing
     this.serverId = process.env.SERVER_ID || `server-${Date.now()}`; // Unique server identifier
     this.isInitialized = false;
   }
@@ -97,83 +94,6 @@ class GmailListenerService {
   }
 
   /**
-   * Acquire a lock for processing a specific email
-   */
-  async acquireLock(messageId, workspaceId, ttl = 300) {
-    // 5 minutes TTL
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    try {
-      const db = mongoose.connection.db;
-      if (!db) {
-        throw new Error('MongoDB database not available');
-      }
-
-      const lockKey = `email-lock:${workspaceId}:${messageId}`;
-      const result = await db.collection('locks').updateOne(
-        {
-          _id: lockKey,
-          expiresAt: { $lt: new Date() }, // Only acquire if expired or doesn't exist
-        },
-        {
-          $set: {
-            serverId: this.serverId,
-            expiresAt: new Date(Date.now() + ttl * 1000),
-            createdAt: new Date(),
-          },
-        },
-        { upsert: true },
-      );
-      return result.modifiedCount > 0 || result.upsertedCount > 0;
-    } catch (error) {
-      console.error('[Gmail] Error acquiring lock:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Release a lock for a specific email
-   */
-  async releaseLock(messageId, workspaceId) {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    try {
-      const db = mongoose.connection.db;
-      if (!db) {
-        throw new Error('MongoDB database not available');
-      }
-
-      const lockKey = `email-lock:${workspaceId}:${messageId}`;
-      await db.collection('locks').deleteOne({
-        _id: lockKey,
-        serverId: this.serverId, // Only release if we own the lock
-      });
-    } catch (error) {
-      console.error('[Gmail] Error releasing lock:', error);
-    }
-  }
-
-  /**
-   * Sanitize HTML content
-   */
-  sanitizeHtml(html) {
-    try {
-      return DOMPurify.sanitize(html, {
-        ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'em', 'strong', 'a', 'img', 'ul', 'ol', 'li'],
-        ALLOWED_ATTR: ['href', 'src', 'alt', 'title'],
-        ALLOW_DATA_ATTR: false,
-      });
-    } catch (error) {
-      console.error('HTML sanitization failed:', error);
-      return html; // Return original if sanitization fails
-    }
-  }
-
-  /**
    * Start Gmail listener for all workspaces with active Gmail integrations
    */
   async start() {
@@ -187,59 +107,29 @@ class GmailListenerService {
         'name',
       );
 
-      // Set up listeners for each integration
+      // Set up watch for each integration
       for (const integration of integrations) {
-        await this.setupListenerForIntegration(integration);
+        await this.setupWatchForIntegration(integration);
       }
 
-      console.info('[Gmail] Listener service started on server:', this.serverId);
+      console.info('[Gmail] Watch service started on server:', this.serverId);
     } catch (error) {
-      console.error('[Gmail] Error starting listener service:', error);
+      console.error('[Gmail] Error starting watch service:', error);
       throw error;
     }
   }
 
   /**
-   * Proactively refresh tokens if they're about to expire
+   * Set up watch for a specific Gmail integration
    */
-  async refreshTokensIfNeeded(oauth2Client, integration) {
+  async setupWatchForIntegration(integration) {
     try {
-      // Check if token is expired or about to expire (within 5 minutes)
-      const isTokenExpired =
-        integration.tokenExpiry &&
-        Date.now() >= new Date(integration.tokenExpiry).getTime() - 5 * 60 * 1000;
+      const shouldRefresh =
+        !integration.watchExpiration ||
+        new Date(integration.watchExpiration).getTime() < Date.now() + 24 * 60 * 60 * 1000;
 
-      if (isTokenExpired) {
-        const { tokens } = await oauth2Client.refreshToken(integration.refreshToken);
-
-        // Update tokens in database
-        integration.accessToken = tokens.access_token;
-        if (tokens.refresh_token) integration.refreshToken = tokens.refresh_token;
-        integration.tokenExpiry = new Date(tokens.expiry_date);
-        await integration.save();
-
-        // Update oauth client with new tokens
-        oauth2Client.setCredentials({
-          access_token: integration.accessToken,
-          refresh_token: integration.refreshToken,
-          expiry_date: integration.tokenExpiry.getTime(),
-        });
-      }
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  /**
-   * Set up listener for a specific Gmail integration
-   */
-  async setupListenerForIntegration(integration) {
-    try {
-      const workspaceId = integration.workspace._id.toString();
-      const email = integration.email;
-
-      // If there's already a listener for this workspace, don't add another one
-      if (this.activeListeners.has(`${workspaceId}-${email}`)) {
+      if (!shouldRefresh || !integration.isActive) {
+        console.log(`[Gmail Watch] Skipping: ${integration.email}`);
         return;
       }
 
@@ -254,75 +144,63 @@ class GmailListenerService {
       oauth2Client.setCredentials({
         access_token: integration.accessToken,
         refresh_token: integration.refreshToken,
-        expiry_date: integration.tokenExpiry.getTime(),
+        expiry_date: integration.tokenExpiry?.getTime(),
       });
 
       // Set up token refresh handler
       oauth2Client.on('tokens', async (tokens) => {
         if (tokens.refresh_token) {
-          // Update refresh token in the database
           integration.refreshToken = tokens.refresh_token;
         }
-
         integration.accessToken = tokens.access_token;
         integration.tokenExpiry = new Date(tokens.expiry_date);
         await integration.save();
       });
 
-      // Start polling interval
-      const intervalId = setInterval(async () => {
-        try {
-          // Check and refresh tokens if needed before checking emails
-          await this.refreshTokensIfNeeded(oauth2Client, integration);
-          await this.checkNewEmails(oauth2Client, integration);
-        } catch (error) {
-          if (error.code === 401) {
-            // Handle token refresh failure
-            integration.isActive = false;
-            await integration.save();
-            clearInterval(intervalId);
-            this.activeListeners.delete(`${workspaceId}-${email}`);
-          }
-        }
-      }, this.pollingInterval);
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-      // Store interval ID for cleanup
-      this.activeListeners.set(`${workspaceId}-${email}`, intervalId);
+      const res = await gmail.users.watch({
+        userId: 'me',
+        requestBody: {
+          topicName: 'projects/hour-block/topics/gmail-push-notify',
+          labelIds: ['INBOX'],
+        },
+      });
 
-      // Do initial check
-      await this.refreshTokensIfNeeded(oauth2Client, integration);
-      await this.checkNewEmails(oauth2Client, integration);
+      integration.watchExpiration = new Date(Number(res.data.expiration));
+      integration.historyId = res.data.historyId;
+      await integration.save();
 
+      console.log(`[Gmail Watch] Registered for ${integration.email}`);
       return true;
     } catch (error) {
+      console.error(`[Gmail Watch] Failed for ${integration.email}:`, error.message);
       return false;
     }
   }
 
   /**
-   * Check for new emails for a specific integration
+   * Handle push notification from Gmail
    */
-  async checkNewEmails(oauth2Client, integration) {
+  async handlePushNotification(integration, historyId) {
     try {
-      // Create Gmail API client
+      // Create OAuth client
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI,
+      );
+
+      // Set credentials
+      oauth2Client.setCredentials({
+        access_token: integration.accessToken,
+        refresh_token: integration.refreshToken,
+        expiry_date: integration.tokenExpiry?.getTime(),
+      });
+
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-      // Get workspace and email info
-      const workspaceId = integration.workspace._id;
-      const email = integration.email;
-
-      // Get last history ID for this integration
-      let historyId = this.historyIds.get(`${workspaceId}-${email}`);
-
-      if (!historyId) {
-        // If no history ID, get the current one to use for next time
-        const profile = await gmail.users.getProfile({ userId: 'me' });
-        historyId = profile.data.historyId;
-        this.historyIds.set(`${workspaceId}-${email}`, historyId);
-        return; // Skip first run, just initialize the history ID
-      }
-
-      // List changes since last check
+      // List changes since last history ID
       const history = await gmail.users.history.list({
         userId: 'me',
         startHistoryId: historyId,
@@ -331,7 +209,8 @@ class GmailListenerService {
 
       // Update history ID
       if (history.data.historyId) {
-        this.historyIds.set(`${workspaceId}-${email}`, history.data.historyId);
+        integration.historyId = history.data.historyId;
+        await integration.save();
       }
 
       // No changes
@@ -356,13 +235,6 @@ class GmailListenerService {
       if (error.code === 401) {
         integration.isActive = false;
         await integration.save();
-
-        // Stop the listener
-        const key = `${integration.workspace._id}-${integration.email}`;
-        if (this.activeListeners.has(key)) {
-          clearInterval(this.activeListeners.get(key));
-          this.activeListeners.delete(key);
-        }
       }
       throw error;
     }
@@ -1029,13 +901,6 @@ class GmailListenerService {
    */
   async stop() {
     try {
-      // Clear all intervals
-      for (const intervalId of this.activeListeners.values()) {
-        clearInterval(intervalId);
-      }
-
-      this.activeListeners.clear();
-
       // Clean up any locks owned by this server
       if (this.isInitialized && mongoose.connection.readyState === 1) {
         const db = mongoose.connection.db;
@@ -1046,33 +911,41 @@ class GmailListenerService {
         }
       }
 
-      console.info('[Gmail] Listener service stopped on server:', this.serverId);
+      console.info('[Gmail] Watch service stopped on server:', this.serverId);
     } catch (error) {
-      console.error('[Gmail] Error stopping listener service:', error);
+      console.error('[Gmail] Error stopping watch service:', error);
       throw error;
     }
   }
 
   /**
-   * Add a new Gmail integration to the listener service
+   * Add a new Gmail integration to the watch service
    */
   async addIntegration(integration) {
-    return await this.setupListenerForIntegration(integration);
+    return await this.setupWatchForIntegration(integration);
   }
 
   /**
-   * Remove a Gmail integration from the listener service
+   * Remove a Gmail integration from the watch service
    */
-  removeIntegration(workspaceId, email) {
-    const key = `${workspaceId}-${email}`;
+  async removeIntegration(workspaceId, email) {
+    try {
+      const integration = await GmailIntegration.findOne({
+        workspace: workspaceId,
+        email: email,
+      });
 
-    if (this.activeListeners.has(key)) {
-      clearInterval(this.activeListeners.get(key));
-      this.activeListeners.delete(key);
-      return true;
+      if (integration) {
+        integration.isActive = false;
+        await integration.save();
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[Gmail] Error removing integration:', error);
+      return false;
     }
-
-    return false;
   }
 
   /**
