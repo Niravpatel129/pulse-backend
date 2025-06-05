@@ -342,12 +342,6 @@ const emailBodySchema = new mongoose.Schema(
     html: {
       type: String,
       required: true,
-      get: function (v) {
-        return base64Utils.decode(v);
-      },
-      set: function (v) {
-        return v;
-      },
     },
   },
   { _id: false },
