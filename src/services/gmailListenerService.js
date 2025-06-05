@@ -264,8 +264,22 @@ class GmailListenerService {
       const getHeader = (name) =>
         headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
+      // Log raw headers for debugging
+      console.log('[Gmail] Raw headers:', JSON.stringify(headers, null, 2));
+
       // Get message ID from headers
       const messageIdHeader = getHeader('Message-ID');
+
+      // Log specific headers we care about
+      console.log('[Gmail] Important headers:', {
+        from: getHeader('From'),
+        to: getHeader('To'),
+        cc: getHeader('Cc'),
+        bcc: getHeader('Bcc'),
+        subject: getHeader('Subject'),
+        date: getHeader('Date'),
+        messageId: messageIdHeader,
+      });
 
       // Check for existing email to prevent duplicates
       const existingEmail = await Email.findOne({
@@ -298,20 +312,25 @@ class GmailListenerService {
       const threadId = message.data.threadId;
       const sentAt = new Date(getHeader('Date'));
 
-      // Format email addresses
-      const formatEmailAddress = (emailStr) => {
-        if (!emailStr) return { name: '', email: '' };
-        const match = emailStr.match(/(.*?)\s*<([^>]+)>/) || [null, null, emailStr];
-        return {
-          name: match[1]?.trim() || '',
-          email: match[2]?.trim() || match[3]?.trim() || emailStr.trim(),
-        };
-      };
+      // Format email addresses using the class method
+      const from = this.formatEmailAddress(fromHeader, 'from');
+      const to = toHeader
+        ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
+        : [];
+      const cc = ccHeader
+        ? ccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'cc'))
+        : [];
+      const bcc = bccHeader
+        ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
+        : [];
 
-      const from = formatEmailAddress(fromHeader);
-      const to = toHeader ? toHeader.split(',').map(formatEmailAddress) : [];
-      const cc = ccHeader ? ccHeader.split(',').map(formatEmailAddress) : [];
-      const bcc = bccHeader ? bccHeader.split(',').map(formatEmailAddress) : [];
+      // Log formatted email addresses
+      console.log('[Gmail] Formatted email addresses:', {
+        from: from,
+        to: to,
+        cc: cc,
+        bcc: bcc,
+      });
 
       // Format attachments with required fields
       const formattedAttachments = attachments.map((att) => ({
@@ -356,7 +375,6 @@ class GmailListenerService {
         status: 'received',
         sentAt,
         workspaceId: integration.workspace._id,
-        // Gmail specific fields
         token: {
           id: messageId,
           type: 'gmail',
@@ -365,12 +383,28 @@ class GmailListenerService {
           scope: 'https://www.googleapis.com/auth/gmail.readonly',
           expiryDate: integration.tokenExpiry,
         },
-        threadPart: parseInt(threadId, 16) || 0, // Convert hex to number
+        threadPart: parseInt(threadId, 16) || 0,
         historyId: message.data.historyId,
         internalDate: message.data.internalDate,
         snippet: message.data.snippet || '',
         userId: integration.workspace._id.toString(),
       });
+
+      // Ensure all email addresses are in the rich format
+      if (email.from && !email.from.id) {
+        email.from = this.formatEmailAddress(email.from, 'from');
+      }
+      if (email.to && email.to.length > 0) {
+        email.to = email.to.map((addr) => (addr.id ? addr : this.formatEmailAddress(addr, 'to')));
+      }
+      if (email.cc && email.cc.length > 0) {
+        email.cc = email.cc.map((addr) => (addr.id ? addr : this.formatEmailAddress(addr, 'cc')));
+      }
+      if (email.bcc && email.bcc.length > 0) {
+        email.bcc = email.bcc.map((addr) =>
+          addr.id ? addr : this.formatEmailAddress(addr, 'bcc'),
+        );
+      }
 
       await email.save();
       console.info('[Gmail] Email processed successfully:', {
@@ -708,6 +742,125 @@ class GmailListenerService {
     }
 
     return false;
+  }
+
+  /**
+   * Format email address into rich contact format
+   */
+  formatEmailAddress(emailStr, role = 'from') {
+    if (!emailStr) return null;
+
+    // Handle both string and object inputs
+    let name = '';
+    let email = '';
+
+    if (typeof emailStr === 'string') {
+      const match = emailStr.match(/(.*?)\s*<([^>]+)>/) || [null, null, emailStr];
+      name = match[1]?.trim() || '';
+      email = match[2]?.trim() || match[3]?.trim() || emailStr.trim();
+    } else if (typeof emailStr === 'object') {
+      name = emailStr.name || '';
+      email = emailStr.email || '';
+    }
+
+    if (!email) return null;
+
+    const timestamp = Date.now();
+    const displayName = name || email.split('@')[0];
+    const initials = displayName
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase();
+
+    return {
+      id: timestamp,
+      avatar_type: 'contact',
+      class: 'contact',
+      source: 'email',
+      url: `/api/contacts/${timestamp}`,
+      namespace: 'global',
+      name: displayName,
+      card_name: displayName,
+      handle: email,
+      email: email,
+      display_name: displayName,
+      description: null,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        displayName,
+      )}&background=random`,
+      initials: initials,
+      channel_id: null,
+      channel_full: null,
+      inbox_alias: null,
+      message_type: null,
+      card_id: timestamp,
+      card_url: `/api/cards/${timestamp}`,
+      links: [],
+      num_notes: 0,
+      extra: {
+        email: email,
+      },
+      phone: null,
+      company: null,
+      job_title: null,
+      location: null,
+      social_profiles: {},
+      tags: [],
+      last_contacted: new Date(),
+      contact_frequency: 0,
+      contact_notes: [],
+      card: {
+        id: timestamp,
+        namespace: 'global',
+        avatar_type: 'contact',
+        class: 'card',
+        url: `/api/cards/${timestamp}`,
+        name: displayName,
+        display_name: displayName,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          displayName,
+        )}&background=random`,
+        initials: initials,
+        color: '#a385e0',
+        num_notes: 0,
+        namespace_to_num_notes: {},
+        autogenerated: false,
+        edited: false,
+        created_at: timestamp,
+        updated_at: timestamp,
+        type: 'auto',
+        bio: null,
+        description: null,
+        links: [],
+        groups: [],
+        external_info: null,
+        custom_field_attributes: [],
+        metadata: {},
+        last_updated_by: null,
+        version: 1,
+        contacts: [
+          {
+            id: timestamp,
+            url: `/api/contacts/${timestamp}`,
+            source: 'email',
+            handle: email,
+            is_primary: true,
+            verified: false,
+            verification_date: null,
+            last_used: new Date(),
+          },
+        ],
+      },
+      fallback: null,
+      role: role,
+      is_spammer: false,
+      recipient_url: `/api/recipients/${timestamp}`,
+      last_interaction: new Date(),
+      interaction_count: 0,
+      status: 'active',
+      preferences: {},
+    };
   }
 }
 
