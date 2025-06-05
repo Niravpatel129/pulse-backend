@@ -571,6 +571,31 @@ class GmailListenerService {
         },
       );
 
+      // If this is a new thread, check if there's an existing thread with the same subject and participants
+      if (!thread.emails || thread.emails.length === 1) {
+        const potentialThreads = await EmailThread.find({
+          workspaceId: integration.workspace._id,
+          cleanSubject: this.cleanSubjectFromSubject(subject),
+          _id: { $ne: thread._id },
+        });
+
+        for (const potentialThread of potentialThreads) {
+          // Check if this email should be part of the potential thread
+          if (await potentialThread.shouldIncludeEmail(email)) {
+            // Merge the threads
+            await potentialThread.mergeThread(thread);
+            // Delete the duplicate thread
+            await EmailThread.findByIdAndDelete(thread._id);
+            console.info('[Gmail] Merged duplicate thread:', {
+              originalThreadId: potentialThread._id,
+              duplicateThreadId: thread._id,
+              emailId: email._id,
+            });
+            return;
+          }
+        }
+      }
+
       // Update participant hash after thread creation/update
       const allParticipants = thread.participants;
       thread.participantHash = this.generateParticipantHash(allParticipants);
