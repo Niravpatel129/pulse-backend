@@ -693,6 +693,73 @@ class GmailListenerService {
   }
 
   /**
+   * Process a Google Drive download link and convert it to Firebase storage
+   */
+  async processGoogleDriveLink(url, workspaceId) {
+    try {
+      // Extract file ID from the URL
+      const fileIdMatch = url.match(/[?&]id=([^&]+)/);
+      if (!fileIdMatch) {
+        return null;
+      }
+
+      const fileId = fileIdMatch[1];
+
+      // Create OAuth client for Google Drive
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI,
+      );
+
+      // Set credentials
+      oauth2Client.setCredentials({
+        access_token: process.env.GOOGLE_ACCESS_TOKEN,
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      });
+
+      const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+      // Get file metadata
+      const file = await drive.files.get({
+        fileId: fileId,
+        fields: 'name,mimeType,size',
+      });
+
+      // Download file content
+      const response = await drive.files.get(
+        {
+          fileId: fileId,
+          alt: 'media',
+        },
+        { responseType: 'stream' },
+      );
+
+      // Generate storage path
+      const filename = file.data.name;
+      const storagePath = firebaseStorage.generatePath(workspaceId, filename);
+
+      // Upload to Firebase Storage
+      const { url: downloadUrl } = await firebaseStorage.uploadFile(
+        response.data,
+        storagePath,
+        file.data.mimeType,
+      );
+
+      return {
+        originalUrl: url,
+        firebaseUrl: downloadUrl,
+        filename: filename,
+        mimeType: file.data.mimeType,
+        size: file.data.size,
+      };
+    } catch (error) {
+      console.error('[Gmail] Error processing Google Drive link:', error);
+      return null;
+    }
+  }
+
+  /**
    * Process email parts including attachments
    */
   async processEmailParts(gmail, messageId, part, workspaceId, options = {}) {
@@ -717,6 +784,31 @@ class GmailListenerService {
         mimeType: part.mimeType,
         isMultipart: part.mimeType?.startsWith('multipart/'),
       });
+
+      // Process Google Drive links in the body
+      if (result.body) {
+        const driveLinkRegex = /https:\/\/docs\.google\.com\/uc\?export=download[^"'\s]+/g;
+        const driveLinks = result.body.match(driveLinkRegex) || [];
+
+        for (const link of driveLinks) {
+          const processedLink = await this.processGoogleDriveLink(link, workspaceId);
+          if (processedLink) {
+            result.body = result.body.replace(link, processedLink.firebaseUrl);
+
+            // Add to attachments if it's a downloadable file
+            if (processedLink.mimeType && !processedLink.mimeType.startsWith('image/')) {
+              result.attachments.push({
+                filename: processedLink.filename,
+                mimeType: processedLink.mimeType,
+                size: processedLink.size,
+                storageUrl: processedLink.firebaseUrl,
+                type: fileUtils.getType(processedLink.mimeType),
+                isInline: false,
+              });
+            }
+          }
+        }
+      }
 
       // Sanitize HTML content
       if (result.body) {
