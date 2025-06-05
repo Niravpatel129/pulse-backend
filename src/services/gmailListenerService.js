@@ -424,6 +424,14 @@ class GmailListenerService {
         integration.workspace._id.toString(),
       );
 
+      console.log('[Gmail Debug] Final body content before storage:', {
+        messageId,
+        hasBody: !!body,
+        bodyLength: body?.length,
+        isHtml: body?.includes('<html') || body?.includes('<body'),
+        preview: body?.substring(0, 100) + '...',
+      });
+
       // Extract and format email details
       const fromHeader = getHeader('From');
       const toHeader = getHeader('To');
@@ -627,10 +635,24 @@ class GmailListenerService {
 
       // Extract body content first
       result.body = this.extractFirstMatching(part);
+      console.log('[Gmail Debug] Initial body content:', {
+        messageId,
+        hasBody: !!result.body,
+        bodyLength: result.body?.length,
+        mimeType: part.mimeType,
+        isMultipart: part.mimeType?.startsWith('multipart/'),
+      });
 
       // Sanitize HTML content
       if (result.body) {
+        const originalBody = result.body;
         result.body = this.sanitizeHtml(result.body);
+        console.log('[Gmail Debug] After sanitization:', {
+          messageId,
+          originalLength: originalBody.length,
+          sanitizedLength: result.body.length,
+          wasChanged: originalBody !== result.body,
+        });
       }
 
       // Handle multipart messages
@@ -700,8 +722,21 @@ class GmailListenerService {
    * Extract first matching content type from email parts
    */
   extractFirstMatching(part, types = ['text/html', 'text/plain']) {
+    console.log('[Gmail Debug] Extracting content:', {
+      mimeType: part.mimeType,
+      hasBody: !!part.body?.data,
+      targetTypes: types,
+    });
+
     if (types.includes(part.mimeType) && part.body?.data) {
-      return Buffer.from(part.body.data, 'base64url').toString();
+      const content = Buffer.from(part.body.data, 'base64url').toString();
+      console.log('[Gmail Debug] Found matching content:', {
+        mimeType: part.mimeType,
+        contentLength: content.length,
+        isHtml: part.mimeType === 'text/html',
+        preview: content.substring(0, 100) + '...',
+      });
+      return content;
     }
     if (part.parts?.length) {
       for (const sub of part.parts) {
