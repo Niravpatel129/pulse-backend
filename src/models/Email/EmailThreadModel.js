@@ -127,6 +127,11 @@ const emailThreadSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    stage: {
+      type: String,
+      enum: ['unassigned', 'assigned', 'archived', 'snoozed', 'trash', 'spam'],
+      default: 'unassigned',
+    },
     subject: {
       type: String,
       required: true,
