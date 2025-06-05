@@ -222,7 +222,6 @@ class EmailListenerService {
         // Create base email data
         const emailData = {
           from: fromEmail,
-          projectId: workspace._id,
           to: toEmail,
           subject,
           sentBy: user?._id,
@@ -330,7 +329,6 @@ class EmailListenerService {
       // Create base email data
       const emailData = {
         from: fromEmail,
-        projectId: workspace._id, // Use the actual workspace ObjectId
         to: toEmail,
         subject,
         sentBy: user?._id,

@@ -47,7 +47,6 @@ export const addParticipant = async (req, res, next) => {
     });
 
     if (projectId) {
-      console.log('🚀 projectId:', projectId);
       const project = await Project.findById(projectId);
       if (project) {
         // Add participant with the required participant field
