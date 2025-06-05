@@ -2,10 +2,12 @@ import EmailThread from '../../models/Email/EmailThreadModel.js';
 
 const getInboxEmails = async (req, res) => {
   try {
+    console.log('🚀 req.query:', req.query);
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const stage = req.query.stage || 'unassigned';
     const skip = (page - 1) * limit;
+    console.log('🚀 stage:', stage);
 
     // Get total count for pagination
     const total = await EmailThread.countDocuments({ workspaceId: req.workspace._id, stage });
