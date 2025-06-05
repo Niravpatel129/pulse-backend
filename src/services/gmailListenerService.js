@@ -486,12 +486,20 @@ class GmailListenerService {
         // First check if there's an existing thread with the same subject and participants
         const potentialThreads = await EmailThread.find({
           workspaceId: integration.workspace._id,
-          cleanSubject: this.cleanSubjectFromSubject(subject),
+          $or: [
+            { threadId: threadId }, // First check for exact threadId match
+            { cleanSubject: this.cleanSubjectFromSubject(subject) }, // Then check for subject match
+          ],
         });
 
         let targetThread = null;
         for (const potentialThread of potentialThreads) {
-          // Check if this email should be part of the potential thread
+          // If we found a thread with matching threadId, use that
+          if (potentialThread.threadId === threadId) {
+            targetThread = potentialThread;
+            break;
+          }
+          // Otherwise check if this email should be part of the potential thread
           if (await potentialThread.shouldIncludeEmail(email)) {
             targetThread = potentialThread;
             break;
