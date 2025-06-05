@@ -2,10 +2,29 @@ import Email from '../../models/Email.js';
 
 const getInboxEmails = async (req, res) => {
   try {
-    const { workspaceId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    const inbox = await Email.find({ workspaceId });
-    res.status(200).json(inbox);
+    // Get total count for pagination
+    const total = await Email.countDocuments({ workspaceId: req.workspace._id });
+
+    // Get paginated emails
+    const inbox = await Email.find({ workspaceId: req.workspace._id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({
+      success: true,
+      data: inbox,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+        limit,
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Internal server error' });
