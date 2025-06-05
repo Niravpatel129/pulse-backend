@@ -1,5 +1,6 @@
 import createDOMPurify from 'dompurify';
 import { google } from 'googleapis';
+import sha256 from 'js-sha256';
 import { JSDOM } from 'jsdom';
 import Email from '../models/Email.js';
 import GmailIntegration from '../models/GmailIntegration.js';
@@ -745,6 +746,16 @@ class GmailListenerService {
   }
 
   /**
+   * Generate Gravatar URL for an email address
+   */
+  generateGravatarUrl(email) {
+    if (!email) return null;
+    const address = String(email).trim().toLowerCase();
+    const hash = sha256(address);
+    return `https://gravatar.com/avatar/${hash}`;
+  }
+
+  /**
    * Format email address into rich contact format
    */
   formatEmailAddress(emailStr, role = 'from') {
@@ -773,6 +784,12 @@ class GmailListenerService {
       .join('')
       .toUpperCase();
 
+    // Generate avatar URLs
+    const gravatarUrl = this.generateGravatarUrl(email);
+    const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      displayName,
+    )}&background=random`;
+
     return {
       id: timestamp,
       avatar_type: 'contact',
@@ -786,9 +803,7 @@ class GmailListenerService {
       email: email,
       display_name: displayName,
       description: null,
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
-        displayName,
-      )}&background=random`,
+      avatar: gravatarUrl || fallbackAvatar,
       initials: initials,
       channel_id: null,
       channel_full: null,
@@ -818,9 +833,7 @@ class GmailListenerService {
         url: `/api/cards/${timestamp}`,
         name: displayName,
         display_name: displayName,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
-          displayName,
-        )}&background=random`,
+        avatar: gravatarUrl || fallbackAvatar,
         initials: initials,
         color: '#a385e0',
         num_notes: 0,
