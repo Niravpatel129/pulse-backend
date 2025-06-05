@@ -365,6 +365,7 @@ emailThreadSchema.methods.updateLatestMessage = async function (messageData) {
     sender: messageData.sender,
     timestamp: messageData.timestamp || new Date(),
     type: messageData.type || 'email',
+    isRead: messageData.isRead ?? false,
   };
   this.lastActivity = messageData.timestamp || new Date();
   await this.save();
