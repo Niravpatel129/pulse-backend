@@ -728,22 +728,48 @@ class GmailListenerService {
       targetTypes: types,
     });
 
-    if (types.includes(part.mimeType) && part.body?.data) {
+    // First try to find HTML content
+    if (part.mimeType === 'text/html' && part.body?.data) {
       const content = Buffer.from(part.body.data, 'base64url').toString();
-      console.log('[Gmail Debug] Found matching content:', {
+      console.log('[Gmail Debug] Found HTML content:', {
         mimeType: part.mimeType,
         contentLength: content.length,
-        isHtml: part.mimeType === 'text/html',
+        isHtml: true,
         preview: content.substring(0, 100) + '...',
       });
       return content;
     }
+
+    // If no HTML content found, try to find plain text
+    if (part.mimeType === 'text/plain' && part.body?.data) {
+      const content = Buffer.from(part.body.data, 'base64url').toString();
+      console.log('[Gmail Debug] Found plain text content:', {
+        mimeType: part.mimeType,
+        contentLength: content.length,
+        isHtml: false,
+        preview: content.substring(0, 100) + '...',
+      });
+      return content;
+    }
+
+    // If no direct match, check parts
     if (part.parts?.length) {
+      // First try to find HTML in parts
       for (const sub of part.parts) {
-        const res = this.extractFirstMatching(sub, types);
-        if (res) return res;
+        if (sub.mimeType === 'text/html') {
+          const res = this.extractFirstMatching(sub, types);
+          if (res) return res;
+        }
+      }
+      // If no HTML found, try plain text
+      for (const sub of part.parts) {
+        if (sub.mimeType === 'text/plain') {
+          const res = this.extractFirstMatching(sub, types);
+          if (res) return res;
+        }
       }
     }
+
     return '';
   }
 
