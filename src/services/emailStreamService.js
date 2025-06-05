@@ -199,6 +199,7 @@ class EmailStreamService {
         sentAt,
       });
 
+      console.log('Email saved:', email.subject);
       await email.save();
     } catch (error) {
       console.error('Error processing email:', error);
