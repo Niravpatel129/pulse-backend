@@ -469,58 +469,90 @@ emailThreadSchema.statics.findPotentialThreads = async function (email) {
 
 // Add method to check if email belongs to this thread
 emailThreadSchema.methods.shouldIncludeEmail = function (email) {
-  // First check message references - this is Gmail's primary method
-  if (email.messageId) {
-    // Check if this email is referenced in the thread
-    const isReferenced = this.messageReferences.some(
-      (ref) =>
-        ref.messageId === email.messageId ||
-        ref.references.includes(email.messageId) ||
-        email.inReplyTo === ref.messageId,
-    );
-    if (isReferenced) {
-      return true;
-    }
-
-    // Check if this email references any message in the thread
-    if (
-      email.inReplyTo &&
-      this.messageReferences.some((ref) => ref.messageId === email.inReplyTo)
-    ) {
-      return true;
-    }
-
-    if (
-      email.references &&
-      email.references.some((ref) =>
-        this.messageReferences.some((threadRef) => threadRef.messageId === ref),
-      )
-    ) {
-      return true;
-    }
+  // 1. First check Message-ID - if this email's ID is already in the thread
+  if (email.messageId && this.messageReferences.some((ref) => ref.messageId === email.messageId)) {
+    return true;
   }
 
-  // If no message reference match, check participant overlap
+  // 2. Check In-Reply-To - if this email is replying to any message in the thread
+  if (email.inReplyTo && this.messageReferences.some((ref) => ref.messageId === email.inReplyTo)) {
+    return true;
+  }
+
+  // 3. Check References - if this email references any message in the thread
+  if (
+    email.references &&
+    email.references.some((ref) =>
+      this.messageReferences.some((threadRef) => threadRef.messageId === ref),
+    )
+  ) {
+    return true;
+  }
+
+  // 4. Check if any message in the thread references this email
+  if (
+    email.messageId &&
+    this.messageReferences.some((ref) => ref.references && ref.references.includes(email.messageId))
+  ) {
+    return true;
+  }
+
+  // If we get here, the core headers didn't establish a connection
+  // Only use heuristics if we have no header-based connection
+
+  // Check participant overlap only if we have no header-based connection
   const emailParticipants = EmailThread.getParticipantEmails(email);
   const threadParticipants = this.participants.map((p) => p.email);
   const overlap = emailParticipants.filter((email) => threadParticipants.includes(email));
   const overlapPercentage =
     overlap.length / Math.max(emailParticipants.length, threadParticipants.length);
 
-  // If less than 50% overlap, likely a different thread
-  if (overlapPercentage < 0.5) {
+  // Require very high participant overlap (>90%) for heuristic matching
+  if (overlapPercentage < 0.9) {
     return false;
   }
 
-  // Check time proximity (if more than 30 days apart, likely new thread)
-  const timeDiff = Math.abs(email.sentAt - this.firstMessageDate);
-  if (timeDiff > 30 * 24 * 60 * 60 * 1000) {
+  // Check time proximity (if more than 24 hours apart, likely new thread)
+  const timeDiff = Math.abs(new Date(email.sentAt) - this.firstMessageDate);
+  if (timeDiff > 24 * 60 * 60 * 1000) {
+    // 24 hours
     return false;
   }
 
-  // Only use subject matching as a last resort
+  // Check if this is a new conversation starter
+  // If the email doesn't have In-Reply-To or References, and no message in the thread
+  // references it, it's likely a new conversation
+  if (!email.inReplyTo && (!email.references || email.references.length === 0)) {
+    const isReferencedInThread = this.messageReferences.some(
+      (ref) => ref.references && ref.references.includes(email.messageId),
+    );
+    if (!isReferencedInThread) {
+      return false;
+    }
+  }
+
+  // Check if the email is from a mailing list or automated system
+  // These often reuse subjects but should be separate threads
+  const isAutomated =
+    email.from?.email?.toLowerCase().includes('noreply') ||
+    email.from?.email?.toLowerCase().includes('no-reply') ||
+    email.from?.email?.toLowerCase().includes('automated') ||
+    email.from?.email?.toLowerCase().includes('mailing-list') ||
+    email.from?.email?.toLowerCase().includes('newsletter');
+
+  if (isAutomated) {
+    return false;
+  }
+
+  // Only use subject matching as a last resort, and require exact match
   const emailCleanSubject = EmailThread.cleanSubjectFromSubject(email.subject);
   if (emailCleanSubject !== this.cleanSubject) {
+    return false;
+  }
+
+  // Additional check: If the email has a different threadId from Gmail,
+  // it's likely a separate thread even if other heuristics match
+  if (email.threadId && email.threadId !== this.threadId) {
     return false;
   }
 

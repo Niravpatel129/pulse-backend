@@ -522,8 +522,14 @@ class GmailListenerService {
         const potentialThreads = await EmailThread.find({
           workspaceId: integration.workspace._id,
           $or: [
-            { threadId: threadId }, // First check for exact threadId match
-            { cleanSubject: this.cleanSubjectFromSubject(subject) }, // Then check for subject match
+            // 1. First check for exact threadId match (Gmail's primary method)
+            { threadId: threadId },
+            // 2. Then check for message reference matches
+            {
+              'messageReferences.messageId': messageIdHeader,
+              'messageReferences.inReplyTo': getHeader('In-Reply-To'),
+              'messageReferences.references': { $in: getHeader('References')?.split(/\s+/) || [] },
+            },
           ],
         });
 
@@ -546,7 +552,14 @@ class GmailListenerService {
           await EmailThread.findByIdAndUpdate(
             targetThread._id,
             {
-              $addToSet: { emails: email._id },
+              $addToSet: {
+                emails: email._id,
+                messageReferences: {
+                  messageId: messageIdHeader,
+                  inReplyTo: getHeader('In-Reply-To'),
+                  references: getHeader('References')?.split(/\s+/) || [],
+                },
+              },
               $set: {
                 lastMessageDate: sentAt,
                 lastActivity: sentAt,
