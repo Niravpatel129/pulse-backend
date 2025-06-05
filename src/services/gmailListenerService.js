@@ -451,24 +451,22 @@ class GmailListenerService {
         // Format attachments with required fields
         const formattedAttachments = attachments.map((att) => ({
           filename: att.filename || 'unnamed_file',
-          size: att.size || 0,
-          type: att.type || 'unknown',
           mimeType: att.mimeType || 'application/octet-stream',
-          storageUrl: att.downloadUrl || '',
+          size: att.size || 0,
           attachmentId: att.attachmentId || messageId,
+          storageUrl: att.downloadUrl || '',
+          data: att.data || null,
           isInline: att.isInline || false,
-          error: att.error || null,
-          skipped: att.skipped || false,
         }));
 
         // Format inline images
         const formattedInlineImages = inlineImages.map((img) => ({
           filename: img.filename || 'unnamed_image',
-          size: img.size || 0,
-          type: img.type || 'image',
           mimeType: img.mimeType || 'image/jpeg',
-          storageUrl: img.downloadUrl || '',
+          size: img.size || 0,
           contentId: img.contentId || '',
+          storageUrl: img.downloadUrl || '',
+          data: img.data || null,
         }));
 
         // Create email document with atomic operation
