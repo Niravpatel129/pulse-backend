@@ -3,6 +3,7 @@ import { google } from 'googleapis';
 import sha256 from 'js-sha256';
 import { JSDOM } from 'jsdom';
 import Email from '../models/Email.js';
+import EmailThread from '../models/Email/EmailThreadModel.js';
 import GmailIntegration from '../models/GmailIntegration.js';
 import { fileUtils, firebaseStorage } from '../utils/firebase.js';
 
@@ -408,8 +409,77 @@ class GmailListenerService {
       }
 
       await email.save();
-      console.info('[Gmail] Email processed successfully:', {
+
+      // Handle thread creation/update
+      let thread = await EmailThread.findOne({ threadId });
+
+      if (!thread) {
+        // Create new thread with title derived from subject
+        const threadTitle = this.generateThreadTitle(subject, from);
+        thread = new EmailThread({
+          threadId,
+          workspaceId: integration.workspace._id,
+          title: threadTitle,
+          subject: subject || '(No Subject)',
+          participants: [
+            { email: from.email, name: from.name, role: 'sender', isInternal: false },
+            ...to.map((t) => ({
+              email: t.email,
+              name: t.name,
+              role: 'recipient',
+              isInternal: false,
+            })),
+            ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
+            ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
+          ],
+          emails: [email._id],
+          lastActivity: sentAt,
+          latestMessage: {
+            content: message.data.snippet || this.generateMessagePreview(body),
+            sender: from.name || from.email,
+            timestamp: sentAt,
+            type: 'email',
+          },
+        });
+      } else {
+        // Update existing thread
+        thread.emails.push(email._id);
+        thread.lastActivity = sentAt;
+
+        // Update latest message
+        await thread.updateLatestMessage({
+          content: message.data.snippet || this.generateMessagePreview(body),
+          sender: from.name || from.email,
+          timestamp: sentAt,
+          type: 'email',
+        });
+
+        // Update participants if new ones are found
+        const allParticipants = [
+          { email: from.email, name: from.name, role: 'sender', isInternal: false },
+          ...to.map((t) => ({
+            email: t.email,
+            name: t.name,
+            role: 'recipient',
+            isInternal: false,
+          })),
+          ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
+          ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
+        ];
+
+        // Add new participants that aren't already in the thread
+        allParticipants.forEach((participant) => {
+          if (!thread.participants.some((p) => p.email === participant.email)) {
+            thread.participants.push(participant);
+          }
+        });
+      }
+
+      await thread.save();
+
+      console.info('[Gmail] Email and thread processed successfully:', {
         emailId: email._id,
+        threadId: thread._id,
         workspaceId: email.workspaceId,
         attachmentsCount: formattedAttachments.length,
         inlineImagesCount: formattedInlineImages.length,
@@ -423,6 +493,26 @@ class GmailListenerService {
       console.error('[Gmail] Error processing email:', error);
       throw error;
     }
+  }
+
+  /**
+   * Generate a thread title from subject and sender
+   */
+  generateThreadTitle(subject, from) {
+    // Remove common prefixes like Re:, Fwd:, etc.
+    const cleanSubject = subject.replace(/^(Re|Fwd|Fw|R|F):\s*/i, '').trim();
+
+    // If subject is empty or just contains prefixes, use sender's name
+    if (!cleanSubject || cleanSubject === '') {
+      return `Conversation with ${from.name || from.email.split('@')[0]}`;
+    }
+
+    // If subject is too long, truncate it
+    if (cleanSubject.length > 100) {
+      return cleanSubject.substring(0, 97) + '...';
+    }
+
+    return cleanSubject;
   }
 
   /**
@@ -874,6 +964,27 @@ class GmailListenerService {
       status: 'active',
       preferences: {},
     };
+  }
+
+  /**
+   * Generate a preview of the message content
+   */
+  generateMessagePreview(content) {
+    if (!content) return '';
+
+    // Remove HTML tags and decode HTML entities
+    const plainText = content
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+      .replace(/&amp;/g, '&') // Replace &amp; with &
+      .replace(/&lt;/g, '<') // Replace &lt; with <
+      .replace(/&gt;/g, '>') // Replace &gt; with >
+      .replace(/&quot;/g, '"') // Replace &quot; with "
+      .replace(/&#39;/g, "'") // Replace &#39; with '
+      .trim();
+
+    // Truncate to 200 characters and add ellipsis if needed
+    return plainText.length > 200 ? plainText.substring(0, 197) + '...' : plainText;
   }
 }
 
