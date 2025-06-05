@@ -394,14 +394,26 @@ class GmailListenerService {
           integration.workspace._id.toString(),
         );
 
+        // Enhanced empty email detection
+        const isEmptyEmail = this.isEmailEmpty(body, message.data.snippet);
+        if (isEmptyEmail) {
+          console.log('[Gmail] Skipping empty email:', {
+            messageId,
+            workspaceId: integration.workspace._id,
+            timestamp: new Date().toISOString(),
+            snippet: message.data.snippet,
+            bodyLength: body?.length,
+          });
+          return;
+        }
+
         // Log detailed body content analysis
         console.log('[Gmail Debug] Email content analysis:', {
           messageId,
           hasBody: !!body,
           bodyLength: body?.length,
           isHtml: body?.includes('<html') || body?.includes('<body'),
-          isEmpty:
-            !body || body.trim() === '' || body === '<br>' || body === '<div dir="ltr"><br></div>',
+          isEmpty: isEmptyEmail,
           preview: body?.substring(0, 100) + '...',
           headers: {
             subject: getHeader('Subject'),
@@ -413,21 +425,6 @@ class GmailListenerService {
             references: getHeader('References'),
           },
         });
-
-        // If the email is empty, log it and skip processing
-        if (
-          !body ||
-          body.trim() === '' ||
-          body === '<br>' ||
-          body === '<div dir="ltr"><br></div>'
-        ) {
-          console.log('[Gmail] Skipping empty email:', {
-            messageId,
-            workspaceId: integration.workspace._id,
-            timestamp: new Date().toISOString(),
-          });
-          return;
-        }
 
         // Extract and format email details
         const fromHeader = getHeader('From');
@@ -1311,6 +1308,49 @@ class GmailListenerService {
     } catch (error) {
       console.error('[Gmail] Error releasing lock:', error);
     }
+  }
+
+  /**
+   * Check if an email is empty
+   * @param {string} body - The email body content
+   * @param {string} snippet - The email snippet from Gmail
+   * @returns {boolean} - Whether the email is considered empty
+   */
+  isEmailEmpty(body, snippet) {
+    if (!body && !snippet) return true;
+
+    // Check for common empty email patterns
+    const emptyPatterns = [
+      '', // Empty string
+      '<br>',
+      '<div dir="ltr"><br></div>',
+      '<div><br></div>',
+      '<p><br></p>',
+      '&nbsp;',
+      ' ',
+      '\n',
+      '\r\n',
+      '\t',
+    ];
+
+    // Clean the body content
+    const cleanBody = body
+      ?.replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim();
+
+    // Check if body matches any empty patterns
+    if (emptyPatterns.includes(body) || emptyPatterns.includes(cleanBody)) {
+      return true;
+    }
+
+    // Check if snippet is empty or just whitespace
+    if (!snippet || snippet.trim() === '') {
+      return true;
+    }
+
+    return false;
   }
 }
 
