@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import createDOMPurify from 'dompurify';
 import { google } from 'googleapis';
 import sha256 from 'js-sha256';
@@ -488,7 +489,7 @@ class GmailListenerService {
             workspaceId: integration.workspace._id,
             title: threadTitle,
             subject: subject || '(No Subject)',
-            cleanSubject,
+            cleanSubject: cleanSubject || '(No Subject)',
             participants: allParticipants,
             participantHash: this.generateParticipantHash(allParticipants),
             emails: [email._id],
@@ -1083,7 +1084,7 @@ class GmailListenerService {
       .map((p) => p.email.toLowerCase())
       .sort()
       .join('|');
-    return require('crypto').createHash('sha256').update(sortedEmails).digest('hex');
+    return createHash('sha256').update(sortedEmails).digest('hex');
   }
 }
 
