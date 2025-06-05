@@ -555,6 +555,7 @@ class GmailListenerService {
                   sender: from.name || from.email,
                   timestamp: sentAt,
                   type: 'email',
+                  isRead: false,
                 },
               },
             },
@@ -630,6 +631,7 @@ class GmailListenerService {
               sender: from.name || from.email,
               timestamp: sentAt,
               type: 'email',
+              isRead: false,
             },
           });
 

@@ -179,6 +179,10 @@ const emailThreadSchema = new mongoose.Schema(
         enum: ['email', 'note', 'system'],
         default: 'email',
       },
+      isRead: {
+        type: Boolean,
+        default: false,
+      },
     },
     status: {
       type: String,
@@ -325,6 +329,16 @@ emailThreadSchema.methods.markAsRead = async function (isRead = true) {
   this.isRead = isRead;
   this.lastActivity = new Date();
   await this.save();
+  return this;
+};
+
+// Method to mark latest message as read
+emailThreadSchema.methods.markLatestMessageAsRead = async function (isRead = true) {
+  if (this.latestMessage) {
+    this.latestMessage.isRead = isRead;
+    this.lastActivity = new Date();
+    await this.save();
+  }
   return this;
 };
 
