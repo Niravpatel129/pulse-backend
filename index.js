@@ -31,6 +31,7 @@ import figmaRoutes from './src/routes/figmaRoutes.js';
 import fileManagerRoutes from './src/routes/fileManagerRoutes.js';
 import fileRoutes from './src/routes/fileRoutes.js';
 import gmailRoutes from './src/routes/gmailRoutes.js';
+import inboxRoutes from './src/routes/inboxRoutes.js';
 import integrationRoutes from './src/routes/integrationRoutes.js';
 import invoice2Routes from './src/routes/invoice2Routes.js';
 import invoiceRoutes from './src/routes/invoiceRoutes.js';
@@ -167,6 +168,7 @@ app.use(`${routesPrefix}/schedule`, scheduleRoutes);
 
 // Communication
 app.use(`${routesPrefix}/emails`, emailRoutes);
+app.use(`${routesPrefix}/inbox`, inboxRoutes);
 
 // Data and storage
 app.use(`${routesPrefix}/tables`, tablesRoutes);
