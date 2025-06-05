@@ -514,47 +514,55 @@ class GmailListenerService {
         }
       } else {
         // Update existing thread
-        thread.emails.push(email._id);
-        thread.lastActivity = sentAt;
-        thread.lastMessageDate = sentAt;
-        thread.messageCount = thread.emails.length;
+        // Check if email already exists in thread
+        if (!thread.emails.includes(email._id)) {
+          thread.emails.push(email._id);
+          thread.lastActivity = sentAt;
+          thread.lastMessageDate = sentAt;
+          thread.messageCount = thread.emails.length;
 
-        // Update latest message
-        await thread.updateLatestMessage({
-          content: message.data.snippet || this.generateMessagePreview(body),
-          sender: from.name || from.email,
-          timestamp: sentAt,
-          type: 'email',
-        });
+          // Update latest message
+          await thread.updateLatestMessage({
+            content: message.data.snippet || this.generateMessagePreview(body),
+            sender: from.name || from.email,
+            timestamp: sentAt,
+            type: 'email',
+          });
 
-        // Update participants
-        const allParticipants = [
-          { email: from.email, name: from.name, role: 'sender', isInternal: false },
-          ...to.map((t) => ({
-            email: t.email,
-            name: t.name,
-            role: 'recipient',
-            isInternal: false,
-          })),
-          ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
-          ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
-        ];
+          // Update participants
+          const allParticipants = [
+            { email: from.email, name: from.name, role: 'sender', isInternal: false },
+            ...to.map((t) => ({
+              email: t.email,
+              name: t.name,
+              role: 'recipient',
+              isInternal: false,
+            })),
+            ...cc.map((c) => ({ email: c.email, name: c.name, role: 'cc', isInternal: false })),
+            ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
+          ];
 
-        allParticipants.forEach((participant) => {
-          if (!thread.participants.some((p) => p.email === participant.email)) {
-            thread.participants.push(participant);
-          }
-        });
+          allParticipants.forEach((participant) => {
+            if (!thread.participants.some((p) => p.email === participant.email)) {
+              thread.participants.push(participant);
+            }
+          });
 
-        // Update message references
-        thread.messageReferences.push({
-          messageId: messageIdHeader,
-          inReplyTo: getHeader('In-Reply-To'),
-          references: getHeader('References')?.split(/\s+/) || [],
-        });
+          // Update message references
+          thread.messageReferences.push({
+            messageId: messageIdHeader,
+            inReplyTo: getHeader('In-Reply-To'),
+            references: getHeader('References')?.split(/\s+/) || [],
+          });
+
+          await thread.save();
+        } else {
+          console.log('[Gmail] Email already exists in thread, skipping update:', {
+            emailId: email._id,
+            threadId: thread._id,
+          });
+        }
       }
-
-      await thread.save();
 
       console.info('[Gmail] Email and thread processed successfully:', {
         emailId: email._id,
