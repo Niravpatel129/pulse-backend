@@ -1142,6 +1142,75 @@ class GmailListenerService {
       .join('|');
     return createHash('sha256').update(sortedEmails).digest('hex');
   }
+
+  /**
+   * Acquire a lock for processing an email
+   * @param {string} messageId - The Gmail message ID
+   * @param {string} workspaceId - The workspace ID
+   * @returns {Promise<boolean>} - Whether the lock was acquired
+   */
+  async acquireLock(messageId, workspaceId) {
+    if (!this.isInitialized) {
+      throw new Error('Service not initialized');
+    }
+
+    try {
+      const db = mongoose.connection.db;
+      if (!db) {
+        throw new Error('MongoDB database not available');
+      }
+
+      const lockId = `${workspaceId}-${messageId}`;
+      const lockExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+      const result = await db.collection('locks').updateOne(
+        {
+          _id: lockId,
+          $or: [{ expiresAt: { $lt: new Date() } }, { serverId: this.serverId }],
+        },
+        {
+          $set: {
+            serverId: this.serverId,
+            expiresAt: lockExpiry,
+            messageId,
+            workspaceId,
+          },
+        },
+        { upsert: true },
+      );
+
+      return result.modifiedCount > 0 || result.upsertedCount > 0;
+    } catch (error) {
+      console.error('[Gmail] Error acquiring lock:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Release a lock for an email
+   * @param {string} messageId - The Gmail message ID
+   * @param {string} workspaceId - The workspace ID
+   */
+  async releaseLock(messageId, workspaceId) {
+    if (!this.isInitialized) {
+      return;
+    }
+
+    try {
+      const db = mongoose.connection.db;
+      if (!db) {
+        return;
+      }
+
+      const lockId = `${workspaceId}-${messageId}`;
+      await db.collection('locks').deleteOne({
+        _id: lockId,
+        serverId: this.serverId,
+      });
+    } catch (error) {
+      console.error('[Gmail] Error releasing lock:', error);
+    }
+  }
 }
 
 // Create and export a singleton instance
