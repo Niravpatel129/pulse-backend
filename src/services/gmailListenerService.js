@@ -137,10 +137,7 @@ class GmailListenerService {
    */
   async setupWatchForIntegration(integration) {
     try {
-      const shouldRefresh =
-        !integration.watchExpiration ||
-        new Date(integration.watchExpiration).getTime() < Date.now() + 24 * 60 * 60 * 1000;
-
+      const shouldRefresh = true;
       if (!shouldRefresh || !integration.isActive) {
         console.log(`[Gmail Watch] Skipping: ${integration.email}`);
         return;

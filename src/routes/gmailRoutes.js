@@ -6,6 +6,7 @@ import getGmailAttachment from '../controllers/integrations/gmail/getGmailAttach
 import getGmailClientEmails from '../controllers/integrations/gmail/getGmailClientEmails.js';
 import getGmailEmails from '../controllers/integrations/gmail/getGmailEmails.js';
 import getGmailStatus from '../controllers/integrations/gmail/getGmailStatus.js';
+import gmailWebhook from '../controllers/integrations/gmail/gmailWebhook.js';
 import setPrimaryGmail from '../controllers/integrations/gmail/setPrimaryGmail.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
@@ -26,5 +27,8 @@ router.get(
   extractWorkspace,
   getGmailAttachment,
 );
+
+// Webhook route - no auth required as it's called by Google
+router.post('/webhook', gmailWebhook);
 
 export default router;
