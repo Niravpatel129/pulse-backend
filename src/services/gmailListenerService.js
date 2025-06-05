@@ -198,6 +198,7 @@ class GmailListenerService {
       workspaceId: integration.workspace._id,
       historyId,
       timestamp: new Date().toISOString(),
+      serverId: this.serverId,
     });
 
     try {
@@ -228,6 +229,10 @@ class GmailListenerService {
         currentHistoryId: profile.data.historyId,
         ourHistoryId: historyId,
         difference: Number(profile.data.historyId) - Number(historyId),
+        lastSynced: integration.lastSynced?.toISOString(),
+        timeSinceLastSync: integration.lastSynced
+          ? Math.round((Date.now() - integration.lastSynced.getTime()) / 1000) + ' seconds'
+          : 'never',
       });
 
       // List changes since last history ID
@@ -244,6 +249,8 @@ class GmailListenerService {
           oldHistoryId: historyId,
           newHistoryId: history.data.historyId,
           difference: Number(history.data.historyId) - Number(historyId),
+          historyLength: history.data.history?.length || 0,
+          nextPageToken: history.data.nextPageToken ? 'present' : 'none',
         });
         integration.historyId = history.data.historyId;
         await integration.save();
@@ -255,6 +262,9 @@ class GmailListenerService {
           historyId: history.data.historyId,
           historyLength: history.data.history?.length || 0,
           nextPageToken: history.data.nextPageToken ? 'present' : 'none',
+          timeSinceLastSync: integration.lastSynced
+            ? Math.round((Date.now() - integration.lastSynced.getTime()) / 1000) + ' seconds'
+            : 'never',
         });
         return;
       }
@@ -367,6 +377,7 @@ class GmailListenerService {
             messageId,
             gmailMessageId: messageId,
             workspaceId: integration.workspace._id,
+            existingEmailId: existingEmail._id,
           });
           return;
         }
@@ -383,13 +394,40 @@ class GmailListenerService {
           integration.workspace._id.toString(),
         );
 
-        console.log('[Gmail Debug] Final body content before storage:', {
+        // Log detailed body content analysis
+        console.log('[Gmail Debug] Email content analysis:', {
           messageId,
           hasBody: !!body,
           bodyLength: body?.length,
           isHtml: body?.includes('<html') || body?.includes('<body'),
+          isEmpty:
+            !body || body.trim() === '' || body === '<br>' || body === '<div dir="ltr"><br></div>',
           preview: body?.substring(0, 100) + '...',
+          headers: {
+            subject: getHeader('Subject'),
+            from: getHeader('From'),
+            to: getHeader('To'),
+            date: getHeader('Date'),
+            messageId: messageIdHeader,
+            inReplyTo: getHeader('In-Reply-To'),
+            references: getHeader('References'),
+          },
         });
+
+        // If the email is empty, log it and skip processing
+        if (
+          !body ||
+          body.trim() === '' ||
+          body === '<br>' ||
+          body === '<div dir="ltr"><br></div>'
+        ) {
+          console.log('[Gmail] Skipping empty email:', {
+            messageId,
+            workspaceId: integration.workspace._id,
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
 
         // Extract and format email details
         const fromHeader = getHeader('From');
