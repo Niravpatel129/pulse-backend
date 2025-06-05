@@ -469,17 +469,40 @@ emailThreadSchema.statics.findPotentialThreads = async function (email) {
 
 // Add method to check if email belongs to this thread
 emailThreadSchema.methods.shouldIncludeEmail = function (email) {
-  // Check subject match (ignoring prefixes)
-  const emailCleanSubject = EmailThread.cleanSubjectFromSubject(email.subject);
-  if (emailCleanSubject !== this.cleanSubject) {
-    return false;
+  // First check message references - this is Gmail's primary method
+  if (email.messageId) {
+    // Check if this email is referenced in the thread
+    const isReferenced = this.messageReferences.some(
+      (ref) =>
+        ref.messageId === email.messageId ||
+        ref.references.includes(email.messageId) ||
+        email.inReplyTo === ref.messageId,
+    );
+    if (isReferenced) {
+      return true;
+    }
+
+    // Check if this email references any message in the thread
+    if (
+      email.inReplyTo &&
+      this.messageReferences.some((ref) => ref.messageId === email.inReplyTo)
+    ) {
+      return true;
+    }
+
+    if (
+      email.references &&
+      email.references.some((ref) =>
+        this.messageReferences.some((threadRef) => threadRef.messageId === ref),
+      )
+    ) {
+      return true;
+    }
   }
 
-  // Check participant overlap
+  // If no message reference match, check participant overlap
   const emailParticipants = EmailThread.getParticipantEmails(email);
   const threadParticipants = this.participants.map((p) => p.email);
-
-  // Calculate participant overlap percentage
   const overlap = emailParticipants.filter((email) => threadParticipants.includes(email));
   const overlapPercentage =
     overlap.length / Math.max(emailParticipants.length, threadParticipants.length);
@@ -492,21 +515,13 @@ emailThreadSchema.methods.shouldIncludeEmail = function (email) {
   // Check time proximity (if more than 30 days apart, likely new thread)
   const timeDiff = Math.abs(email.sentAt - this.firstMessageDate);
   if (timeDiff > 30 * 24 * 60 * 60 * 1000) {
-    // 30 days in milliseconds
     return false;
   }
 
-  // Check message references
-  if (
-    email.messageId &&
-    this.messageReferences.some(
-      (ref) =>
-        ref.messageId === email.messageId ||
-        ref.references.includes(email.messageId) ||
-        email.inReplyTo === ref.messageId,
-    )
-  ) {
-    return true;
+  // Only use subject matching as a last resort
+  const emailCleanSubject = EmailThread.cleanSubjectFromSubject(email.subject);
+  if (emailCleanSubject !== this.cleanSubject) {
+    return false;
   }
 
   return true;
