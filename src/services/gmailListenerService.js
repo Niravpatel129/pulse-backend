@@ -545,7 +545,6 @@ class GmailListenerService {
               ...bcc.map((b) => ({ email: b.email, name: b.name, role: 'bcc', isInternal: false })),
             ],
             firstMessageDate: sentAt,
-            messageCount: 1,
             messageReferences: [
               {
                 messageId: messageIdHeader,
@@ -564,8 +563,9 @@ class GmailListenerService {
               timestamp: sentAt,
               type: 'email',
             },
+            messageCount: 1, // Set initial messageCount for new threads
           },
-          $inc: { messageCount: 1 },
+          $inc: { messageCount: 1 }, // Increment messageCount for existing threads
         },
         {
           new: true,
