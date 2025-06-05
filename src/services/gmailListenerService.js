@@ -370,7 +370,6 @@ class GmailListenerService {
                 type: 'email',
               },
             },
-            $inc: { messageCount: 1 },
           },
           {
             new: true,
@@ -563,9 +562,7 @@ class GmailListenerService {
               timestamp: sentAt,
               type: 'email',
             },
-            messageCount: 1, // Set initial messageCount for new threads
           },
-          $inc: { messageCount: 1 }, // Increment messageCount for existing threads
         },
         {
           new: true,
