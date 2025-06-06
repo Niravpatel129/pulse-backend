@@ -650,24 +650,24 @@ class GmailListenerService {
         email.body.html = body;
       }
 
-      // Add new attachments
+      // Add new attachments, avoiding duplicates based on filename and size
       if (attachments.length > 0) {
-        const newAttachments = attachments.filter(
-          (newAtt) =>
-            !email.attachments.some(
-              (existingAtt) => existingAtt.attachmentId === newAtt.attachmentId,
-            ),
-        );
+        const newAttachments = attachments.filter((newAtt) => {
+          // Check if we already have an attachment with the same filename and size
+          const isDuplicate = email.attachments.some(
+            (existingAtt) =>
+              existingAtt.filename === newAtt.filename && existingAtt.size === newAtt.size,
+          );
+          return !isDuplicate;
+        });
         email.attachments.push(...newAttachments);
       }
 
-      // Add new inline images
+      // Add new inline images, avoiding duplicates based on contentId
       if (inlineImages.length > 0) {
         const newInlineImages = inlineImages.filter(
           (newImg) =>
-            !email.inlineImages.some(
-              (existingImg) => existingImg.contentId === newImg.attachmentId,
-            ),
+            !email.inlineImages.some((existingImg) => existingImg.contentId === newImg.contentId),
         );
         email.inlineImages.push(...newInlineImages);
       }
