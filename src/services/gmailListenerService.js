@@ -213,16 +213,12 @@ class GmailListenerService {
         process.env.GOOGLE_REDIRECT_URI,
       );
 
-      console.log('[Gmail Push] OAuth client created');
-
       // Set credentials
       oauth2Client.setCredentials({
         access_token: integration.accessToken,
         refresh_token: integration.refreshToken,
         expiry_date: integration.tokenExpiry?.getTime(),
       });
-
-      console.log('[Gmail Push] OAuth credentials set');
 
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
@@ -233,10 +229,6 @@ class GmailListenerService {
         currentHistoryId: profile.data.historyId,
         ourHistoryId: historyId,
         difference: Number(profile.data.historyId) - Number(historyId),
-        lastSynced: integration.lastSynced?.toISOString(),
-        timeSinceLastSync: integration.lastSynced
-          ? Math.round((Date.now() - integration.lastSynced.getTime()) / 1000) + ' seconds'
-          : 'never',
       });
 
       // List changes since last history ID
@@ -249,54 +241,81 @@ class GmailListenerService {
 
       // No changes
       if (!history.data.history || !history.data.history.length) {
-        console.log('[Gmail Push] No new changes found. History response:', {
-          historyId: history.data.historyId,
-          historyLength: 0,
-          nextPageToken: history.data.nextPageToken || 'none',
-          timeSinceLastSync: integration.lastSynced
-            ? Math.round((Date.now() - integration.lastSynced.getTime()) / 1000) + ' seconds'
-            : 'never',
-        });
+        console.log('[Gmail Push] No new changes found');
         return;
       }
 
-      // Process history records
-      console.log('[Gmail Push] Processing history records:', {
-        recordCount: history.data.history.length,
-      });
+      // Group messages by thread ID
+      const threadMessages = new Map();
 
-      // Process each message as it comes in
+      // Process history records
       for (const record of history.data.history) {
         if (!record.messagesAdded) continue;
 
-        console.log('[Gmail Push] Processing messages:', {
-          messageCount: record.messagesAdded.length,
-        });
-
         for (const { message } of record.messagesAdded) {
           try {
-            await this.processEmail(gmail, integration, message.id);
+            // Get the full message to check its thread ID
+            const fullMessage = await gmail.users.messages.get({
+              userId: 'me',
+              id: message.id,
+              format: 'metadata',
+              metadataHeaders: ['Thread-Id'],
+            });
+
+            const threadId = fullMessage.data.threadId;
+
+            // Group messages by thread ID
+            if (!threadMessages.has(threadId)) {
+              threadMessages.set(threadId, []);
+            }
+            threadMessages.get(threadId).push(message.id);
           } catch (error) {
-            console.error('[Gmail] Error processing message:', {
+            console.error('[Gmail] Error getting message metadata:', {
               error: error.message,
               messageId: message.id,
-              workspaceId: integration.workspace._id,
             });
-            // Continue processing other messages even if one fails
             continue;
           }
         }
       }
 
-      // Update history ID after successful processing
-      console.log('[Gmail Push] Updating history ID:', {
-        oldHistoryId: historyId,
-        newHistoryId: history.data.historyId,
-        difference: Number(history.data.historyId) - Number(historyId),
-        historyLength: history.data.history.length,
-        nextPageToken: history.data.nextPageToken || 'none',
-      });
+      // Process each thread's messages together
+      for (const [threadId, messageIds] of threadMessages) {
+        try {
+          // Get the first message in the thread
+          const firstMessageId = messageIds[0];
 
+          // Check if we already have this thread in our database
+          const existingThread = await EmailThread.findOne({
+            threadId,
+            workspaceId: integration.workspace._id,
+          });
+
+          if (existingThread) {
+            // If thread exists, process all messages to update attachments
+            for (const messageId of messageIds) {
+              await this.processEmail(gmail, integration, messageId);
+            }
+          } else {
+            // If thread doesn't exist, process the first message to create it
+            await this.processEmail(gmail, integration, firstMessageId);
+
+            // Then process remaining messages to add any missing attachments
+            for (const messageId of messageIds.slice(1)) {
+              await this.processEmail(gmail, integration, messageId);
+            }
+          }
+        } catch (error) {
+          console.error('[Gmail] Error processing thread:', {
+            error: error.message,
+            threadId,
+            messageIds,
+          });
+          continue;
+        }
+      }
+
+      // Update history ID after successful processing
       integration.historyId = history.data.historyId;
       integration.lastSynced = new Date();
       await integration.save();
@@ -333,7 +352,7 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
-      console.log('[Gmail] New email received:', {
+      console.log('[Gmail] Processing email:', {
         messageId,
         workspaceId: integration.workspace._id,
         workspaceName: integration.workspace.name,
@@ -342,7 +361,6 @@ class GmailListenerService {
       });
 
       // Acquire lock for this message
-      const lockKey = `email:${messageId}:${integration.workspace._id}`;
       const lock = await this.acquireLock(messageId, integration.workspace._id);
       if (!lock) {
         console.log('[Gmail] Skipping duplicate message:', { messageId });
@@ -361,7 +379,7 @@ class GmailListenerService {
             message = await gmail.users.messages.get({
               userId: 'me',
               id: messageId,
-              format: 'full',
+              format: 'full', // Get complete message
             });
             break;
           } catch (error) {
@@ -400,12 +418,125 @@ class GmailListenerService {
           return await this.updateExistingEmail(existingEmail, message, gmail);
         }
 
+        // Get headers
+        const headers = message.data.payload.headers;
+        if (!headers || !Array.isArray(headers)) {
+          throw new Error('Invalid message: missing or invalid headers');
+        }
+
+        const getHeader = (name) =>
+          headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+        // Extract and format email details
+        const fromHeader = getHeader('From');
+        const toHeader = getHeader('To');
+        const ccHeader = getHeader('Cc');
+        const bccHeader = getHeader('Bcc');
+        const subject = getHeader('Subject');
+        const threadId = message.data.threadId;
+        const sentAt = new Date(getHeader('Date'));
+        const messageIdHeader = getHeader('Message-ID');
+
+        if (!fromHeader) {
+          throw new Error('Invalid message: missing From header');
+        }
+
+        // Format email addresses
+        const from = this.formatEmailAddress(fromHeader, 'from');
+        const to = toHeader
+          ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
+          : [];
+        const cc = ccHeader
+          ? ccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'cc'))
+          : [];
+        const bcc = bccHeader
+          ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
+          : [];
+
+        // Process attachments
+        const attachments = [];
+        const inlineImages = [];
+        let body = '';
+
+        // Process message parts
+        if (message.data.payload.parts) {
+          for (const part of message.data.payload.parts) {
+            if (part.mimeType === 'text/plain' || part.mimeType === 'text/html') {
+              if (part.body?.data) {
+                body = Buffer.from(part.body.data, 'base64').toString();
+              }
+            } else if (part.filename) {
+              const attachment = await this.processAttachment(
+                gmail,
+                messageId,
+                part,
+                integration.workspace._id,
+              );
+              if (attachment) {
+                if (part.contentId) {
+                  inlineImages.push(attachment);
+                } else {
+                  attachments.push(attachment);
+                }
+              }
+            }
+          }
+        } else if (message.data.payload.body?.data) {
+          // Handle single part messages
+          body = Buffer.from(message.data.payload.body.data, 'base64').toString();
+        }
+
         // Create new email
-        console.log('[Gmail] Creating new email:', {
-          messageId,
+        const email = new Email({
+          gmailMessageId: message.data.id,
           threadId: message.data.threadId,
+          userId: integration.workspace._id,
+          workspaceId: integration.workspace._id,
+          from,
+          to,
+          cc,
+          bcc,
+          subject: subject || '(No Subject)',
+          body: {
+            text: body ? body.replace(/<[^>]*>/g, '') : '(No text content)',
+            html: body || '(No HTML content)',
+          },
+          attachments,
+          inlineImages,
+          historyId: message.data.historyId,
+          internalDate: new Date(parseInt(message.data.internalDate)),
+          snippet: message.data.snippet || '(No preview available)',
+          token: {
+            accessToken: integration.accessToken,
+            refreshToken: integration.refreshToken,
+            expiryDate: integration.tokenExpiry,
+            scope: 'https://www.googleapis.com/auth/gmail.readonly',
+          },
+          direction: 'inbound',
+          status: 'received',
+          sentAt,
+          isSpam: message.data.labelIds?.includes('SPAM') || false,
+          stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
+          threadPart: 1,
         });
-        return await this.createNewEmail(message, gmail, integration);
+
+        await email.save();
+
+        // Handle thread management
+        await this.handleThreadManagement(email, {
+          threadId,
+          messageIdHeader,
+          from,
+          to,
+          cc,
+          bcc,
+          subject,
+          sentAt,
+          getHeader,
+          content: { text: body, html: body, attachments, inlineImages },
+        });
+
+        return email;
       } finally {
         // Always release the lock
         await this.releaseLock(messageId, integration.workspace._id);
@@ -415,173 +546,6 @@ class GmailListenerService {
         error: error.message,
         messageId,
         workspaceId: integration.workspace._id,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Create a new email
-   */
-  async createNewEmail(message, gmail, integration) {
-    try {
-      if (!message?.data?.id || !message?.data?.threadId) {
-        throw new Error('Invalid message data: missing id or threadId');
-      }
-
-      // Process email parts
-      const {
-        body,
-        attachments = [],
-        inlineImages = [],
-      } = await this.processEmailParts(
-        gmail,
-        message.data.id,
-        message.data.payload,
-        integration.workspace._id.toString(),
-      );
-
-      // Get headers
-      const headers = message.data.payload.headers;
-      if (!headers || !Array.isArray(headers)) {
-        throw new Error('Invalid message: missing or invalid headers');
-      }
-
-      const getHeader = (name) =>
-        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
-
-      // Extract and format email details
-      const fromHeader = getHeader('From');
-      const toHeader = getHeader('To');
-      const ccHeader = getHeader('Cc');
-      const bccHeader = getHeader('Bcc');
-      const subject = getHeader('Subject');
-      const threadId = message.data.threadId;
-      const sentAt = new Date(getHeader('Date'));
-      const messageIdHeader = getHeader('Message-ID');
-
-      if (!fromHeader) {
-        throw new Error('Invalid message: missing From header');
-      }
-
-      // Format email addresses
-      const from = this.formatEmailAddress(fromHeader, 'from');
-      const to = toHeader
-        ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
-        : [];
-      const cc = ccHeader
-        ? ccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'cc'))
-        : [];
-      const bcc = bccHeader
-        ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
-        : [];
-
-      // Process attachments to ensure they have storageUrl
-      const processedAttachments = await Promise.all(
-        attachments.map(async (attachment) => {
-          if (!attachment.storageUrl) {
-            // If attachment doesn't have storageUrl, try to get it from the message
-            try {
-              const attachmentData = await gmail.users.messages.attachments.get({
-                userId: 'me',
-                messageId: message.data.id,
-                id: attachment.attachmentId,
-              });
-
-              if (attachmentData?.data?.data) {
-                const buffer = Buffer.from(attachmentData.data.data, 'base64');
-                const storagePath = `workspaces/${integration.workspace._id}/files/${Date.now()}_${
-                  attachment.filename
-                }`;
-
-                // Upload to storage
-                const storageRef = storage.bucket().file(storagePath);
-                await storageRef.save(buffer, {
-                  metadata: {
-                    contentType: attachment.mimeType,
-                    cacheControl: 'public,max-age=3600',
-                  },
-                });
-
-                // Get download URL
-                const [url] = await storageRef.getSignedUrl({
-                  action: 'read',
-                  expires: '03-01-2500',
-                });
-
-                return {
-                  ...attachment,
-                  storageUrl: url,
-                };
-              }
-            } catch (error) {
-              console.error('[Gmail] Error processing attachment:', {
-                error: error.message,
-                attachmentId: attachment.attachmentId,
-                messageId: message.data.id,
-              });
-            }
-          }
-          return attachment;
-        }),
-      );
-
-      // Create new email
-      const email = new Email({
-        gmailMessageId: message.data.id,
-        threadId: message.data.threadId,
-        userId: integration.workspace._id,
-        workspaceId: integration.workspace._id,
-        from,
-        to,
-        cc,
-        bcc,
-        subject: subject || '(No Subject)',
-        body: {
-          text: body ? body.replace(/<[^>]*>/g, '') : '(No text content)',
-          html: body || '(No HTML content)',
-        },
-        attachments: processedAttachments,
-        inlineImages,
-        historyId: message.data.historyId,
-        internalDate: new Date(parseInt(message.data.internalDate)),
-        snippet: message.data.snippet || '(No preview available)',
-        token: {
-          accessToken: integration.accessToken,
-          refreshToken: integration.refreshToken,
-          expiryDate: integration.tokenExpiry,
-          scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        },
-        direction: 'inbound',
-        status: 'received',
-        sentAt,
-        isSpam: message.data.labelIds?.includes('SPAM') || false,
-        stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
-        threadPart: 1,
-      });
-
-      await email.save();
-
-      // Handle thread management
-      await this.handleThreadManagement(email, {
-        threadId,
-        messageIdHeader,
-        from,
-        to,
-        cc,
-        bcc,
-        subject,
-        sentAt,
-        getHeader,
-        content: { text: body, html: body, attachments: processedAttachments, inlineImages },
-      });
-
-      return email;
-    } catch (error) {
-      console.error('[Gmail] Error creating new email:', {
-        error: error.message,
-        messageId: message?.data?.id,
-        threadId: message?.data?.threadId,
       });
       throw error;
     }
