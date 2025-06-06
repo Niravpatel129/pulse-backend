@@ -2,6 +2,7 @@ import express from 'express';
 import { archiveThread } from '../controllers/inbox/archiveThread.js';
 import getInboxEmailById from '../controllers/inbox/getInboxEmailById.js';
 import getInboxEmails from '../controllers/inbox/getInboxEmails.js';
+import { getInboxHeaders } from '../controllers/inbox/getInboxHeaders.js';
 import { markAsSpam } from '../controllers/inbox/markAsSpam.js';
 import { moveToTrash } from '../controllers/inbox/moveToTrash.js';
 import { summarizeThread } from '../controllers/inbox/summarizeThread.js';
@@ -17,7 +18,9 @@ router.use(authenticate);
 router.use(extractWorkspace);
 
 router.get('/', getInboxEmails);
+router.get('/inbox-headers', getInboxHeaders);
 router.get('/:id', getInboxEmailById);
+
 router.post('/:threadId/read-status', updateReadStatus);
 router.post('/:threadId/trash', moveToTrash);
 router.post('/:threadId/spam', markAsSpam);
