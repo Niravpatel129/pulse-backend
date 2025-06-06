@@ -201,18 +201,17 @@ class AttachmentService {
             return null;
           }
 
-          // Convert the first page to PNG
-          const firstPage = pages[PDF_FIRST_PAGE];
-          const { width, height } = firstPage.getSize();
-
           // Create a new PDF with just the first page
           const singlePagePdf = await PDFDocument.create();
           const [copiedPage] = await singlePagePdf.copyPages(pdfDoc, [PDF_FIRST_PAGE]);
           singlePagePdf.addPage(copiedPage);
 
-          // Convert to PNG using sharp
-          const pdfBytes = await singlePagePdf.save();
-          const pngBuffer = await sharp(Buffer.from(pdfBytes))
+          // Convert to PNG using pdf-lib's built-in PNG conversion
+          const pngBytes = await singlePagePdf.saveAsBase64({ format: 'png' });
+          const pngBuffer = Buffer.from(pngBytes, 'base64');
+
+          // Resize the PNG using sharp
+          const resizedBuffer = await sharp(pngBuffer)
             .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
               fit: 'inside',
               withoutEnlargement: true,
@@ -228,7 +227,7 @@ class AttachmentService {
 
           // Upload thumbnail to storage
           const { url: thumbnailUrl } = await firebaseStorage.uploadFile(
-            pngBuffer,
+            resizedBuffer,
             thumbnailPath,
             'image/png',
           );
