@@ -15,7 +15,7 @@ export const getInboxHeaders = catchAsync(async (req, res, next) => {
 
       return {
         stage,
-        threadId: thread?._id || null,
+        threadId: thread?.threadId || null,
         isRead: thread?.isRead || true,
       };
     }),
