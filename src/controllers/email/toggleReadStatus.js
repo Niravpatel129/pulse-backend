@@ -3,7 +3,16 @@ import { handleError } from '../../utils/errorHandler.js';
 
 const toggleReadStatus = async (req, res) => {
   const { emailId } = req.params;
+  const { isUnread } = req.body;
   const userId = req.user.userId;
+
+  // Validate isUnread is a boolean
+  if (typeof isUnread !== 'boolean') {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'isUnread must be a boolean value',
+    });
+  }
 
   try {
     const email = await Email.findById(emailId);
