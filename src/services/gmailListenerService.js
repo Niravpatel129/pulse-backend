@@ -535,8 +535,8 @@ class GmailListenerService {
         bcc,
         subject: subject || '(No Subject)',
         body: {
-          text: body ? body.replace(/<[^>]*>/g, '') : '',
-          html: body || '',
+          text: body ? body.replace(/<[^>]*>/g, '') : '(No text content)',
+          html: body || '(No HTML content)',
         },
         attachments,
         inlineImages,
@@ -554,6 +554,7 @@ class GmailListenerService {
         sentAt,
         isSpam: message.data.labelIds?.includes('SPAM') || false,
         stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
+        threadPart: 1, // Add required threadPart field
       });
 
       await email.save();
@@ -917,6 +918,7 @@ class GmailListenerService {
         part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
       const isAttachment = contentDisposition.toLowerCase().includes('attachment');
       const isInline = contentDisposition.toLowerCase().includes('inline');
+      const contentId = part.headers?.find((h) => h.name.toLowerCase() === 'content-id')?.value;
 
       // Process attachments
       if (isAttachment || isInline) {
