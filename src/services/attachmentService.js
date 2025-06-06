@@ -1,7 +1,5 @@
 import { exec } from 'child_process';
-import { unlink, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 import { promisify } from 'util';
 import { firebaseStorage } from '../utils/firebase.js';
@@ -11,7 +9,7 @@ const execAsync = promisify(exec);
 // Constants
 const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024; // 20MB
 const THUMBNAIL_SIZE = 200; // 200px for thumbnail width/height
-const PDF_FIRST_PAGE = 1; // Generate thumbnail from first page
+const PDF_FIRST_PAGE = 0; // Generate thumbnail from first page (0-based index)
 
 // MIME type to extension mapping
 const MIME_EXTENSION_MAP = {
@@ -192,29 +190,34 @@ class AttachmentService {
 
       // Handle PDF files
       if (mimeType === 'application/pdf') {
-        // Create temporary files
-        const tempDir = tmpdir();
-        const tempPdfPath = join(tempDir, `temp_${Date.now()}_${filename}`);
-        const tempImagePath = join(tempDir, `temp_${Date.now()}_thumb.png`);
-
         try {
-          // Write PDF buffer to temporary file
-          await writeFile(tempPdfPath, buffer);
+          // Load the PDF document
+          const pdfDoc = await PDFDocument.load(buffer);
 
-          // Convert first page of PDF to PNG using pdftoppm
-          await execAsync(
-            `pdftoppm -png -f ${PDF_FIRST_PAGE} -l ${PDF_FIRST_PAGE} -scale-to ${THUMBNAIL_SIZE} "${tempPdfPath}" "${tempImagePath.replace(
-              '.png',
-              '',
-            )}"`,
-          );
+          // Get the first page
+          const pages = pdfDoc.getPages();
+          if (pages.length === 0) {
+            console.log('[Attachment] PDF has no pages');
+            return null;
+          }
 
-          // Read the generated image
-          const imageBuffer = await sharp(tempImagePath)
+          // Convert the first page to PNG
+          const firstPage = pages[PDF_FIRST_PAGE];
+          const { width, height } = firstPage.getSize();
+
+          // Create a new PDF with just the first page
+          const singlePagePdf = await PDFDocument.create();
+          const [copiedPage] = await singlePagePdf.copyPages(pdfDoc, [PDF_FIRST_PAGE]);
+          singlePagePdf.addPage(copiedPage);
+
+          // Convert to PNG using sharp
+          const pdfBytes = await singlePagePdf.save();
+          const pngBuffer = await sharp(Buffer.from(pdfBytes))
             .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
               fit: 'inside',
               withoutEnlargement: true,
             })
+            .png()
             .toBuffer();
 
           // Generate thumbnail storage path
@@ -225,7 +228,7 @@ class AttachmentService {
 
           // Upload thumbnail to storage
           const { url: thumbnailUrl } = await firebaseStorage.uploadFile(
-            imageBuffer,
+            pngBuffer,
             thumbnailPath,
             'image/png',
           );
@@ -236,14 +239,12 @@ class AttachmentService {
             width: THUMBNAIL_SIZE,
             height: THUMBNAIL_SIZE,
           };
-        } finally {
-          // Clean up temporary files
-          try {
-            await unlink(tempPdfPath);
-            await unlink(tempImagePath);
-          } catch (error) {
-            console.error('[Attachment] Error cleaning up temporary files:', error);
-          }
+        } catch (error) {
+          console.error('[Attachment] Error processing PDF:', {
+            error: error.message,
+            filename,
+          });
+          return null;
         }
       }
 
