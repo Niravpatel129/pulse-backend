@@ -379,7 +379,7 @@ class GmailListenerService {
             message = await gmail.users.messages.get({
               userId: 'me',
               id: messageId,
-              format: 'full', // Get complete message
+              format: 'full',
             });
             break;
           } catch (error) {
@@ -453,38 +453,50 @@ class GmailListenerService {
           ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
           : [];
 
-        // Process attachments
+        // Process message parts
+        const parts = [];
         const attachments = [];
         const inlineImages = [];
-        let body = '';
 
-        // Process message parts
-        if (message.data.payload.parts) {
-          for (const part of message.data.payload.parts) {
-            if (part.mimeType === 'text/plain' || part.mimeType === 'text/html') {
-              if (part.body?.data) {
-                body = Buffer.from(part.body.data, 'base64').toString();
-              }
-            } else if (part.filename) {
-              const attachment = await this.processAttachment(
-                gmail,
-                messageId,
-                part,
-                integration.workspace._id,
-              );
-              if (attachment) {
-                if (part.contentId) {
-                  inlineImages.push(attachment);
-                } else {
-                  attachments.push(attachment);
-                }
+        // Process message structure
+        const processPart = async (part, parentMimeType = null) => {
+          const partData = {
+            mimeType: part.mimeType,
+            contentId: part.contentId,
+            filename: part.filename,
+            headers: part.headers || [],
+          };
+
+          if (part.mimeType === 'multipart/alternative' || part.mimeType === 'multipart/mixed') {
+            partData.parts = [];
+            for (const subPart of part.parts || []) {
+              const processedSubPart = await processPart(subPart, part.mimeType);
+              partData.parts.push(processedSubPart);
+            }
+          } else if (part.body?.data) {
+            partData.content = Buffer.from(part.body.data, 'base64').toString();
+          } else if (part.filename) {
+            const attachment = await this.processAttachment(
+              gmail,
+              messageId,
+              part,
+              integration.workspace._id,
+            );
+            if (attachment) {
+              if (part.contentId) {
+                inlineImages.push(attachment);
+              } else {
+                attachments.push(attachment);
               }
             }
           }
-        } else if (message.data.payload.body?.data) {
-          // Handle single part messages
-          body = Buffer.from(message.data.payload.body.data, 'base64').toString();
-        }
+
+          return partData;
+        };
+
+        // Process the main message structure
+        const messageStructure = await processPart(message.data.payload);
+        parts.push(messageStructure);
 
         // Create new email
         const email = new Email({
@@ -498,8 +510,9 @@ class GmailListenerService {
           bcc,
           subject: subject || '(No Subject)',
           body: {
-            text: body ? body.replace(/<[^>]*>/g, '') : '(No text content)',
-            html: body || '(No HTML content)',
+            mimeType: message.data.payload.mimeType,
+            parts,
+            structure: messageStructure,
           },
           attachments,
           inlineImages,
@@ -518,6 +531,24 @@ class GmailListenerService {
           isSpam: message.data.labelIds?.includes('SPAM') || false,
           stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
           threadPart: 1,
+          messageReferences: [
+            {
+              messageId: messageIdHeader,
+              inReplyTo: getHeader('In-Reply-To'),
+              references: getHeader('References')?.split(/\s+/) || [],
+              type: 'original',
+              position: 0,
+            },
+          ],
+          labels:
+            message.data.labelIds?.map((label) => ({
+              name: label,
+              color: this.getLabelColor(label),
+            })) || [],
+          headers: headers.map((h) => ({
+            name: h.name,
+            value: h.value,
+          })),
         });
 
         await email.save();
@@ -533,7 +564,12 @@ class GmailListenerService {
           subject,
           sentAt,
           getHeader,
-          content: { text: body, html: body, attachments, inlineImages },
+          content: {
+            text: messageStructure.content,
+            html: messageStructure.content,
+            attachments,
+            inlineImages,
+          },
         });
 
         return email;
@@ -1437,6 +1473,27 @@ class GmailListenerService {
     } catch (error) {
       console.error('[Gmail] Error releasing lock:', error);
     }
+  }
+
+  /**
+   * Get color for a Gmail label
+   */
+  getLabelColor(label) {
+    const labelColors = {
+      INBOX: '#1a73e8',
+      SENT: '#188038',
+      DRAFT: '#ea4335',
+      SPAM: '#ea4335',
+      TRASH: '#5f6368',
+      STARRED: '#fbbc04',
+      IMPORTANT: '#ea4335',
+      CATEGORY_PERSONAL: '#1a73e8',
+      CATEGORY_SOCIAL: '#188038',
+      CATEGORY_PROMOTIONS: '#ea4335',
+      CATEGORY_UPDATES: '#fbbc04',
+      CATEGORY_FORUMS: '#5f6368',
+    };
+    return labelColors[label] || '#5f6368';
   }
 }
 

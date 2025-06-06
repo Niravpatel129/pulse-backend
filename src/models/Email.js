@@ -1,17 +1,39 @@
 import { google } from 'googleapis';
 import mongoose from 'mongoose';
 
+const emailPartSchema = new mongoose.Schema(
+  {
+    mimeType: {
+      type: String,
+      required: true,
+    },
+    content: {
+      type: String,
+      required: true,
+    },
+    contentId: String,
+    filename: String,
+    headers: [
+      {
+        name: String,
+        value: String,
+      },
+    ],
+    parts: [
+      {
+        type: mongoose.Schema.Types.Mixed,
+        refPath: 'mimeType',
+      },
+    ],
+  },
+  { _id: false },
+);
+
 const attachmentSchema = new mongoose.Schema(
   {
     filename: {
       type: String,
       required: true,
-      get: function (v) {
-        return base64Utils.decode(v);
-      },
-      set: function (v) {
-        return v;
-      },
     },
     mimeType: {
       type: String,
@@ -29,15 +51,18 @@ const attachmentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    data: {
-      type: String,
-      get: function (v) {
-        return base64Utils.decodeToBuffer(v);
-      },
-      set: function (v) {
-        return v;
-      },
+    contentId: String,
+    position: Number,
+    dimensions: {
+      width: Number,
+      height: Number,
     },
+    headers: [
+      {
+        name: String,
+        value: String,
+      },
+    ],
   },
   { _id: false },
 );
@@ -415,50 +440,39 @@ const emailSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     workspaceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Workspace',
       required: true,
+      index: true,
     },
     from: {
       type: emailAddressSchema,
       required: true,
     },
-    to: [
-      {
-        type: emailAddressSchema,
-        required: true,
-      },
-    ],
-    cc: [
-      {
-        type: emailAddressSchema,
-        default: [],
-      },
-    ],
-    bcc: [
-      {
-        type: emailAddressSchema,
-        default: [],
-      },
-    ],
+    to: [emailAddressSchema],
+    cc: [emailAddressSchema],
+    bcc: [emailAddressSchema],
     subject: {
       type: String,
       required: true,
     },
     body: {
-      type: emailBodySchema,
-      required: true,
-    },
-    labels: [
-      {
+      mimeType: {
         type: String,
-        default: [],
+        required: true,
+        default: 'multipart/alternative',
       },
-    ],
-    snippet: {
+      parts: [emailPartSchema],
+      structure: {
+        type: Map,
+        of: mongoose.Schema.Types.Mixed,
+      },
+    },
+    attachments: [attachmentSchema],
+    inlineImages: [attachmentSchema],
+    historyId: {
       type: String,
       required: true,
     },
@@ -466,52 +480,73 @@ const emailSchema = new mongoose.Schema(
       type: Date,
       required: true,
     },
-    attachments: [
-      {
-        type: attachmentSchema,
-        default: [],
-      },
-    ],
-    isRead: {
-      type: Boolean,
-      default: false,
+    snippet: {
+      type: String,
+      default: '',
+    },
+    token: {
+      accessToken: String,
+      refreshToken: String,
+      expiryDate: Date,
+      scope: String,
+    },
+    direction: {
+      type: String,
+      enum: ['inbound', 'outbound'],
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ['received', 'sent', 'draft', 'failed'],
+      required: true,
+    },
+    sentAt: {
+      type: Date,
+      required: true,
     },
     isSpam: {
       type: Boolean,
       default: false,
     },
-    syncedAt: {
-      type: Date,
-      default: Date.now,
-    },
-    historyId: {
+    stage: {
       type: String,
-      required: true,
+      enum: ['unassigned', 'assigned', 'archived', 'snoozed', 'trash', 'spam'],
+      default: 'unassigned',
     },
     threadPart: {
       type: Number,
-      required: true,
+      default: 1,
     },
-    messageSource: {
-      type: String,
-      enum: ['gmail'],
-      default: 'gmail',
-    },
-    rawHeaders: {
-      type: Map,
-      of: String,
-      default: {},
-    },
-    token: {
-      type: tokenSchema,
-      required: true,
-    },
-    watch: {
-      type: watchSchema,
-    },
+    messageReferences: [
+      {
+        messageId: String,
+        inReplyTo: String,
+        references: [String],
+        type: {
+          type: String,
+          enum: ['reply', 'forward', 'original'],
+          default: 'original',
+        },
+        position: Number,
+      },
+    ],
+    labels: [
+      {
+        name: String,
+        color: String,
+      },
+    ],
+    headers: [
+      {
+        name: String,
+        value: String,
+      },
+    ],
   },
   {
     timestamps: true,
+    toJSON: { getters: true },
+    toObject: { getters: true },
   },
 );
 
