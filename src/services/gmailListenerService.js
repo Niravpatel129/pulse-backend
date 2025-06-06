@@ -265,9 +265,7 @@ class GmailListenerService {
         recordCount: history.data.history.length,
       });
 
-      // Group messages by thread
-      const threadMessages = new Map();
-
+      // Process each message as it comes in
       for (const record of history.data.history) {
         if (!record.messagesAdded) continue;
 
@@ -276,56 +274,21 @@ class GmailListenerService {
         });
 
         for (const { message } of record.messagesAdded) {
-          // Get full message to get threadId
-          const fullMessage = await gmail.users.messages.get({
-            userId: 'me',
-            id: message.id,
-            format: 'metadata',
-            metadataHeaders: ['Thread-Id'],
-          });
-
-          const threadId = fullMessage.data.threadId;
-
-          // Group messages by thread
-          if (!threadMessages.has(threadId)) {
-            threadMessages.set(threadId, []);
-          }
-          threadMessages.get(threadId).push(message.id);
-        }
-      }
-
-      // Process each thread's messages
-      for (const [threadId, messageIds] of threadMessages) {
-        const key = `${integration.workspace._id}-${threadId}`;
-
-        // Clear existing timer if any
-        if (this.debounceTimers.has(key)) {
-          clearTimeout(this.debounceTimers.get(key));
-        }
-
-        // Set new timer
-        const timer = setTimeout(async () => {
           try {
-            // Process all messages in the thread
-            for (const messageId of messageIds) {
-              await this.processEmail(gmail, integration, messageId);
-            }
+            await this.processEmail(gmail, integration, message.id);
           } catch (error) {
-            console.error('[Gmail] Error processing thread messages:', {
+            console.error('[Gmail] Error processing message:', {
               error: error.message,
-              threadId,
-              messageIds,
+              messageId: message.id,
               workspaceId: integration.workspace._id,
             });
-          } finally {
-            this.debounceTimers.delete(key);
+            // Continue processing other messages even if one fails
+            continue;
           }
-        }, this.DEBOUNCE_DELAY);
-
-        this.debounceTimers.set(key, timer);
+        }
       }
 
-      // Update history ID
+      // Update history ID after successful processing
       console.log('[Gmail Push] Updating history ID:', {
         oldHistoryId: historyId,
         newHistoryId: history.data.historyId,
