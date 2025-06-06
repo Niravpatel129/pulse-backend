@@ -480,10 +480,22 @@ class GmailListenerService {
             partData.parts = [];
             for (const subPart of part.parts || []) {
               const processedSubPart = await processPart(subPart, part.mimeType);
-              partData.parts.push(processedSubPart);
+              if (processedSubPart) {
+                partData.parts.push(processedSubPart);
+              }
             }
           } else if (part.body?.data) {
-            partData.content = Buffer.from(part.body.data, 'base64').toString();
+            try {
+              partData.content = Buffer.from(part.body.data, 'base64').toString();
+            } catch (error) {
+              console.error('[Gmail] Error decoding part content:', {
+                error: error.message,
+                messageId,
+                mimeType: part.mimeType,
+              });
+              // If we can't decode the content, set a placeholder
+              partData.content = '(Content decoding failed)';
+            }
           } else if (part.filename) {
             const attachment = await this.processAttachment(
               gmail,
@@ -500,12 +512,27 @@ class GmailListenerService {
             }
           }
 
-          return partData;
+          // Only return the part if it has content or subparts
+          if (partData.content || (partData.parts && partData.parts.length > 0)) {
+            return partData;
+          }
+          return null;
         };
 
         // Process the main message structure
         const messageStructure = await processPart(message.data.payload);
-        parts.push(messageStructure);
+        if (messageStructure) {
+          parts.push(messageStructure);
+        }
+
+        // If no parts were processed successfully, create a minimal structure
+        if (parts.length === 0) {
+          parts.push({
+            mimeType: 'text/plain',
+            content: '(No content available)',
+            headers: [],
+          });
+        }
 
         // Create new email
         const email = new Email({

@@ -9,7 +9,10 @@ const emailPartSchema = new mongoose.Schema(
     },
     content: {
       type: String,
-      required: true,
+      required: function () {
+        // Content is only required for non-multipart messages
+        return !this.mimeType.startsWith('multipart/');
+      },
     },
     contentId: String,
     filename: String,
