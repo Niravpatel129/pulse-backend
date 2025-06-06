@@ -424,16 +424,27 @@ class GmailListenerService {
    */
   async updateExistingEmail(email, message, gmail) {
     try {
-      // Extract new content
-      const content = await emailParser.extractContent(gmail, message.id, message.payload);
+      // Process email parts
+      const {
+        body,
+        attachments = [],
+        inlineImages = [],
+      } = await this.processEmailParts(
+        gmail,
+        message.id,
+        message.data.payload,
+        email.workspaceId.toString(),
+      );
 
       // Update email with new data
-      if (content.text) email.body.text = content.text;
-      if (content.html) email.body.html = content.html;
+      if (body) {
+        email.body.text = body.replace(/<[^>]*>/g, '');
+        email.body.html = body;
+      }
 
       // Add new attachments
-      if (content.attachments.length > 0) {
-        const newAttachments = content.attachments.filter(
+      if (attachments.length > 0) {
+        const newAttachments = attachments.filter(
           (newAtt) =>
             !email.attachments.some(
               (existingAtt) => existingAtt.attachmentId === newAtt.attachmentId,
@@ -443,8 +454,8 @@ class GmailListenerService {
       }
 
       // Add new inline images
-      if (content.inlineImages.length > 0) {
-        const newInlineImages = content.inlineImages.filter(
+      if (inlineImages.length > 0) {
+        const newInlineImages = inlineImages.filter(
           (newImg) =>
             !email.inlineImages.some(
               (existingImg) => existingImg.contentId === newImg.attachmentId,
@@ -473,8 +484,17 @@ class GmailListenerService {
    */
   async createNewEmail(message, gmail, integration) {
     try {
-      // Extract content
-      const content = await emailParser.extractContent(gmail, message.id, message.payload);
+      // Process email parts
+      const {
+        body,
+        attachments = [],
+        inlineImages = [],
+      } = await this.processEmailParts(
+        gmail,
+        message.id,
+        message.data.payload,
+        integration.workspace._id.toString(),
+      );
 
       // Get headers
       const headers = message.data.payload.headers;
@@ -515,11 +535,11 @@ class GmailListenerService {
         bcc,
         subject: subject || '(No Subject)',
         body: {
-          text: content.text,
-          html: content.html,
+          text: body ? body.replace(/<[^>]*>/g, '') : '',
+          html: body || '',
         },
-        attachments: content.attachments,
-        inlineImages: content.inlineImages,
+        attachments,
+        inlineImages,
         historyId: message.data.historyId,
         internalDate: new Date(parseInt(message.data.internalDate)),
         snippet: message.data.snippet || '',
@@ -549,7 +569,7 @@ class GmailListenerService {
         subject,
         sentAt,
         getHeader,
-        content,
+        content: { text: body, html: body, attachments, inlineImages },
       });
 
       return email;
