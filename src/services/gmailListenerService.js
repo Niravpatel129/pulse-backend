@@ -254,13 +254,22 @@ class GmailListenerService {
 
         for (const { message } of record.messagesAdded) {
           try {
-            // Get the full message to check its thread ID
+            // Get the full message to check its labels and thread ID
             const fullMessage = await gmail.users.messages.get({
               userId: 'me',
               id: message.id,
               format: 'metadata',
               metadataHeaders: ['Thread-Id'],
             });
+
+            // Skip drafts
+            if (fullMessage.data.labelIds?.includes('DRAFT')) {
+              console.log('[Gmail] Skipping draft message:', {
+                messageId: message.id,
+                threadId: fullMessage.data.threadId,
+              });
+              continue;
+            }
 
             const threadId = fullMessage.data.threadId;
 
