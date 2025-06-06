@@ -9,6 +9,7 @@ import EmailThread from '../models/Email/EmailThreadModel.js';
 import GmailIntegration from '../models/GmailIntegration.js';
 import { firebaseStorage } from '../utils/firebase.js';
 import { registerShutdownHandler } from '../utils/shutdownHandler.js';
+import attachmentService from './attachmentService.js';
 
 // Initialize DOMPurify
 const window = new JSDOM('').window;
@@ -1045,6 +1046,39 @@ class GmailListenerService {
       // For images, resize them directly
       if (mimeType.startsWith('image/')) {
         const sharp = require('sharp');
+
+        // For SVG files, we need to convert to PNG first
+        if (mimeType === 'image/svg+xml') {
+          const svgBuffer = await sharp(buffer)
+            .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .png()
+            .toBuffer();
+
+          // Generate thumbnail storage path
+          const thumbnailPath = `workspaces/thumbnails/${Date.now()}_thumb_${filename.replace(
+            '.svg',
+            '.png',
+          )}`;
+
+          // Upload thumbnail to storage
+          const { url: thumbnailUrl } = await firebaseStorage.uploadFile(
+            svgBuffer,
+            thumbnailPath,
+            'image/png',
+          );
+
+          return {
+            url: thumbnailUrl,
+            path: thumbnailPath,
+            width: THUMBNAIL_SIZE,
+            height: THUMBNAIL_SIZE,
+          };
+        }
+
+        // For other image types
         const thumbnailBuffer = await sharp(buffer)
           .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
             fit: 'inside',
@@ -1089,91 +1123,14 @@ class GmailListenerService {
    * Process a single attachment
    */
   async processAttachment(gmail, messageId, part, workspaceId) {
-    try {
-      if (!messageId || !part.body?.attachmentId) {
-        throw new Error('Missing required parameters: messageId or attachmentId');
-      }
-
-      // Get attachment data
-      const attachmentData = await gmail.users.messages.attachments.get({
-        userId: 'me',
-        messageId,
-        id: part.body.attachmentId,
-      });
-
-      if (!attachmentData?.data?.data) {
-        throw new Error('No attachment data received');
-      }
-
-      // Decode attachment data
-      const buffer = Buffer.from(attachmentData.data.data, 'base64');
-
-      // Generate storage path
-      const filename = this.extractFilename(part);
-      const storagePath = `workspaces/${workspaceId}/files/${Date.now()}_${filename}`;
-
-      console.log('Generated storage path:', storagePath);
-
-      // Upload to storage using firebaseStorage utility
-      const { url } = await firebaseStorage.uploadFile(buffer, storagePath, part.mimeType);
-
-      // Generate thumbnail if supported
-      const thumbnail = await this.generateThumbnail(buffer, part.mimeType, filename);
-
-      console.log('File uploaded successfully:', {
-        storagePath,
-        contentType: part.mimeType,
-        bufferSize: buffer.length,
-        url,
-        hasThumbnail: !!thumbnail,
-      });
-
-      return {
-        filename,
-        mimeType: part.mimeType,
-        size: buffer.length,
-        attachmentId: part.body.attachmentId,
-        contentId: part.contentId,
-        storageUrl: url,
-        storagePath,
-        thumbnail: thumbnail
-          ? {
-              url: thumbnail.url,
-              path: thumbnail.path,
-              width: thumbnail.width,
-              height: thumbnail.height,
-            }
-          : null,
-      };
-    } catch (error) {
-      console.error('[Gmail] Error processing attachment:', {
-        error: error.message,
-        messageId,
-        filename: part.filename,
-      });
-      throw error;
-    }
+    return await attachmentService.processAttachment(gmail, messageId, part, workspaceId);
   }
 
   /**
    * Extract filename from email part
    */
   extractFilename(part) {
-    const contentDisposition =
-      part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
-
-    const filenameMatch =
-      contentDisposition.match(/filename="([^"]+)"/) ||
-      contentDisposition.match(/filename=([^;]+)/);
-
-    if (filenameMatch) {
-      return filenameMatch[1].trim();
-    }
-
-    // Fallback to content type if no filename found
-    const contentType = part.mimeType || '';
-    const extension = MIME_EXTENSION_MAP[contentType] || 'bin';
-    return `attachment.${extension}`;
+    return attachmentService.extractFilename(part);
   }
 
   /**
