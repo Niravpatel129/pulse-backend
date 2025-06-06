@@ -54,6 +54,10 @@ const attachmentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    storagePath: {
+      type: String,
+      required: true,
+    },
     contentId: String,
     position: Number,
     dimensions: {
@@ -66,6 +70,13 @@ const attachmentSchema = new mongoose.Schema(
         value: String,
       },
     ],
+    thumbnail: {
+      url: String,
+      path: String,
+      width: Number,
+      height: Number,
+      generatedAt: Date,
+    },
   },
   { _id: false },
 );

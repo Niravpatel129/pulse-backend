@@ -16,6 +16,7 @@ const DOMPurify = createDOMPurify(window);
 
 // Constants
 const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024; // 20MB
+const THUMBNAIL_SIZE = 200; // 200px for thumbnail width/height
 
 // MIME type to extension mapping
 const MIME_EXTENSION_MAP = {
@@ -39,6 +40,18 @@ const MIME_EXTENSION_MAP = {
   'text/xml': 'xml',
   'application/xml': 'xml',
 };
+
+// Supported thumbnail MIME types
+const THUMBNAIL_SUPPORTED_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
 
 class GmailListenerService {
   constructor() {
@@ -1020,6 +1033,59 @@ class GmailListenerService {
   }
 
   /**
+   * Generate thumbnail for supported file types
+   */
+  async generateThumbnail(buffer, mimeType, filename) {
+    try {
+      // Skip if mime type is not supported for thumbnails
+      if (!THUMBNAIL_SUPPORTED_TYPES.includes(mimeType)) {
+        return null;
+      }
+
+      // For images, resize them directly
+      if (mimeType.startsWith('image/')) {
+        const sharp = require('sharp');
+        const thumbnailBuffer = await sharp(buffer)
+          .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .toBuffer();
+
+        // Generate thumbnail storage path
+        const thumbnailPath = `workspaces/thumbnails/${Date.now()}_thumb_${filename}`;
+
+        // Upload thumbnail to storage
+        const { url: thumbnailUrl } = await firebaseStorage.uploadFile(
+          thumbnailBuffer,
+          thumbnailPath,
+          mimeType,
+        );
+
+        return {
+          url: thumbnailUrl,
+          path: thumbnailPath,
+          width: THUMBNAIL_SIZE,
+          height: THUMBNAIL_SIZE,
+        };
+      }
+
+      // For PDFs and Office documents, we would need additional processing
+      // This would require additional libraries like pdf-poppler for PDFs
+      // and libreoffice for Office documents
+      // For now, we'll return null for these types
+      return null;
+    } catch (error) {
+      console.error('[Gmail] Error generating thumbnail:', {
+        error: error.message,
+        mimeType,
+        filename,
+      });
+      return null;
+    }
+  }
+
+  /**
    * Process a single attachment
    */
   async processAttachment(gmail, messageId, part, workspaceId) {
@@ -1051,11 +1117,15 @@ class GmailListenerService {
       // Upload to storage using firebaseStorage utility
       const { url } = await firebaseStorage.uploadFile(buffer, storagePath, part.mimeType);
 
+      // Generate thumbnail if supported
+      const thumbnail = await this.generateThumbnail(buffer, part.mimeType, filename);
+
       console.log('File uploaded successfully:', {
         storagePath,
         contentType: part.mimeType,
         bufferSize: buffer.length,
         url,
+        hasThumbnail: !!thumbnail,
       });
 
       return {
@@ -1066,6 +1136,14 @@ class GmailListenerService {
         contentId: part.contentId,
         storageUrl: url,
         storagePath,
+        thumbnail: thumbnail
+          ? {
+              url: thumbnail.url,
+              path: thumbnail.path,
+              width: thumbnail.width,
+              height: thumbnail.height,
+            }
+          : null,
       };
     } catch (error) {
       console.error('[Gmail] Error processing attachment:', {
