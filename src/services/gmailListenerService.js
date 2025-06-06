@@ -47,6 +47,7 @@ class GmailListenerService {
     this.debounceTimers = new Map(); // Track debounce timers
     this.DEBOUNCE_DELAY = 2000; // 2 seconds debounce
     this.isInitialized = false;
+    this.threadParts = new Map(); // Track parts of threads being processed
     this.setupShutdownHandlers();
   }
 
@@ -250,8 +251,8 @@ class GmailListenerService {
       if (!history.data.history || !history.data.history.length) {
         console.log('[Gmail Push] No new changes found. History response:', {
           historyId: history.data.historyId,
-          historyLength: history.data.history?.length || 0,
-          nextPageToken: history.data.nextPageToken ? 'present' : 'none',
+          historyLength: 0,
+          nextPageToken: history.data.nextPageToken || 'none',
           timeSinceLastSync: integration.lastSynced
             ? Math.round((Date.now() - integration.lastSynced.getTime()) / 1000) + ' seconds'
             : 'never',
@@ -259,35 +260,83 @@ class GmailListenerService {
         return;
       }
 
+      // Process history records
       console.log('[Gmail Push] Processing history records:', {
         recordCount: history.data.history.length,
       });
 
-      // Process each history record
+      // Group messages by thread
+      const threadMessages = new Map();
+
       for (const record of history.data.history) {
-        if (record.messagesAdded) {
-          console.log('[Gmail Push] Processing messages:', {
-            messageCount: record.messagesAdded.length,
+        if (!record.messagesAdded) continue;
+
+        console.log('[Gmail Push] Processing messages:', {
+          messageCount: record.messagesAdded.length,
+        });
+
+        for (const { message } of record.messagesAdded) {
+          // Get full message to get threadId
+          const fullMessage = await gmail.users.messages.get({
+            userId: 'me',
+            id: message.id,
+            format: 'metadata',
+            metadataHeaders: ['Thread-Id'],
           });
-          for (const messageAdded of record.messagesAdded) {
-            await this.debounceEmailProcessing(gmail, integration, messageAdded.message.id);
+
+          const threadId = fullMessage.data.threadId;
+
+          // Group messages by thread
+          if (!threadMessages.has(threadId)) {
+            threadMessages.set(threadId, []);
           }
+          threadMessages.get(threadId).push(message.id);
         }
       }
 
-      // Only update history ID and last synced after successful processing
-      if (history.data.historyId) {
-        console.log('[Gmail Push] Updating history ID:', {
-          oldHistoryId: historyId,
-          newHistoryId: history.data.historyId,
-          difference: Number(history.data.historyId) - Number(historyId),
-          historyLength: history.data.history?.length || 0,
-          nextPageToken: history.data.nextPageToken ? 'present' : 'none',
-        });
-        integration.historyId = history.data.historyId;
-        integration.lastSynced = new Date();
-        await integration.save();
+      // Process each thread's messages
+      for (const [threadId, messageIds] of threadMessages) {
+        const key = `${integration.workspace._id}-${threadId}`;
+
+        // Clear existing timer if any
+        if (this.debounceTimers.has(key)) {
+          clearTimeout(this.debounceTimers.get(key));
+        }
+
+        // Set new timer
+        const timer = setTimeout(async () => {
+          try {
+            // Process all messages in the thread
+            for (const messageId of messageIds) {
+              await this.processEmail(gmail, integration, messageId);
+            }
+          } catch (error) {
+            console.error('[Gmail] Error processing thread messages:', {
+              error: error.message,
+              threadId,
+              messageIds,
+              workspaceId: integration.workspace._id,
+            });
+          } finally {
+            this.debounceTimers.delete(key);
+          }
+        }, this.DEBOUNCE_DELAY);
+
+        this.debounceTimers.set(key, timer);
       }
+
+      // Update history ID
+      console.log('[Gmail Push] Updating history ID:', {
+        oldHistoryId: historyId,
+        newHistoryId: history.data.historyId,
+        difference: Number(history.data.historyId) - Number(historyId),
+        historyLength: history.data.history.length,
+        nextPageToken: history.data.nextPageToken || 'none',
+      });
+
+      integration.historyId = history.data.historyId;
+      integration.lastSynced = new Date();
+      await integration.save();
 
       console.info('[Gmail Push] Successfully completed push notification handling:', {
         email: integration.email,
@@ -317,35 +366,6 @@ class GmailListenerService {
   }
 
   /**
-   * Debounce email processing to wait for all parts to arrive
-   */
-  async debounceEmailProcessing(gmail, integration, messageId) {
-    const key = `${integration.workspace._id}-${messageId}`;
-
-    // Clear existing timer if any
-    if (this.debounceTimers.has(key)) {
-      clearTimeout(this.debounceTimers.get(key));
-    }
-
-    // Set new timer
-    const timer = setTimeout(async () => {
-      try {
-        await this.processEmail(gmail, integration, messageId);
-      } catch (error) {
-        console.error('[Gmail] Error processing debounced email:', {
-          error: error.message,
-          messageId,
-          workspaceId: integration.workspace._id,
-        });
-      } finally {
-        this.debounceTimers.delete(key);
-      }
-    }, this.DEBOUNCE_DELAY);
-
-    this.debounceTimers.set(key, timer);
-  }
-
-  /**
    * Process a single email
    */
   async processEmail(gmail, integration, messageId) {
@@ -367,12 +387,37 @@ class GmailListenerService {
       }
 
       try {
-        // Get full message
-        const message = await gmail.users.messages.get({
-          userId: 'me',
-          id: messageId,
-          format: 'full',
-        });
+        // Get full message with retry logic
+        let message;
+        let retryCount = 0;
+        const maxRetries = 3;
+        const retryDelay = 1000; // 1 second
+
+        while (retryCount < maxRetries) {
+          try {
+            message = await gmail.users.messages.get({
+              userId: 'me',
+              id: messageId,
+              format: 'full',
+            });
+            break;
+          } catch (error) {
+            if (
+              error.message === 'Requested entity was not found.' &&
+              retryCount < maxRetries - 1
+            ) {
+              console.log('[Gmail] Message not found, retrying...', {
+                messageId,
+                retryCount: retryCount + 1,
+                maxRetries,
+              });
+              await new Promise((resolve) => setTimeout(resolve, retryDelay));
+              retryCount++;
+            } else {
+              throw error;
+            }
+          }
+        }
 
         if (!message?.data) {
           throw new Error('Invalid message data received from Gmail');
@@ -980,7 +1025,7 @@ class GmailListenerService {
    */
   async processAttachment(gmail, messageId, part, workspaceId) {
     try {
-      if (!messageId || !part.attachmentId) {
+      if (!messageId || !part.body?.attachmentId) {
         throw new Error('Missing required parameters: messageId or attachmentId');
       }
 
@@ -988,7 +1033,7 @@ class GmailListenerService {
       const attachmentData = await gmail.users.messages.attachments.get({
         userId: 'me',
         messageId,
-        id: part.attachmentId,
+        id: part.body.attachmentId,
       });
 
       if (!attachmentData?.data?.data) {
@@ -1034,7 +1079,7 @@ class GmailListenerService {
         filename,
         mimeType: part.mimeType,
         size: buffer.length,
-        attachmentId: part.attachmentId,
+        attachmentId: part.body.attachmentId,
         contentId: part.contentId,
         storageUrl: url,
         storagePath,
