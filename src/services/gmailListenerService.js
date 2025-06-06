@@ -246,19 +246,6 @@ class GmailListenerService {
         historyTypes: ['messageAdded'],
       });
 
-      // Update history ID
-      if (history.data.historyId) {
-        console.log('[Gmail Push] Updating history ID:', {
-          oldHistoryId: historyId,
-          newHistoryId: history.data.historyId,
-          difference: Number(history.data.historyId) - Number(historyId),
-          historyLength: history.data.history?.length || 0,
-          nextPageToken: history.data.nextPageToken ? 'present' : 'none',
-        });
-        integration.historyId = history.data.historyId;
-        await integration.save();
-      }
-
       // No changes
       if (!history.data.history || !history.data.history.length) {
         console.log('[Gmail Push] No new changes found. History response:', {
@@ -288,9 +275,20 @@ class GmailListenerService {
         }
       }
 
-      // Update last synced timestamp
-      integration.lastSynced = new Date();
-      await integration.save();
+      // Only update history ID and last synced after successful processing
+      if (history.data.historyId) {
+        console.log('[Gmail Push] Updating history ID:', {
+          oldHistoryId: historyId,
+          newHistoryId: history.data.historyId,
+          difference: Number(history.data.historyId) - Number(historyId),
+          historyLength: history.data.history?.length || 0,
+          nextPageToken: history.data.nextPageToken ? 'present' : 'none',
+        });
+        integration.historyId = history.data.historyId;
+        integration.lastSynced = new Date();
+        await integration.save();
+      }
+
       console.info('[Gmail Push] Successfully completed push notification handling:', {
         email: integration.email,
         workspaceId: integration.workspace._id,
@@ -382,6 +380,10 @@ class GmailListenerService {
           format: 'full',
         });
 
+        if (!message.data) {
+          throw new Error('No message data received from Gmail API');
+        }
+
         // Extract headers
         const headers = message.data.payload.headers;
         const getHeader = (name) =>
@@ -420,10 +422,14 @@ class GmailListenerService {
   }
 
   /**
-   * Update an existing email with new data
+   * Create a new email
    */
-  async updateExistingEmail(email, message, gmail) {
+  async createNewEmail(message, gmail, integration) {
     try {
+      if (!message?.data?.id || !message?.data?.threadId) {
+        throw new Error('Invalid message data: missing id or threadId');
+      }
+
       // Process email parts
       const {
         body,
@@ -431,7 +437,124 @@ class GmailListenerService {
         inlineImages = [],
       } = await this.processEmailParts(
         gmail,
-        message.id,
+        message.data.id,
+        message.data.payload,
+        integration.workspace._id.toString(),
+      );
+
+      // Get headers
+      const headers = message.data.payload.headers;
+      if (!headers || !Array.isArray(headers)) {
+        throw new Error('Invalid message: missing or invalid headers');
+      }
+
+      const getHeader = (name) =>
+        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
+
+      // Extract and format email details
+      const fromHeader = getHeader('From');
+      const toHeader = getHeader('To');
+      const ccHeader = getHeader('Cc');
+      const bccHeader = getHeader('Bcc');
+      const subject = getHeader('Subject');
+      const threadId = message.data.threadId;
+      const sentAt = new Date(getHeader('Date'));
+      const messageIdHeader = getHeader('Message-ID');
+
+      if (!fromHeader) {
+        throw new Error('Invalid message: missing From header');
+      }
+
+      // Format email addresses
+      const from = this.formatEmailAddress(fromHeader, 'from');
+      const to = toHeader
+        ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
+        : [];
+      const cc = ccHeader
+        ? ccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'cc'))
+        : [];
+      const bcc = bccHeader
+        ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
+        : [];
+
+      // Create new email
+      const email = new Email({
+        gmailMessageId: message.data.id,
+        threadId: message.data.threadId,
+        userId: integration.workspace._id,
+        workspaceId: integration.workspace._id,
+        from,
+        to,
+        cc,
+        bcc,
+        subject: subject || '(No Subject)',
+        body: {
+          text: body ? body.replace(/<[^>]*>/g, '') : '(No text content)',
+          html: body || '(No HTML content)',
+        },
+        attachments,
+        inlineImages,
+        historyId: message.data.historyId,
+        internalDate: new Date(parseInt(message.data.internalDate)),
+        snippet: message.data.snippet || '',
+        token: {
+          accessToken: integration.accessToken,
+          refreshToken: integration.refreshToken,
+          expiryDate: integration.tokenExpiry,
+          scope: 'https://www.googleapis.com/auth/gmail.readonly',
+        },
+        direction: 'inbound',
+        status: 'received',
+        sentAt,
+        isSpam: message.data.labelIds?.includes('SPAM') || false,
+        stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
+        threadPart: 1,
+      });
+
+      await email.save();
+
+      // Handle thread management
+      await this.handleThreadManagement(email, {
+        threadId,
+        messageIdHeader,
+        from,
+        to,
+        cc,
+        bcc,
+        subject,
+        sentAt,
+        getHeader,
+        content: { text: body, html: body, attachments, inlineImages },
+      });
+
+      return email;
+    } catch (error) {
+      console.error('[Gmail] Error creating new email:', {
+        error: error.message,
+        messageId: message?.data?.id,
+        threadId: message?.data?.threadId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing email with new data
+   */
+  async updateExistingEmail(email, message, gmail) {
+    try {
+      if (!message?.data?.id || !message?.data?.threadId) {
+        throw new Error('Invalid message data: missing id or threadId');
+      }
+
+      // Process email parts
+      const {
+        body,
+        attachments = [],
+        inlineImages = [],
+      } = await this.processEmailParts(
+        gmail,
+        message.data.id,
         message.data.payload,
         email.workspaceId.toString(),
       );
@@ -473,111 +596,8 @@ class GmailListenerService {
     } catch (error) {
       console.error('[Gmail] Error updating existing email:', {
         error: error.message,
-        messageId: message.id,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Create a new email
-   */
-  async createNewEmail(message, gmail, integration) {
-    try {
-      // Process email parts
-      const {
-        body,
-        attachments = [],
-        inlineImages = [],
-      } = await this.processEmailParts(
-        gmail,
-        message.id,
-        message.data.payload,
-        integration.workspace._id.toString(),
-      );
-
-      // Get headers
-      const headers = message.data.payload.headers;
-      const getHeader = (name) =>
-        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
-
-      // Extract and format email details
-      const fromHeader = getHeader('From');
-      const toHeader = getHeader('To');
-      const ccHeader = getHeader('Cc');
-      const bccHeader = getHeader('Bcc');
-      const subject = getHeader('Subject');
-      const threadId = message.data.threadId;
-      const sentAt = new Date(getHeader('Date'));
-      const messageIdHeader = getHeader('Message-ID');
-
-      // Format email addresses
-      const from = this.formatEmailAddress(fromHeader, 'from');
-      const to = toHeader
-        ? toHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'to'))
-        : [];
-      const cc = ccHeader
-        ? ccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'cc'))
-        : [];
-      const bcc = bccHeader
-        ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
-        : [];
-
-      // Create new email
-      const email = new Email({
-        gmailMessageId: message.id,
-        threadId: message.threadId,
-        userId: integration.workspace._id,
-        workspaceId: integration.workspace._id,
-        from,
-        to,
-        cc,
-        bcc,
-        subject: subject || '(No Subject)',
-        body: {
-          text: body ? body.replace(/<[^>]*>/g, '') : '(No text content)',
-          html: body || '(No HTML content)',
-        },
-        attachments,
-        inlineImages,
-        historyId: message.data.historyId,
-        internalDate: new Date(parseInt(message.data.internalDate)),
-        snippet: message.data.snippet || '',
-        token: {
-          accessToken: integration.accessToken,
-          refreshToken: integration.refreshToken,
-          expiryDate: integration.tokenExpiry,
-          scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        },
-        direction: 'inbound',
-        status: 'received',
-        sentAt,
-        isSpam: message.data.labelIds?.includes('SPAM') || false,
-        stage: message.data.labelIds?.includes('SPAM') ? 'spam' : 'unassigned',
-        threadPart: 1, // Add required threadPart field
-      });
-
-      await email.save();
-
-      // Handle thread management
-      await this.handleThreadManagement(email, {
-        threadId,
-        messageIdHeader,
-        from,
-        to,
-        cc,
-        bcc,
-        subject,
-        sentAt,
-        getHeader,
-        content: { text: body, html: body, attachments, inlineImages },
-      });
-
-      return email;
-    } catch (error) {
-      console.error('[Gmail] Error creating new email:', {
-        error: error.message,
-        messageId: message.id,
+        messageId: message?.data?.id,
+        emailId: email?._id,
       });
       throw error;
     }
@@ -1010,6 +1030,10 @@ class GmailListenerService {
    */
   async processAttachment(gmail, messageId, part, workspaceId) {
     try {
+      if (!messageId) {
+        throw new Error('Message ID is required for attachment processing');
+      }
+
       // Get attachment data if not already present
       let attachmentData = part.body.data;
       if (!attachmentData && part.body.attachmentId) {
