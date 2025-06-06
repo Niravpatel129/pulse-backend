@@ -1012,31 +1012,15 @@ class GmailListenerService {
 
       console.log('Generated storage path:', storagePath);
 
-      // Upload to storage
-      const storageRef = storage.bucket().file(storagePath);
+      // Upload to storage using firebaseStorage utility
+      const { url } = await firebaseStorage.uploadFile(buffer, storagePath, part.mimeType);
 
-      console.log('Starting file upload:', {
+      console.log('File uploaded successfully:', {
         storagePath,
         contentType: part.mimeType,
         bufferSize: buffer.length,
+        url,
       });
-
-      await storageRef.save(buffer, {
-        metadata: {
-          contentType: part.mimeType,
-          cacheControl: 'public,max-age=3600',
-        },
-      });
-
-      console.log('Created storage reference:', storagePath);
-
-      // Get download URL
-      console.log('Getting download URL for:', storagePath);
-      const [url] = await storageRef.getSignedUrl({
-        action: 'read',
-        expires: '03-01-2500',
-      });
-      console.log('Download URL obtained:', url);
 
       return {
         filename,
