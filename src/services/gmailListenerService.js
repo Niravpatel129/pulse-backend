@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
 import Email from '../models/Email.js';
 import EmailThread from '../models/Email/EmailThreadModel.js';
 import GmailIntegration from '../models/GmailIntegration.js';
-import { fileUtils, firebaseStorage } from '../utils/firebase.js';
+import { firebaseStorage } from '../utils/firebase.js';
 import { registerShutdownHandler } from '../utils/shutdownHandler.js';
 
 // Initialize DOMPurify
@@ -346,12 +346,11 @@ class GmailListenerService {
   }
 
   /**
-   * Process a specific email message
+   * Process a single email
    */
   async processEmail(gmail, integration, messageId) {
     try {
-      // Log new incoming email
-      console.info('[Gmail] New email received:', {
+      console.log('[Gmail] New email received:', {
         messageId,
         workspaceId: integration.workspace._id,
         workspaceName: integration.workspace.name,
@@ -359,54 +358,46 @@ class GmailListenerService {
         timestamp: new Date().toISOString(),
       });
 
-      // Try to acquire lock before processing
-      const lockAcquired = await this.acquireLock(messageId, integration.workspace._id);
-      if (!lockAcquired) {
-        console.log(
-          '[Gmail] Skipping email processing - already being processed by another server:',
-          {
-            messageId,
-            workspaceId: integration.workspace._id,
-          },
-        );
+      // Acquire lock for this message
+      const lockKey = `email:${messageId}:${integration.workspace._id}`;
+      const lock = await this.acquireLock(messageId, integration.workspace._id);
+      if (!lock) {
+        console.log('[Gmail] Skipping duplicate message:', { messageId });
         return;
       }
 
       try {
-        // Get the full message
+        // Get full message
         const message = await gmail.users.messages.get({
           userId: 'me',
           id: messageId,
           format: 'full',
         });
 
-        if (!message.data) {
-          throw new Error('No message data received from Gmail API');
+        if (!message?.data) {
+          throw new Error('Invalid message data received from Gmail');
         }
 
-        // Extract headers
-        const headers = message.data.payload.headers;
-        const getHeader = (name) =>
-          headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
-
-        // Get message ID from headers
-        const messageIdHeader = getHeader('Message-ID');
-
-        // Check for existing email
-        let email = await Email.findOne({
-          gmailMessageId: messageId,
+        // Check if email already exists
+        const existingEmail = await Email.findOne({
+          gmailMessageId: message.data.id,
           workspaceId: integration.workspace._id,
         });
 
-        if (email) {
-          // Update existing email with new data
-          await this.updateExistingEmail(email, message, gmail);
-        } else {
-          // Create new email
-          email = await this.createNewEmail(message, gmail, integration);
+        if (existingEmail) {
+          console.log('[Gmail] Updating existing email:', {
+            messageId,
+            emailId: existingEmail._id,
+          });
+          return await this.updateExistingEmail(existingEmail, message, gmail);
         }
 
-        return email;
+        // Create new email
+        console.log('[Gmail] Creating new email:', {
+          messageId,
+          threadId: message.data.threadId,
+        });
+        return await this.createNewEmail(message, gmail, integration);
       } finally {
         // Always release the lock
         await this.releaseLock(messageId, integration.workspace._id);
@@ -477,6 +468,56 @@ class GmailListenerService {
         ? bccHeader.split(',').map((addr) => this.formatEmailAddress(addr, 'bcc'))
         : [];
 
+      // Process attachments to ensure they have storageUrl
+      const processedAttachments = await Promise.all(
+        attachments.map(async (attachment) => {
+          if (!attachment.storageUrl) {
+            // If attachment doesn't have storageUrl, try to get it from the message
+            try {
+              const attachmentData = await gmail.users.messages.attachments.get({
+                userId: 'me',
+                messageId: message.data.id,
+                id: attachment.attachmentId,
+              });
+
+              if (attachmentData?.data?.data) {
+                const buffer = Buffer.from(attachmentData.data.data, 'base64');
+                const storagePath = `workspaces/${integration.workspace._id}/files/${Date.now()}_${
+                  attachment.filename
+                }`;
+
+                // Upload to storage
+                const storageRef = storage.bucket().file(storagePath);
+                await storageRef.save(buffer, {
+                  metadata: {
+                    contentType: attachment.mimeType,
+                    cacheControl: 'public,max-age=3600',
+                  },
+                });
+
+                // Get download URL
+                const [url] = await storageRef.getSignedUrl({
+                  action: 'read',
+                  expires: '03-01-2500',
+                });
+
+                return {
+                  ...attachment,
+                  storageUrl: url,
+                };
+              }
+            } catch (error) {
+              console.error('[Gmail] Error processing attachment:', {
+                error: error.message,
+                attachmentId: attachment.attachmentId,
+                messageId: message.data.id,
+              });
+            }
+          }
+          return attachment;
+        }),
+      );
+
       // Create new email
       const email = new Email({
         gmailMessageId: message.data.id,
@@ -492,11 +533,11 @@ class GmailListenerService {
           text: body ? body.replace(/<[^>]*>/g, '') : '(No text content)',
           html: body || '(No HTML content)',
         },
-        attachments,
+        attachments: processedAttachments,
         inlineImages,
         historyId: message.data.historyId,
         internalDate: new Date(parseInt(message.data.internalDate)),
-        snippet: message.data.snippet || '',
+        snippet: message.data.snippet || '(No preview available)',
         token: {
           accessToken: integration.accessToken,
           refreshToken: integration.refreshToken,
@@ -524,7 +565,7 @@ class GmailListenerService {
         subject,
         sentAt,
         getHeader,
-        content: { text: body, html: body, attachments, inlineImages },
+        content: { text: body, html: body, attachments: processedAttachments, inlineImages },
       });
 
       return email;
@@ -847,182 +888,91 @@ class GmailListenerService {
   }
 
   /**
-   * Process email parts including attachments
+   * Process email parts and extract content
    */
   async processEmailParts(gmail, messageId, part, workspaceId, options = {}) {
-    const result = {
-      body: '',
-      attachments: [],
-      inlineImages: [],
-      errors: [],
-    };
-
     try {
-      if (!part) {
-        throw new Error('Invalid email part');
-      }
+      const { targetTypes = ['text/html', 'text/plain'] } = options;
+      let body = '';
+      const attachments = [];
+      const inlineImages = [];
 
-      // Extract body content first
-      result.body = this.extractFirstMatching(part);
-      console.log('[Gmail Debug] Initial body content:', {
-        messageId,
-        hasBody: !!result.body,
-        bodyLength: result.body?.length,
+      // Log initial content extraction
+      console.log('[Gmail Debug] Extracting content:', {
         mimeType: part.mimeType,
-        isMultipart: part.mimeType?.startsWith('multipart/'),
+        hasBody: !!part.body?.data,
+        targetTypes,
       });
 
-      // Process Google Drive links in the body
-      if (result.body) {
-        const driveLinkRegex = /https:\/\/docs\.google\.com\/uc\?export=download[^"'\s]+/g;
-        const driveLinks = result.body.match(driveLinkRegex) || [];
-
-        for (const link of driveLinks) {
-          const processedLink = await this.processGoogleDriveLink(link, workspaceId);
-          if (processedLink) {
-            result.body = result.body.replace(link, processedLink.firebaseUrl);
-
-            // Add to attachments if it's a downloadable file
-            if (processedLink.mimeType && !processedLink.mimeType.startsWith('image/')) {
-              result.attachments.push({
-                filename: processedLink.filename,
-                mimeType: processedLink.mimeType,
-                size: processedLink.size,
-                storageUrl: processedLink.firebaseUrl,
-                type: fileUtils.getType(processedLink.mimeType),
-                isInline: false,
-              });
-            }
-          }
-        }
-      }
-
-      // Sanitize HTML content
-      if (result.body) {
-        const originalBody = result.body;
-        result.body = this.sanitizeHtml(result.body);
-        console.log('[Gmail Debug] After sanitization:', {
-          messageId,
-          originalLength: originalBody.length,
-          sanitizedLength: result.body.length,
-          wasChanged: originalBody !== result.body,
-        });
-      }
-
-      // Handle multipart messages
-      if (part.mimeType && part.mimeType.startsWith('multipart/')) {
-        if (!part.parts || !Array.isArray(part.parts)) {
-          throw new Error(`Invalid multipart structure: ${part.mimeType}`);
-        }
-
-        // Process each subpart
-        for (const subpart of part.parts) {
-          const subpartResult = await this.processEmailParts(
+      if (part.mimeType === 'multipart/alternative' || part.mimeType === 'multipart/mixed') {
+        // Process each part
+        for (const subPart of part.parts || []) {
+          const result = await this.processEmailParts(
             gmail,
             messageId,
-            subpart,
+            subPart,
             workspaceId,
             options,
           );
-
-          // Merge results
-          result.attachments.push(...subpartResult.attachments);
-          result.inlineImages.push(...subpartResult.inlineImages);
-          result.errors.push(...subpartResult.errors);
+          body = result.body || body;
+          attachments.push(...(result.attachments || []));
+          inlineImages.push(...(result.inlineImages || []));
         }
+      } else if (targetTypes.includes(part.mimeType)) {
+        // Extract text content
+        if (part.body?.data) {
+          const content = Buffer.from(part.body.data, 'base64').toString();
+          body = content;
 
-        return result;
-      }
-
-      const contentDisposition =
-        part.headers?.find((h) => h.name.toLowerCase() === 'content-disposition')?.value || '';
-      const isAttachment = contentDisposition.toLowerCase().includes('attachment');
-      const isInline = contentDisposition.toLowerCase().includes('inline');
-      const contentId = part.headers?.find((h) => h.name.toLowerCase() === 'content-id')?.value;
-
-      // Process attachments
-      if (isAttachment || isInline) {
+          console.log('[Gmail Debug] Found content:', {
+            mimeType: part.mimeType,
+            contentLength: content.length,
+            isHtml: part.mimeType === 'text/html',
+            preview: content.substring(0, 50) + '...',
+          });
+        }
+      } else if (part.filename) {
+        // Process attachment
         try {
           const attachment = await this.processAttachment(gmail, messageId, part, workspaceId);
-
           if (attachment) {
-            if (isInline && contentId) {
-              result.inlineImages.push(attachment);
+            if (part.contentId) {
+              inlineImages.push(attachment);
             } else {
-              result.attachments.push(attachment);
+              attachments.push(attachment);
             }
           }
         } catch (error) {
-          result.errors.push({
-            part: part.mimeType,
-            error: `Attachment processing failed: ${error.message}`,
+          console.error('[Gmail] Error processing attachment:', {
+            error: error.message,
+            filename: part.filename,
+            messageId,
           });
         }
       }
 
-      return result;
+      // Log final body content
+      console.log('[Gmail Debug] Initial body content:', {
+        messageId,
+        hasBody: !!body,
+        bodyLength: body.length,
+        mimeType: part.mimeType,
+        isMultipart: part.mimeType?.includes('multipart'),
+      });
+
+      return {
+        body,
+        attachments,
+        inlineImages,
+      };
     } catch (error) {
-      result.errors.push({
-        part: part.mimeType,
+      console.error('[Gmail] Error processing email parts:', {
         error: error.message,
-      });
-      return result;
-    }
-  }
-
-  /**
-   * Extract first matching content type from email parts
-   */
-  extractFirstMatching(part, types = ['text/html', 'text/plain']) {
-    console.log('[Gmail Debug] Extracting content:', {
-      mimeType: part.mimeType,
-      hasBody: !!part.body?.data,
-      targetTypes: types,
-    });
-
-    // First try to find HTML content
-    if (part.mimeType === 'text/html' && part.body?.data) {
-      const content = Buffer.from(part.body.data, 'base64url').toString();
-      console.log('[Gmail Debug] Found HTML content:', {
+        messageId,
         mimeType: part.mimeType,
-        contentLength: content.length,
-        isHtml: true,
-        preview: content.substring(0, 100) + '...',
       });
-      return content;
+      throw error;
     }
-
-    // If no HTML content found, try to find plain text
-    if (part.mimeType === 'text/plain' && part.body?.data) {
-      const content = Buffer.from(part.body.data, 'base64url').toString();
-      console.log('[Gmail Debug] Found plain text content:', {
-        mimeType: part.mimeType,
-        contentLength: content.length,
-        isHtml: false,
-        preview: content.substring(0, 100) + '...',
-      });
-      return content;
-    }
-
-    // If no direct match, check parts
-    if (part.parts?.length) {
-      // First try to find HTML in parts
-      for (const sub of part.parts) {
-        if (sub.mimeType === 'text/html') {
-          const res = this.extractFirstMatching(sub, types);
-          if (res) return res;
-        }
-      }
-      // If no HTML found, try plain text
-      for (const sub of part.parts) {
-        if (sub.mimeType === 'text/plain') {
-          const res = this.extractFirstMatching(sub, types);
-          if (res) return res;
-        }
-      }
-    }
-
-    return '';
   }
 
   /**
@@ -1030,63 +980,71 @@ class GmailListenerService {
    */
   async processAttachment(gmail, messageId, part, workspaceId) {
     try {
-      if (!messageId) {
-        throw new Error('Message ID is required for attachment processing');
+      if (!messageId || !part.attachmentId) {
+        throw new Error('Missing required parameters: messageId or attachmentId');
       }
 
-      // Get attachment data if not already present
-      let attachmentData = part.body.data;
-      if (!attachmentData && part.body.attachmentId) {
-        const response = await gmail.users.messages.attachments.get({
-          userId: 'me',
-          messageId: messageId,
-          id: part.body.attachmentId,
-        });
-        attachmentData = response.data.data;
+      // Get attachment data
+      const attachmentData = await gmail.users.messages.attachments.get({
+        userId: 'me',
+        messageId,
+        id: part.attachmentId,
+      });
+
+      if (!attachmentData?.data?.data) {
+        throw new Error('No attachment data received');
       }
 
-      // Decode base64url data
-      const decodedData = Buffer.from(attachmentData, 'base64url');
-
-      // Check file size
-      if (decodedData.length > MAX_ATTACHMENT_SIZE) {
-        console.warn(`[Gmail] Attachment too large (${decodedData.length} bytes), skipping upload`);
-        return {
-          filename: this.extractFilename(part),
-          mimeType: part.mimeType,
-          size: decodedData.length,
-          error: 'File too large',
-          skipped: true,
-        };
-      }
+      // Decode attachment data
+      const buffer = Buffer.from(attachmentData.data.data, 'base64');
 
       // Generate storage path
       const filename = this.extractFilename(part);
-      const storagePath = firebaseStorage.generatePath(workspaceId, filename);
+      const storagePath = `workspaces/${workspaceId}/files/${Date.now()}_${filename}`;
 
-      // Upload to Firebase Storage
-      const { url: downloadUrl, storagePath: finalStoragePath } = await firebaseStorage.uploadFile(
-        decodedData,
+      console.log('Generated storage path:', storagePath);
+
+      // Upload to storage
+      const storageRef = storage.bucket().file(storagePath);
+
+      console.log('Starting file upload:', {
         storagePath,
-        part.mimeType,
-      );
+        contentType: part.mimeType,
+        bufferSize: buffer.length,
+      });
+
+      await storageRef.save(buffer, {
+        metadata: {
+          contentType: part.mimeType,
+          cacheControl: 'public,max-age=3600',
+        },
+      });
+
+      console.log('Created storage reference:', storagePath);
+
+      // Get download URL
+      console.log('Getting download URL for:', storagePath);
+      const [url] = await storageRef.getSignedUrl({
+        action: 'read',
+        expires: '03-01-2500',
+      });
+      console.log('Download URL obtained:', url);
 
       return {
         filename,
         mimeType: part.mimeType,
-        size: decodedData.length,
-        attachmentId: part.body.attachmentId,
-        storagePath: finalStoragePath,
-        downloadUrl,
-        type: fileUtils.getType(part.mimeType),
-        isInline: part.headers?.some(
-          (h) =>
-            h.name.toLowerCase() === 'content-disposition' &&
-            h.value.toLowerCase().includes('inline'),
-        ),
+        size: buffer.length,
+        attachmentId: part.attachmentId,
+        contentId: part.contentId,
+        storageUrl: url,
+        storagePath,
       };
     } catch (error) {
-      console.error('[Gmail] Error processing attachment:', error);
+      console.error('[Gmail] Error processing attachment:', {
+        error: error.message,
+        messageId,
+        filename: part.filename,
+      });
       throw error;
     }
   }
