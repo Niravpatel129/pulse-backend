@@ -45,7 +45,6 @@ const apiKeySchema = new mongoose.Schema(
 );
 
 // Create indexes
-apiKeySchema.index({ key: 1 });
 apiKeySchema.index({ workspaceId: 1 });
 
 const ApiKey = mongoose.model('ApiKey', apiKeySchema);

@@ -30,8 +30,6 @@ const validateRequest = (schema) => {
       console.log('Files in request:', req.files);
     }
 
-    console.log('Schema to validate against:', schema);
-
     // Validate the processed body
     const { error } = schema.validate(validationBody);
     if (error) {

@@ -166,13 +166,11 @@ const inboxEmailSchema = new mongoose.Schema(
     threadId: {
       type: String,
       required: true,
-      index: true,
     },
     workspaceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Workspace',
       required: true,
-      index: true,
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -183,7 +181,6 @@ const inboxEmailSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     from: {
       type: emailAddressSchema,

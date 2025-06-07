@@ -163,7 +163,6 @@ paymentSchema.index({ date: 1 });
 paymentSchema.index({ paymentNumber: 1 });
 paymentSchema.index({ type: 1 });
 paymentSchema.index({ status: 1 });
-paymentSchema.index({ 'receipt.number': 1 });
 paymentSchema.index({ 'metadata.isDeposit': 1 });
 paymentSchema.index({ 'metadata.paymentSequence.number': 1 });
 
