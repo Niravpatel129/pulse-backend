@@ -49,8 +49,8 @@ export const getGmailClient = async (workspaceId, fromEmail = null) => {
 export const sendGmailEmail = async (gmailClient, emailData) => {
   const { to, cc, bcc, subject, html, attachments = [] } = emailData;
 
-  // Create email message
-  const message = [
+  // Create email message parts
+  const messageParts = [
     'Content-Type: multipart/mixed; boundary="foo_bar_baz"\r\n',
     'MIME-Version: 1.0\r\n',
     `To: ${to}\r\n`,
@@ -63,12 +63,12 @@ export const sendGmailEmail = async (gmailClient, emailData) => {
     html,
     '\r\n\r\n',
     '--foo_bar_baz_alt--\r\n\r\n',
-  ].join('');
+  ];
 
   // Add attachments if any
   if (attachments.length > 0) {
     for (const attachment of attachments) {
-      message.push(
+      messageParts.push(
         '--foo_bar_baz\r\n',
         `Content-Type: ${attachment.mimeType}\r\n`,
         'Content-Transfer-Encoding: base64\r\n',
@@ -79,10 +79,12 @@ export const sendGmailEmail = async (gmailClient, emailData) => {
     }
   }
 
-  message.push('--foo_bar_baz--');
+  // Add final boundary
+  messageParts.push('--foo_bar_baz--');
 
-  // Encode the message
-  const encodedMessage = Buffer.from(message.join(''))
+  // Join all parts and encode the message
+  const message = messageParts.join('');
+  const encodedMessage = Buffer.from(message)
     .toString('base64')
     .replace(/\+/g, '-')
     .replace(/\//g, '_')

@@ -61,7 +61,7 @@ const processAttachments = async (files, workspaceId) => {
 
 export const sendInboxEmail = catchAsync(async (req, res, next) => {
   const { to, cc, bcc, subject, body, threadId, inReplyTo, references, fromEmail } = req.body;
-  const userId = req.user._id;
+  const userId = req.user.userId;
   const workspaceId = req.workspace._id;
 
   // Parse arrays from form data
