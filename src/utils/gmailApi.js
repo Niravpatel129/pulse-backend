@@ -86,17 +86,21 @@ export const sendGmailEmail = async (gmailClient, emailData, integration) => {
   // Format references array - ensure inReplyTo is first in the chain
   const formattedReferences = [];
 
-  // Use the first reference as the inReplyTo if it's a Gmail message ID
-  const gmailMessageId = references?.[0]?.replace(/[<>]/g, '');
-  if (!gmailMessageId) {
-    throw new Error('Invalid Gmail message ID in references');
-  }
+  // If this is a reply, ensure we have valid inReplyTo and references
+  if (inReplyTo) {
+    // Clean up the inReplyTo value (remove < > if present)
+    const cleanInReplyTo = inReplyTo.replace(/[<>]/g, '');
+    formattedReferences.push(`<${cleanInReplyTo}>`);
 
-  formattedReferences.push(`<${gmailMessageId}>`);
-
-  // Add remaining references
-  if (references && references.length > 1) {
-    formattedReferences.push(...references.slice(1));
+    // Add remaining references if they exist
+    if (references && Array.isArray(references)) {
+      references.forEach((ref) => {
+        const cleanRef = ref.replace(/[<>]/g, '');
+        if (cleanRef !== cleanInReplyTo) {
+          formattedReferences.push(`<${cleanRef}>`);
+        }
+      });
+    }
   }
 
   // Create email message parts
@@ -108,8 +112,8 @@ export const sendGmailEmail = async (gmailClient, emailData, integration) => {
     ccArray.length ? `Cc: ${ccArray.join(', ')}\r\n` : '',
     bccArray.length ? `Bcc: ${bccArray.join(', ')}\r\n` : '',
     `Subject: ${formattedSubject}\r\n`,
-    `In-Reply-To: <${gmailMessageId}>\r\n`,
-    `References: ${formattedReferences.join(' ')}\r\n`,
+    inReplyTo ? `In-Reply-To: <${inReplyTo.replace(/[<>]/g, '')}>\r\n` : '',
+    formattedReferences.length ? `References: ${formattedReferences.join(' ')}\r\n` : '',
     `Message-ID: ${messageId}\r\n`,
     'Date: ' + new Date().toUTCString() + '\r\n',
     'Thread-Index: ' + Buffer.from(Date.now().toString()).toString('base64') + '\r\n',
@@ -154,14 +158,16 @@ export const sendGmailEmail = async (gmailClient, emailData, integration) => {
   try {
     // First, get the thread ID for the message we're replying to
     let threadId;
-    try {
-      const messageResponse = await gmailClient.users.messages.get({
-        userId: 'me',
-        id: gmailMessageId,
-      });
-      threadId = messageResponse.data.threadId;
-    } catch (error) {
-      console.warn('Could not find thread ID for message, sending as new thread');
+    if (inReplyTo) {
+      try {
+        const messageResponse = await gmailClient.users.messages.get({
+          userId: 'me',
+          id: inReplyTo.replace(/[<>]/g, ''),
+        });
+        threadId = messageResponse.data.threadId;
+      } catch (error) {
+        console.warn('Could not find thread ID for message, sending as new thread');
+      }
     }
 
     const response = await gmailClient.users.messages.send({

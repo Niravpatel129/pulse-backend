@@ -1,4 +1,6 @@
+import mongoose from 'mongoose';
 import { nanoid } from 'nanoid';
+import Email from '../../models/Email.js';
 import InboxEmail from '../../models/Email/InboxEmailModel.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
@@ -63,7 +65,6 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
   const { to, cc, bcc, subject, body, threadId, inReplyTo, references, fromEmail } = req.body;
   const userId = req.user.userId;
   const workspaceId = req.workspace._id;
-  console.log('🚀 fromEmail:', fromEmail);
 
   // Parse arrays from form data
   const toArray = Array.isArray(to) ? to : JSON.parse(to);
@@ -74,6 +75,27 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
       ? references
       : JSON.parse(references)
     : [];
+
+  // Fetch the original email for reply threading
+  let originalEmail = null;
+  if (inReplyTo) {
+    // Try to find by _id first, then by gmailMessageId
+    if (mongoose.Types.ObjectId.isValid(inReplyTo)) {
+      originalEmail = await Email.findById(inReplyTo);
+    }
+    if (!originalEmail) {
+      originalEmail = await Email.findOne({ gmailMessageId: inReplyTo });
+    }
+    if (!originalEmail) {
+      return next(new AppError('Original email not found for reply', 404));
+    }
+  }
+
+  const threadIdToUse = originalEmail ? originalEmail.threadId : threadId;
+  const inReplyToHeader = originalEmail ? originalEmail.gmailMessageId : inReplyTo;
+  const referencesHeader = originalEmail
+    ? [...(originalEmail.messageReferences?.[0]?.references || []), originalEmail.gmailMessageId]
+    : referencesArray;
 
   // Process attachments
   const attachments = await processAttachments(req.files, workspaceId);
@@ -90,8 +112,9 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
     subject,
     html: body,
     attachments,
-    inReplyTo,
-    references: referencesArray,
+    threadId: threadIdToUse,
+    inReplyTo: inReplyToHeader,
+    references: referencesHeader,
   };
 
   const emailResult = await sendGmailEmail(gmailClient, emailPayload, integration);
@@ -102,7 +125,7 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
 
   // Create email record in database
   const emailData = {
-    threadId: threadId || emailResult.threadId,
+    threadId: threadIdToUse || emailResult.threadId,
     workspaceId,
     userId,
     gmailMessageId: emailResult.messageId,
@@ -129,9 +152,9 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
     messageReferences: [
       {
         messageId: emailResult.messageId,
-        inReplyTo: inReplyTo || null,
-        references: referencesArray,
-        type: inReplyTo ? 'reply' : 'original',
+        inReplyTo: inReplyToHeader || null,
+        references: referencesHeader,
+        type: inReplyToHeader ? 'reply' : 'original',
         position: 0,
       },
     ],
