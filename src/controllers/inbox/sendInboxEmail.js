@@ -63,6 +63,7 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
   const { to, cc, bcc, subject, body, threadId, inReplyTo, references, fromEmail } = req.body;
   const userId = req.user.userId;
   const workspaceId = req.workspace._id;
+  console.log('🚀 fromEmail:', fromEmail);
 
   // Parse arrays from form data
   const toArray = Array.isArray(to) ? to : JSON.parse(to);
@@ -79,7 +80,7 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
 
   // Get Gmail client
   const { client: gmailClient, integration } = await getGmailClient(workspaceId, fromEmail);
-  const senderEmail = fromEmail || integration.email;
+  const senderEmail = integration.email;
 
   // Send email using Gmail API
   const emailPayload = {
@@ -91,7 +92,7 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
     attachments,
   };
 
-  const emailResult = await sendGmailEmail(gmailClient, emailPayload);
+  const emailResult = await sendGmailEmail(gmailClient, emailPayload, integration);
 
   if (!emailResult.success) {
     return next(new AppError('Failed to send email via Gmail', 500));

@@ -46,13 +46,14 @@ export const getGmailClient = async (workspaceId, fromEmail = null) => {
 };
 
 // Send email using Gmail API
-export const sendGmailEmail = async (gmailClient, emailData) => {
+export const sendGmailEmail = async (gmailClient, emailData, integration) => {
   const { to, cc, bcc, subject, html, attachments = [] } = emailData;
 
   // Create email message parts
   const messageParts = [
     'Content-Type: multipart/mixed; boundary="foo_bar_baz"\r\n',
     'MIME-Version: 1.0\r\n',
+    `From: ${integration.email}\r\n`,
     `To: ${to}\r\n`,
     cc ? `Cc: ${cc}\r\n` : '',
     `Subject: ${subject}\r\n\r\n`,
