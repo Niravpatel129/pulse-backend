@@ -78,6 +78,10 @@ export const sendGmailEmail = async (gmailClient, emailData, integration) => {
   // Format subject for replies (remove Re: if it's already there)
   const formattedSubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
 
+  // Encode subject using UTF-8
+  const encodedSubject = Buffer.from(formattedSubject).toString('base64');
+  const subjectHeader = `=?UTF-8?B?${encodedSubject}?=`;
+
   // Generate a unique message ID
   const messageId = `<${Math.random().toString(36).substring(2)}@${
     integration.email.split('@')[1]
@@ -111,7 +115,7 @@ export const sendGmailEmail = async (gmailClient, emailData, integration) => {
     `To: ${toArray.join(', ')}\r\n`,
     ccArray.length ? `Cc: ${ccArray.join(', ')}\r\n` : '',
     bccArray.length ? `Bcc: ${bccArray.join(', ')}\r\n` : '',
-    `Subject: ${formattedSubject}\r\n`,
+    `Subject: ${subjectHeader}\r\n`,
     inReplyTo ? `In-Reply-To: <${inReplyTo.replace(/[<>]/g, '')}>\r\n` : '',
     formattedReferences.length ? `References: ${formattedReferences.join(' ')}\r\n` : '',
     `Message-ID: ${messageId}\r\n`,
