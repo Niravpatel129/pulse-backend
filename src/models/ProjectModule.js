@@ -213,7 +213,6 @@ projectModuleSchema.pre('save', async function (next) {
   next();
 });
 
-// Validation based on moduleType
 projectModuleSchema.pre('validate', function (next) {
   const moduleType = this.moduleType;
   const content = this.content || {};

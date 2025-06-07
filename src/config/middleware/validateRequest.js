@@ -2,7 +2,6 @@ const validateRequest = (schema) => {
   return (req, res, next) => {
     // Create a copy of the request body for validation
     const validationBody = { ...req.body };
-    console.log('Validation body (initial):', validationBody);
 
     // Parse form data arrays if they exist
     if (validationBody && typeof validationBody === 'object') {
@@ -24,8 +23,6 @@ const validateRequest = (schema) => {
       });
     }
 
-    console.log('Validation body (after parsing):', validationBody);
-
     // Remove file-related fields from validation if this is a multipart request
     if (req.headers['content-type']?.includes('multipart/form-data')) {
       delete validationBody.attachments;
@@ -33,7 +30,6 @@ const validateRequest = (schema) => {
       console.log('Files in request:', req.files);
     }
 
-    console.log('Validation body (final):', validationBody);
     console.log('Schema to validate against:', schema);
 
     // Validate the processed body
