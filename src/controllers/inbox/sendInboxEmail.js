@@ -90,6 +90,8 @@ export const sendInboxEmail = catchAsync(async (req, res, next) => {
     subject,
     html: body,
     attachments,
+    inReplyTo,
+    references: referencesArray,
   };
 
   const emailResult = await sendGmailEmail(gmailClient, emailPayload, integration);

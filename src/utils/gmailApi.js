@@ -47,16 +47,73 @@ export const getGmailClient = async (workspaceId, fromEmail = null) => {
 
 // Send email using Gmail API
 export const sendGmailEmail = async (gmailClient, emailData, integration) => {
-  const { to, cc, bcc, subject, html, attachments = [] } = emailData;
+  const { to, cc, bcc, subject, html, attachments = [], inReplyTo, references } = emailData;
+
+  // Convert string recipients to arrays if needed
+  const toArray = typeof to === 'string' ? to.split(',').map((email) => email.trim()) : to;
+  const ccArray = cc
+    ? typeof cc === 'string'
+      ? cc.split(',').map((email) => email.trim())
+      : cc
+    : [];
+  const bccArray = bcc
+    ? typeof bcc === 'string'
+      ? bcc.split(',').map((email) => email.trim())
+      : bcc
+    : [];
+
+  // Validate basic email fields
+  if (!toArray || !Array.isArray(toArray) || toArray.length === 0) {
+    throw new Error('recipient (to) is required');
+  }
+
+  if (!subject) {
+    throw new Error('subject is required');
+  }
+
+  if (!html) {
+    throw new Error('email body (html) is required');
+  }
+
+  // Format subject for replies (remove Re: if it's already there)
+  const formattedSubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+
+  // Generate a unique message ID
+  const messageId = `<${Math.random().toString(36).substring(2)}@${
+    integration.email.split('@')[1]
+  }>`;
+
+  // Format references array - ensure inReplyTo is first in the chain
+  const formattedReferences = [];
+
+  // Use the first reference as the inReplyTo if it's a Gmail message ID
+  const gmailMessageId = references?.[0]?.replace(/[<>]/g, '');
+  if (!gmailMessageId) {
+    throw new Error('Invalid Gmail message ID in references');
+  }
+
+  formattedReferences.push(`<${gmailMessageId}>`);
+
+  // Add remaining references
+  if (references && references.length > 1) {
+    formattedReferences.push(...references.slice(1));
+  }
 
   // Create email message parts
   const messageParts = [
     'Content-Type: multipart/mixed; boundary="foo_bar_baz"\r\n',
     'MIME-Version: 1.0\r\n',
     `From: ${integration.email}\r\n`,
-    `To: ${to}\r\n`,
-    cc ? `Cc: ${cc}\r\n` : '',
-    `Subject: ${subject}\r\n\r\n`,
+    `To: ${toArray.join(', ')}\r\n`,
+    ccArray.length ? `Cc: ${ccArray.join(', ')}\r\n` : '',
+    bccArray.length ? `Bcc: ${bccArray.join(', ')}\r\n` : '',
+    `Subject: ${formattedSubject}\r\n`,
+    `In-Reply-To: <${gmailMessageId}>\r\n`,
+    `References: ${formattedReferences.join(' ')}\r\n`,
+    `Message-ID: ${messageId}\r\n`,
+    'Date: ' + new Date().toUTCString() + '\r\n',
+    'Thread-Index: ' + Buffer.from(Date.now().toString()).toString('base64') + '\r\n',
+    '\r\n',
     '--foo_bar_baz\r\n',
     'Content-Type: multipart/alternative; boundary="foo_bar_baz_alt"\r\n\r\n',
     '--foo_bar_baz_alt\r\n',
@@ -69,6 +126,9 @@ export const sendGmailEmail = async (gmailClient, emailData, integration) => {
   // Add attachments if any
   if (attachments.length > 0) {
     for (const attachment of attachments) {
+      if (!attachment.mimeType || !attachment.filename || !attachment.content) {
+        throw new Error('Invalid attachment format: missing required fields');
+      }
       messageParts.push(
         '--foo_bar_baz\r\n',
         `Content-Type: ${attachment.mimeType}\r\n`,
@@ -92,10 +152,23 @@ export const sendGmailEmail = async (gmailClient, emailData, integration) => {
     .replace(/=+$/, '');
 
   try {
+    // First, get the thread ID for the message we're replying to
+    let threadId;
+    try {
+      const messageResponse = await gmailClient.users.messages.get({
+        userId: 'me',
+        id: gmailMessageId,
+      });
+      threadId = messageResponse.data.threadId;
+    } catch (error) {
+      console.warn('Could not find thread ID for message, sending as new thread');
+    }
+
     const response = await gmailClient.users.messages.send({
       userId: 'me',
       requestBody: {
         raw: encodedMessage,
+        threadId: threadId, // Use the thread ID from the original message
       },
     });
 
