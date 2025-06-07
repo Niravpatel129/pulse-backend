@@ -62,11 +62,12 @@ const invoiceSettingsSchema = new mongoose.Schema({
   deposit: {
     enabled: {
       type: Boolean,
-      required: true,
+      default: false,
+      required: false,
     },
     percentage: {
       type: Number,
-      required: true,
+      required: false,
     },
     dueDate: {
       type: Date,
