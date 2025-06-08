@@ -4,14 +4,21 @@ import StripeTerminalReader from '../../models/StripeTerminalReader.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe =
+  process.env.NODE_ENV === 'production'
+    ? new Stripe(process.env.STRIPE_SECRET_KEY)
+    : new Stripe(process.env.STRIPE_SECRET_KEY_DEV);
 
 // Register a new BBPOS reader
 export const registerReader = catchAsync(async (req, res, next) => {
-  const { registrationCode, label = 'New Reader' } = req.body;
+  const { registrationCode, label = 'New Reader', location } = req.body;
 
   if (!registrationCode) {
     return next(new AppError('Registration code is required', 400));
+  }
+
+  if (!location) {
+    return next(new AppError('Location is required', 400));
   }
 
   // Get the Stripe Connect account for this workspace
@@ -26,6 +33,7 @@ export const registerReader = catchAsync(async (req, res, next) => {
       {
         registration_code: registrationCode,
         label,
+        location,
       },
       { stripeAccount: stripeAccount.accountId },
     );
