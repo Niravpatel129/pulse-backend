@@ -91,6 +91,7 @@ const connectGmail = asyncHandler(async (req, res) => {
       existingIntegration.accessToken = access_token;
       if (tokens.refresh_token) {
         existingIntegration.refreshToken = tokens.refresh_token;
+        existingIntegration.refreshTokenLastUsedAt = new Date();
       } else {
         console.log('No refresh token returned — keeping existing one.');
       }
@@ -111,6 +112,7 @@ const connectGmail = asyncHandler(async (req, res) => {
         email,
         accessToken: access_token,
         refreshToken: refresh_token,
+        refreshTokenLastUsedAt: refresh_token ? new Date() : undefined,
         tokenExpiry: new Date(expiry_date),
         isPrimary: existingCount === 0, // Set as primary if this is the first integration
       });

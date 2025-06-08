@@ -182,6 +182,7 @@ class GmailListenerService {
         }
         integration.accessToken = tokens.access_token;
         integration.tokenExpiry = new Date(tokens.expiry_date);
+        integration.refreshTokenLastUsedAt = new Date();
         await integration.save();
       });
 

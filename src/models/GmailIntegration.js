@@ -19,6 +19,10 @@ const GmailIntegrationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    refreshTokenLastUsedAt: {
+      type: Date,
+      description: 'Timestamp when the refresh token was last used',
+    },
     tokenExpiry: {
       type: Date,
       required: true,

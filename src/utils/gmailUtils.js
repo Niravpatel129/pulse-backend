@@ -53,13 +53,11 @@ export async function fetchEmailThread(workspaceId, emailId) {
         tokens.expiry_date ? new Date(tokens.expiry_date) : 'no expiry',
       );
       if (tokens.refresh_token) {
-        // Update refresh token in the database
         gmailIntegration.refreshToken = tokens.refresh_token;
-        console.log('🔑 Refresh token updated');
       }
-
       gmailIntegration.accessToken = tokens.access_token;
       gmailIntegration.tokenExpiry = new Date(tokens.expiry_date);
+      gmailIntegration.refreshTokenLastUsedAt = new Date();
       await gmailIntegration.save();
       console.log('💾 Updated tokens saved to database');
     });
@@ -608,6 +606,7 @@ export async function checkGmailIntegration(workspaceId) {
 
       gmailIntegration.accessToken = tokens.access_token;
       gmailIntegration.tokenExpiry = new Date(tokens.expiry_date);
+      gmailIntegration.refreshTokenLastUsedAt = new Date();
       await gmailIntegration.save();
       console.log('💾 Updated tokens saved to database');
     });
