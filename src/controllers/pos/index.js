@@ -1,3 +1,4 @@
+export { checkPaymentStatus } from './checkPaymentStatus.js';
 export { cancelPaymentIntent, createAndProcessPayment } from './createPaymentIntent.js';
 export { deleteReader } from './deleteReader.js';
 export { getConnectionToken } from './getConnectionToken.js';
