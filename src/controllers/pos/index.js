@@ -1,4 +1,4 @@
-export { createPaymentIntent } from './createPaymentIntent.js';
+export { createAndProcessPayment } from './createPaymentIntent.js';
 export { deleteReader } from './deleteReader.js';
 export { getConnectionToken } from './getConnectionToken.js';
 export { listReaders } from './listReaders.js';
