@@ -1,7 +1,9 @@
 import express from 'express';
 import {
+  createLocation,
   deleteReader,
   getConnectionToken,
+  listLocations,
   listReaders,
   registerReader,
   syncReader,
@@ -22,6 +24,10 @@ router.get('/readers', listReaders);
 router.get('/readers/:readerId/sync', syncReader);
 router.patch('/readers/:readerId', updateReader);
 router.delete('/readers/:readerId', deleteReader);
+
+// Location management routes
+router.post('/locations', createLocation);
+router.get('/locations', listLocations);
 
 // Connection token route
 router.post('/connection-token', getConnectionToken);
