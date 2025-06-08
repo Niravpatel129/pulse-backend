@@ -177,3 +177,79 @@ export const createAndProcessPayment = catchAsync(async (req, res) => {
     });
   }
 });
+
+// Cancel a payment intent
+export const cancelPaymentIntent = catchAsync(async (req, res) => {
+  const { paymentIntentId } = req.body;
+
+  if (!paymentIntentId) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Payment intent ID is required',
+    });
+  }
+
+  try {
+    // Find the invoice associated with this payment intent
+    const invoice = await Invoice2.findOne({ paymentIntentId });
+
+    if (!invoice) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No invoice found for this payment intent',
+      });
+    }
+
+    // Find the connected account for the workspace
+    const connectAccount = await StripeConnectAccount.findOne({
+      workspace: invoice.workspace,
+    });
+
+    if (!connectAccount) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No Stripe account found for this invoice',
+      });
+    }
+
+    // Cancel the payment intent on the connected account
+    const canceledPaymentIntent = await stripe.paymentIntents.cancel(paymentIntentId, {
+      stripeAccount: connectAccount.accountId,
+    });
+
+    // Update the invoice status
+    invoice.paymentIntentId = null;
+    await invoice.save();
+
+    // Add a timeline entry for the cancellation
+    const cancellationEntry = {
+      status: 'seen',
+      changedAt: new Date(),
+      reason: 'Payment was canceled',
+    };
+    invoice.statusHistory.push(cancellationEntry);
+    await invoice.save();
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        id: canceledPaymentIntent.id,
+        status: canceledPaymentIntent.status,
+        amount: canceledPaymentIntent.amount,
+        currency: canceledPaymentIntent.currency,
+        canceled_at: canceledPaymentIntent.canceled_at,
+      },
+    });
+  } catch (error) {
+    console.error('Payment cancellation error:', {
+      message: error.message,
+      type: error.type,
+      code: error.code,
+      stack: error.stack,
+    });
+    return res.status(400).json({
+      status: 'error',
+      message: `Failed to cancel payment: ${error.message}`,
+    });
+  }
+});
