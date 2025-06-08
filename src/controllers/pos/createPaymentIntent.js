@@ -20,91 +20,122 @@ export const createAndProcessPayment = catchAsync(async (req, res) => {
     });
   }
 
-  // Find the invoice with workspace data
-  const invoice = await Invoice2.findById(invoiceId).populate('workspace');
-
-  if (!invoice) {
-    return res.status(404).json({
-      status: 'error',
-      message: 'Invoice not found',
-    });
-  }
-
-  // Find the connected account for the workspace
-  const connectAccount = await StripeConnectAccount.findOne({
-    workspace: invoice.workspace,
-  });
-
-  if (!connectAccount) {
-    return res.status(404).json({
-      status: 'error',
-      message: 'No Stripe account found for this invoice',
-    });
-  }
-
-  // Find the reader
-  const reader = await StripeTerminalReader.findOne({
-    workspace: req.workspace._id,
-    readerId,
-  });
-
-  if (!reader) {
-    return res.status(404).json({
-      status: 'error',
-      message: 'Reader not found',
-    });
-  }
-
-  if (reader.status !== 'online') {
-    return res.status(400).json({
-      status: 'error',
-      message: 'Reader is not online',
-    });
-  }
-
   try {
+    // Find the invoice with workspace data
+    const invoice = await Invoice2.findById(invoiceId).populate('workspace');
+    console.error('Invoice found:', invoice?._id);
+
+    if (!invoice) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Invoice not found',
+      });
+    }
+
+    // Find the connected account for the workspace
+    const connectAccount = await StripeConnectAccount.findOne({
+      workspace: invoice.workspace,
+    });
+    console.error('Connect account found:', connectAccount?.accountId);
+
+    if (!connectAccount) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'No Stripe account found for this invoice',
+      });
+    }
+
+    // Find the reader
+    const reader = await StripeTerminalReader.findOne({
+      workspace: req.workspace._id,
+      readerId,
+    });
+    console.error('Reader details:', {
+      readerId: reader?.readerId,
+      status: reader?.status,
+      stripeAccount: reader?.stripeAccount,
+      locationId: reader?.locationId,
+    });
+
+    if (!reader) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Reader not found',
+      });
+    }
+
+    if (reader.status !== 'online') {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Reader is not online',
+      });
+    }
+
     // Get payment amount from invoice
     const paymentAmount = Math.round(invoice.totals.total * 100);
     const paymentCurrency = invoice.settings?.currency || 'usd';
+    console.error('Payment details:', { amount: paymentAmount, currency: paymentCurrency });
 
-    // Create payment intent
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: paymentAmount,
-      currency: paymentCurrency,
-      transfer_data: {
-        destination: connectAccount.accountId,
+    // Create payment intent on the connected account
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: paymentAmount,
+        currency: paymentCurrency,
+        statement_descriptor_suffix: invoice.workspace.name?.substring(0, 22) || 'PAYMENT',
+        metadata: {
+          invoiceId: invoice._id.toString(),
+          workspaceId: invoice.workspace._id.toString(),
+        },
+        payment_method_types: ['card_present'],
+        capture_method: 'automatic',
       },
-      statement_descriptor_suffix: invoice.workspace.name?.substring(0, 22) || 'PAYMENT',
-      metadata: {
-        invoiceId: invoice._id.toString(),
-        workspaceId: invoice.workspace._id.toString(),
+      {
+        stripeAccount: connectAccount.accountId, // Create on connected account
       },
-      payment_method_types: ['card_present'],
-      capture_method: 'automatic',
+    );
+    console.error('Payment Intent created:', {
+      id: paymentIntent.id,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      status: paymentIntent.status,
     });
 
     // Store the payment intent ID in the invoice
     invoice.paymentIntentId = paymentIntent.id;
     await invoice.save();
+    console.error('Invoice updated with payment intent');
 
-    // Process the payment through the reader
-    await stripe.terminal.readers.processPaymentIntent(
-      readerId,
+    // Process the payment through the reader using the connected account
+    console.error('Processing payment with reader:', {
+      readerId: reader.readerId,
+      stripeAccount: connectAccount.accountId,
+      paymentIntentId: paymentIntent.id,
+    });
+
+    const processedPayment = await stripe.terminal.readers.processPaymentIntent(
+      reader.readerId,
       {
         payment_intent: paymentIntent.id,
       },
       {
-        stripeAccount: reader.stripeAccount,
+        stripeAccount: connectAccount.accountId,
       },
     );
+    console.error('Payment processed:', processedPayment);
 
     // Update reader's last used timestamp
     reader.lastUsedAt = new Date();
     await reader.save();
 
-    // Get detailed payment intent information
+    // Get detailed payment intent information from the connected account
     const paymentIntentDetails = await stripe.paymentIntents.retrieve(paymentIntent.id, {
-      stripeAccount: reader.stripeAccount,
+      stripeAccount: connectAccount.accountId,
+    });
+    console.error('Payment Intent retrieved:', {
+      id: paymentIntentDetails.id,
+      status: paymentIntentDetails.status,
+      amount: paymentIntentDetails.amount,
+      amount_received: paymentIntentDetails.amount_received,
     });
 
     res.status(200).json({
@@ -134,6 +165,12 @@ export const createAndProcessPayment = catchAsync(async (req, res) => {
       },
     });
   } catch (error) {
+    console.error('Payment processing error:', {
+      message: error.message,
+      type: error.type,
+      code: error.code,
+      stack: error.stack,
+    });
     return res.status(400).json({
       status: 'error',
       message: `Failed to process payment: ${error.message}`,
