@@ -3,7 +3,10 @@ import StripeTerminalReader from '../../models/StripeTerminalReader.js';
 import AppError from '../../utils/AppError.js';
 import catchAsync from '../../utils/catchAsync.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe =
+  process.env.NODE_ENV === 'production'
+    ? new Stripe(process.env.STRIPE_SECRET_KEY)
+    : new Stripe(process.env.STRIPE_SECRET_KEY_DEV);
 
 // Sync a single reader with Stripe
 export const syncReader = catchAsync(async (req, res, next) => {

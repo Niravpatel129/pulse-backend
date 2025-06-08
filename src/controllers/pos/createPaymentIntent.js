@@ -58,6 +58,8 @@ export const createPaymentIntent = catchAsync(async (req, res) => {
         invoiceId: invoice._id.toString(),
         workspaceId: invoice.workspace._id.toString(),
       },
+      payment_method_types: ['card_present'],
+      capture_method: 'automatic',
     });
 
     // Store the payment intent ID in the invoice

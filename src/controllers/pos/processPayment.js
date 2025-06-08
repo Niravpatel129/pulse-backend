@@ -10,6 +10,7 @@ const stripe =
 // Process a payment through a Stripe Terminal reader
 export const processPayment = catchAsync(async (req, res) => {
   const { readerId } = req.params;
+  console.log('🚀 readerId:', readerId);
   const { paymentIntentId } = req.body;
 
   if (!paymentIntentId) {
@@ -43,9 +44,11 @@ export const processPayment = catchAsync(async (req, res) => {
     // Process the payment through the reader
     const paymentIntent = await stripe.terminal.readers.processPaymentIntent(
       readerId,
-      paymentIntentId,
       {
-        stripeAccount: reader.accountId,
+        payment_intent: paymentIntentId,
+      },
+      {
+        stripeAccount: reader.stripeAccount,
       },
     );
 
@@ -55,7 +58,7 @@ export const processPayment = catchAsync(async (req, res) => {
 
     // Get detailed payment intent information
     const paymentIntentDetails = await stripe.paymentIntents.retrieve(paymentIntentId, {
-      stripeAccount: reader.accountId,
+      stripeAccount: reader.stripeAccount,
     });
 
     res.status(200).json({
