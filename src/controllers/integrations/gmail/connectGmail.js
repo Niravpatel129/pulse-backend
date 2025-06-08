@@ -89,7 +89,11 @@ const connectGmail = asyncHandler(async (req, res) => {
       console.log('📝 Updating existing integration...');
       // Update existing integration
       existingIntegration.accessToken = access_token;
-      if (refresh_token) existingIntegration.refreshToken = refresh_token;
+      if (tokens.refresh_token) {
+        existingIntegration.refreshToken = tokens.refresh_token;
+      } else {
+        console.log('No refresh token returned — keeping existing one.');
+      }
       existingIntegration.tokenExpiry = new Date(expiry_date);
       existingIntegration.isActive = true;
       existingIntegration.lastSynced = new Date();
