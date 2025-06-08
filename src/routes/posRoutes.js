@@ -1,10 +1,12 @@
 import express from 'express';
 import {
   createLocation,
+  createPaymentIntent,
   deleteReader,
   getConnectionToken,
   listLocations,
   listReaders,
+  processPayment,
   registerReader,
   syncReader,
   updateReader,
@@ -31,5 +33,9 @@ router.get('/locations', listLocations);
 
 // Connection token route
 router.post('/connection-token', getConnectionToken);
+
+// Payment processing routes
+router.post('/payment-intent', createPaymentIntent);
+router.post('/readers/:readerId/process-payment', processPayment);
 
 export default router;
