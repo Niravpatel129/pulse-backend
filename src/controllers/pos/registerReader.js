@@ -8,15 +8,14 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Register a new BBPOS reader
 export const registerReader = catchAsync(async (req, res, next) => {
-  const { workspaceId } = req.params;
-  const { registrationCode } = req.body;
+  const { registrationCode, label = 'New Reader' } = req.body;
 
   if (!registrationCode) {
     return next(new AppError('Registration code is required', 400));
   }
 
   // Get the Stripe Connect account for this workspace
-  const stripeAccount = await StripeConnectAccount.findOne({ workspace: workspaceId });
+  const stripeAccount = await StripeConnectAccount.findOne({ workspace: req.workspace._id });
   if (!stripeAccount) {
     return next(new AppError('No Stripe account found for this workspace', 404));
   }
@@ -26,21 +25,22 @@ export const registerReader = catchAsync(async (req, res, next) => {
     const reader = await stripe.terminal.readers.create(
       {
         registration_code: registrationCode,
-        label: req.body.label || 'New Reader',
+        label,
       },
       { stripeAccount: stripeAccount.accountId },
     );
 
     // Create reader in our database
     const terminalReader = await StripeTerminalReader.create({
-      workspace: workspaceId,
-      stripeAccount: stripeAccount._id,
-      accountId: stripeAccount.accountId,
+      workspace: req.workspace._id,
+      stripeAccount: stripeAccount.accountId,
       readerId: reader.id,
       label: reader.label,
       deviceType: reader.device_type,
       status: reader.status,
-      serialNumber: reader.serial_number,
+      serialNumber: reader.serial_number || '',
+      ipAddress: reader.ip_address || '',
+      locationId: reader.location || '',
       lastSeenAt: new Date(),
     });
 

@@ -7,7 +7,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Update reader label
 export const updateReader = catchAsync(async (req, res, next) => {
-  const { workspaceId, readerId } = req.params;
+  const { readerId } = req.params;
   const { label } = req.body;
 
   if (!label) {
@@ -15,7 +15,7 @@ export const updateReader = catchAsync(async (req, res, next) => {
   }
 
   const reader = await StripeTerminalReader.findOne({
-    workspace: workspaceId,
+    workspace: req.workspace._id,
     readerId,
   });
 

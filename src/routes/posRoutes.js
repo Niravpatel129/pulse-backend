@@ -15,13 +15,13 @@ const router = express.Router({ mergeParams: true });
 router.use(authenticate);
 
 // Reader management routes
-router.post('/:workspaceId/register-reader', registerReader);
-router.get('/:workspaceId/readers', listReaders);
-router.get('/:workspaceId/readers/:readerId/sync', syncReader);
-router.patch('/:workspaceId/readers/:readerId', updateReader);
-router.delete('/:workspaceId/readers/:readerId', deleteReader);
+router.post('/register-reader', registerReader);
+router.get('/readers', listReaders);
+router.get('/readers/:readerId/sync', syncReader);
+router.patch('/readers/:readerId', updateReader);
+router.delete('/readers/:readerId', deleteReader);
 
 // Connection token route
-router.post('/:workspaceId/connection-token', getConnectionToken);
+router.post('/connection-token', getConnectionToken);
 
 export default router;

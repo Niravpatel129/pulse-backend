@@ -7,10 +7,10 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Delete a reader
 export const deleteReader = catchAsync(async (req, res, next) => {
-  const { workspaceId, readerId } = req.params;
+  const { readerId } = req.params;
 
   const reader = await StripeTerminalReader.findOne({
-    workspace: workspaceId,
+    workspace: req.workspace._id,
     readerId,
   });
 

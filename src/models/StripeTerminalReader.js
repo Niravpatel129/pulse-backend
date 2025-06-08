@@ -6,15 +6,8 @@ const stripeTerminalReaderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Workspace',
       required: true,
-      index: true,
     },
     stripeAccount: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'StripeConnectAccount',
-      required: true,
-      index: true,
-    },
-    accountId: {
       type: String,
       required: true,
       index: true,
@@ -35,7 +28,7 @@ const stripeTerminalReaderSchema = new mongoose.Schema(
     },
     locationId: {
       type: String,
-      index: true,
+      default: '',
     },
     status: {
       type: String,
@@ -44,11 +37,13 @@ const stripeTerminalReaderSchema = new mongoose.Schema(
     },
     ipAddress: {
       type: String,
+      default: '',
     },
     serialNumber: {
       type: String,
       unique: true,
       sparse: true,
+      default: '',
     },
     lastSeenAt: {
       type: Date,
@@ -59,6 +54,7 @@ const stripeTerminalReaderSchema = new mongoose.Schema(
     },
     firmwareVersion: {
       type: String,
+      default: '',
     },
     batteryLevel: {
       type: Number,
@@ -82,7 +78,7 @@ const stripeTerminalReaderSchema = new mongoose.Schema(
 // Compound indexes for common queries
 stripeTerminalReaderSchema.index({ workspace: 1, status: 1 });
 stripeTerminalReaderSchema.index({ workspace: 1, lastSeenAt: -1 });
-stripeTerminalReaderSchema.index({ accountId: 1, status: 1 });
+stripeTerminalReaderSchema.index({ stripeAccount: 1, status: 1 });
 
 // Virtual for reader age
 stripeTerminalReaderSchema.virtual('age').get(function () {

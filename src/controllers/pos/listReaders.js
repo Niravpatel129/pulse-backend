@@ -3,10 +3,9 @@ import catchAsync from '../../utils/catchAsync.js';
 
 // List all readers for a workspace
 export const listReaders = catchAsync(async (req, res, next) => {
-  const { workspaceId } = req.params;
   const { status } = req.query;
 
-  const query = { workspace: workspaceId };
+  const query = { workspace: req.workspace._id };
   if (status) {
     query.status = status;
   }
