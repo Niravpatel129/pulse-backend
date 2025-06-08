@@ -180,7 +180,7 @@ export const createAndProcessPayment = catchAsync(async (req, res) => {
 
 // Cancel a payment intent
 export const cancelPaymentIntent = catchAsync(async (req, res) => {
-  const { paymentIntentId } = req.body;
+  const { paymentIntentId, readerId } = req.body;
 
   if (!paymentIntentId) {
     return res.status(400).json({
@@ -209,6 +209,33 @@ export const cancelPaymentIntent = catchAsync(async (req, res) => {
       return res.status(404).json({
         status: 'error',
         message: 'No Stripe account found for this invoice',
+      });
+    }
+
+    // If readerId is provided, cancel the payment on the reader
+    if (readerId) {
+      const reader = await StripeTerminalReader.findOne({
+        workspace: req.workspace._id,
+        readerId,
+      });
+
+      if (!reader) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Reader not found',
+        });
+      }
+
+      if (reader.status !== 'online') {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Reader is not online',
+        });
+      }
+
+      // Cancel the payment on the reader
+      await stripe.terminal.readers.cancelAction(readerId, {
+        stripeAccount: connectAccount.accountId,
       });
     }
 
