@@ -59,8 +59,8 @@ const connectGmail = asyncHandler(async (req, res) => {
     });
 
     console.log('✅ Successfully obtained tokens:', {
-      hasAccessToken: !!tokens.access_token,
-      hasRefreshToken: !!tokens.refresh_token,
+      hasAccessToken: tokens.access_token,
+      hasRefreshToken: tokens.refresh_token,
       expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : 'Not set',
     });
 
