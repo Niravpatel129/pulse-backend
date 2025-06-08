@@ -63,6 +63,7 @@
     "qrcode": "^1.5.4",
     "redis": "^4.7.0",
     "sharp": "^0.32.6",
+    "stripe": "^18.2.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",

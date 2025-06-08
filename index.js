@@ -38,6 +38,7 @@ import invoiceTaxRateRoutes from './src/routes/invoiceTaxRateRoutes.js';
 import leadFormRoutes from './src/routes/leadFormRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
 import paymentRoutes from './src/routes/paymentRoutes.js';
+import posRoutes from './src/routes/posRoutes.js';
 import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
 import projectInvoiceRoutes from './src/routes/projectInvoiceRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
@@ -167,6 +168,9 @@ app.use(`${routesPrefix}/payments`, paymentRoutes);
 
 // Lead Forms
 app.use(`${routesPrefix}/lead-forms`, leadFormRoutes);
+
+// POS Terminal Routes
+app.use(`${routesPrefix}/pos`, posRoutes);
 
 // API Documentation
 app.use(`${routesPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
