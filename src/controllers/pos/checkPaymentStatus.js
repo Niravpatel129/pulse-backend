@@ -82,3 +82,79 @@ export const checkPaymentStatus = catchAsync(async (req, res) => {
     });
   }
 });
+
+// Mark an invoice as paid
+export const markInvoiceAsPaid = catchAsync(async (req, res) => {
+  const { invoiceId } = req.params;
+  const { paymentDate, paymentMethod } = req.body;
+
+  if (!paymentDate) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Payment date is required',
+    });
+  }
+
+  // Validate payment date is not in the future
+  const paymentDateObj = new Date(paymentDate);
+  if (paymentDateObj > new Date()) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Payment date cannot be in the future',
+    });
+  }
+
+  // Validate payment method
+  const validPaymentMethods = ['bank_transfer', 'credit_card', 'cash', 'check', 'other'];
+  if (paymentMethod && !validPaymentMethods.includes(paymentMethod)) {
+    return res.status(400).json({
+      status: 'error',
+      message: `Invalid payment method. Must be one of: ${validPaymentMethods.join(', ')}`,
+    });
+  }
+
+  const invoice = await Invoice2.findOne({ _id: invoiceId, workspace: req.workspace._id });
+
+  if (!invoice) {
+    return res.status(404).json({
+      status: 'error',
+      message: 'Invoice not found',
+    });
+  }
+
+  // Don't allow marking already paid or cancelled invoices as paid
+  if (invoice.status === 'paid') {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Invoice is already marked as paid',
+    });
+  }
+  if (invoice.status === 'cancelled') {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Cannot mark a cancelled invoice as paid',
+    });
+  }
+
+  invoice.status = 'paid';
+  invoice.paymentDate = paymentDate;
+  invoice.paymentMethod = paymentMethod || 'bank_transfer';
+  invoice.paidAt = new Date();
+  invoice.statusChangedAt = new Date();
+  invoice.statusChangedBy = req.user.userId;
+
+  // Add to status history
+  invoice.statusHistory.push({
+    status: 'paid',
+    changedAt: new Date(),
+    changedBy: req.user.userId,
+    reason: 'Invoice marked as paid',
+  });
+
+  await invoice.save();
+
+  res.status(200).json({
+    status: 'success',
+    data: invoice,
+  });
+});
