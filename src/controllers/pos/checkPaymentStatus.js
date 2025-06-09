@@ -8,7 +8,6 @@ const stripe =
     ? new Stripe(process.env.STRIPE_SECRET_KEY)
     : new Stripe(process.env.STRIPE_SECRET_KEY_DEV);
 
-// Check the status of a payment intent
 export const checkPaymentStatus = catchAsync(async (req, res) => {
   const { paymentIntentId } = req.query;
 
