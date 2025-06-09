@@ -10,7 +10,7 @@ const getInboxEmails = async (req, res) => {
     EmailThread.countDocuments({ workspaceId: req.workspace._id, stage }),
     EmailThread.find({ workspaceId: req.workspace._id, stage })
       .select('-messageReferences')
-      .sort({ isRead: 1, createdAt: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
   ]);
