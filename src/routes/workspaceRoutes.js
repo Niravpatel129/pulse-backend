@@ -4,6 +4,7 @@ import { addParticipant } from '../controllers/workspace/addParticipant.js';
 import { deleteWorkspaceMember } from '../controllers/workspace/deleteWorkspaceMember.js';
 import { getClients } from '../controllers/workspace/getClients.js';
 import { getCurrentWorkspace } from '../controllers/workspace/getCurrentWorkspace.js';
+import { getPublicWorkspace } from '../controllers/workspace/getPublicWorkspace.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getUser } from '../controllers/workspace/getUser.js';
 import { getWorkspaceLogo } from '../controllers/workspace/getWorkspaceLogo.js';
@@ -30,6 +31,7 @@ router.post('/invite/accept/:token', acceptWorkspaceInvitation);
 
 // Semi-public routes (no authentication required)
 router.get('/logo', extractWorkspaceWithoutAuth, getWorkspaceLogo);
+router.get('/public', extractWorkspaceWithoutAuth, getPublicWorkspace);
 
 // All routes below require authentication
 router.use(authenticate);

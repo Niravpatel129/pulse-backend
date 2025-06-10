@@ -135,6 +135,19 @@ const workspaceSchema = new mongoose.Schema(
         default: 'private',
       },
     },
+    // CMS-related fields
+    cmsEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    theme: {
+      type: Object,
+      default: {},
+    },
+    publicSettings: {
+      type: Object,
+      default: {},
+    },
   },
   {
     timestamps: true,

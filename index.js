@@ -21,6 +21,7 @@ import availabilityRoutes from './src/routes/availabilityRoutes.js';
 import calendarRoutes from './src/routes/calendarRoutes.js';
 import chatSettingsRoutes from './src/routes/chatSettingsRoutes.js';
 import clientRoutes from './src/routes/clientRoutes.js';
+import cmsRoutes from './src/routes/cmsRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import deliverableRoutes from './src/routes/deliverableRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
@@ -149,6 +150,9 @@ app.use(`${routesPrefix}/tables`, tablesRoutes);
 app.use(`${routesPrefix}/files`, resolveInactivityAlerts, fileRoutes);
 app.use(`${routesPrefix}/figma`, figmaRoutes);
 app.use(`${routesPrefix}/product-catalog`, productCatalogRoutes);
+
+// CMS
+app.use(`${routesPrefix}/cms`, cmsRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
