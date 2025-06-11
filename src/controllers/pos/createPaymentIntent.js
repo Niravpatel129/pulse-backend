@@ -138,6 +138,22 @@ export const createAndProcessPayment = catchAsync(async (req, res) => {
       amount_received: paymentIntentDetails.amount_received,
     });
 
+    if (error.code === 'terminal_reader_timeout') {
+      // Optionally, cancel any pending action on the reader
+      try {
+        await stripe.terminal.readers.cancelAction(reader.readerId, {
+          stripeAccount: connectAccount.accountId,
+        });
+      } catch (cancelError) {
+        // Log or handle cancel error, but don't block the main flow
+      }
+      return res.status(408).json({
+        status: 'error',
+        message: 'The reader timed out. Please check the reader and try again.',
+        code: 'terminal_reader_timeout',
+      });
+    }
+
     res.status(200).json({
       status: 'success',
       data: {
