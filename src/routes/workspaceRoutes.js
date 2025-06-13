@@ -7,6 +7,7 @@ import { getCurrentWorkspace } from '../controllers/workspace/getCurrentWorkspac
 import { getPublicWorkspace } from '../controllers/workspace/getPublicWorkspace.js';
 import { getTeamMembers } from '../controllers/workspace/getTeamMembers.js';
 import { getUser } from '../controllers/workspace/getUser.js';
+import getWorkspaceByUrl from '../controllers/workspace/getWorkspaceByUrl.js';
 import { getWorkspaceLogo } from '../controllers/workspace/getWorkspaceLogo.js';
 import { getWorkspaceMembers } from '../controllers/workspace/getWorkspaceMembers.js';
 import {
@@ -24,6 +25,9 @@ import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace, extractWorkspaceWithoutAuth } from '../middleware/workspace.js';
 
 const router = express.Router();
+
+// workspaces routes
+router.get('/url', getWorkspaceByUrl);
 
 // Public routes (no authentication required)
 router.get('/invite/verify/:token', verifyWorkspaceInvitation);
