@@ -3,6 +3,7 @@ import asyncHandler from '../../../middleware/asyncHandler.js';
 import ChatSettings from '../../../models/ChatSettings.js';
 import GmailIntegration from '../../../models/GmailIntegration.js';
 import gmailListenerService from '../../../services/gmailListenerService.js';
+import computeExpiry from '../../../utils/computeExpiry.js';
 
 // Initialize Google OAuth2 client
 const oauth2Client = new google.auth.OAuth2(
@@ -95,7 +96,7 @@ const connectGmail = asyncHandler(async (req, res) => {
       } else {
         console.log('No refresh token returned — keeping existing one.');
       }
-      existingIntegration.tokenExpiry = new Date(expiry_date);
+      existingIntegration.tokenExpiry = computeExpiry(tokens);
       existingIntegration.isActive = true;
       existingIntegration.lastSynced = new Date();
 
@@ -113,7 +114,7 @@ const connectGmail = asyncHandler(async (req, res) => {
         accessToken: access_token,
         refreshToken: refresh_token,
         refreshTokenLastUsedAt: refresh_token ? new Date() : undefined,
-        tokenExpiry: new Date(expiry_date),
+        tokenExpiry: computeExpiry(tokens),
         isPrimary: existingCount === 0, // Set as primary if this is the first integration
       });
       console.log('✅ New integration created');

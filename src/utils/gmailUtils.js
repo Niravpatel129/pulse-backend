@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import GmailIntegration from '../models/GmailIntegration.js';
+import computeExpiry from './computeExpiry.js';
 
 /**
  * Fetches detailed content of an email thread from Gmail
@@ -55,8 +56,10 @@ export async function fetchEmailThread(workspaceId, emailId) {
       if (tokens.refresh_token) {
         gmailIntegration.refreshToken = tokens.refresh_token;
       }
-      gmailIntegration.accessToken = tokens.access_token;
-      gmailIntegration.tokenExpiry = new Date(tokens.expiry_date);
+      gmailIntegration.accessToken = tokens.accessToken || tokens.access_token;
+      if (tokens.expiry_date || tokens.expires_in) {
+        gmailIntegration.tokenExpiry = computeExpiry(tokens);
+      }
       gmailIntegration.refreshTokenLastUsedAt = new Date();
       await gmailIntegration.save();
       console.log('💾 Updated tokens saved to database');
@@ -604,8 +607,10 @@ export async function checkGmailIntegration(workspaceId) {
         gmailIntegration.refreshToken = tokens.refresh_token;
       }
 
-      gmailIntegration.accessToken = tokens.access_token;
-      gmailIntegration.tokenExpiry = new Date(tokens.expiry_date);
+      gmailIntegration.accessToken = tokens.accessToken || tokens.access_token;
+      if (tokens.expiry_date || tokens.expires_in) {
+        gmailIntegration.tokenExpiry = computeExpiry(tokens);
+      }
       gmailIntegration.refreshTokenLastUsedAt = new Date();
       await gmailIntegration.save();
       console.log('💾 Updated tokens saved to database');

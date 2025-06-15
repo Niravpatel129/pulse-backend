@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import Email from '../models/Email.js';
 import EmailThread from '../models/Email/EmailThreadModel.js';
 import GmailIntegration from '../models/GmailIntegration.js';
+import computeExpiry from '../utils/computeExpiry.js';
 import { firebaseStorage } from '../utils/firebase.js';
 import { registerShutdownHandler } from '../utils/shutdownHandler.js';
 import attachmentService from './attachmentService.js';
@@ -181,7 +182,9 @@ class GmailListenerService {
           integration.refreshToken = tokens.refresh_token;
         }
         integration.accessToken = tokens.access_token;
-        integration.tokenExpiry = new Date(tokens.expiry_date);
+        if (tokens.expiry_date || tokens.expires_in) {
+          integration.tokenExpiry = computeExpiry(tokens);
+        }
         integration.refreshTokenLastUsedAt = new Date();
         await integration.save();
       });

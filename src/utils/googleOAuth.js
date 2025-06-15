@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import computeExpiry from './computeExpiry.js';
 
 // Build an OAuth2 client that automatically persists refreshed tokens
 export default function buildOauthClient(integration) {
@@ -19,7 +20,9 @@ export default function buildOauthClient(integration) {
   client.on('tokens', async (tokens) => {
     try {
       if (tokens.access_token) integration.accessToken = tokens.access_token;
-      if (tokens.expiry_date) integration.tokenExpiry = new Date(tokens.expiry_date);
+      if (tokens.expiry_date || tokens.expires_in) {
+        integration.tokenExpiry = computeExpiry(tokens);
+      }
 
       // Google only sends refresh_token the *first* time consent is granted, but handle it anyway
       if (tokens.refresh_token) {
