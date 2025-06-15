@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import asyncHandler from '../../../middleware/asyncHandler.js';
 import GmailIntegration from '../../../models/GmailIntegration.js';
+import buildOauthClient from '../../../utils/googleOAuth.js';
 
 /**
  * @desc    Get emails from connected Gmail account with pagination and search
@@ -26,18 +27,8 @@ const getGmailEmails = asyncHandler(async (req, res) => {
     throw new Error('Gmail not connected for this workspace');
   }
 
-  // Create OAuth2 client
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI,
-  );
-
-  // Set credentials
-  oauth2Client.setCredentials({
-    access_token: gmailIntegration.accessToken,
-    refresh_token: gmailIntegration.refreshToken,
-  });
+  // Build OAuth2 client (persists refreshed tokens)
+  const oauth2Client = buildOauthClient(gmailIntegration);
 
   // Create Gmail client
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });

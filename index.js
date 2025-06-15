@@ -6,7 +6,6 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/api-docs.js';
 import connectDB from './src/config/db.js';
 import { initializeGmailListener } from './src/init/gmailListener.js';
-import { initializeProjectInactivityChecker } from './src/init/projectInactivityChecker.js';
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
 import requestLogger from './src/middleware/loggingMiddleware.js';
 import activityRoutes from './src/routes/activityRoutes.js';
@@ -60,9 +59,6 @@ connectDB();
 
 // Initialize Gmail listener
 initializeGmailListener();
-
-// Initialize project inactivity checker
-initializeProjectInactivityChecker();
 
 // Body parser with increased limits
 app.use(express.json({ limit: '50mb' }));
