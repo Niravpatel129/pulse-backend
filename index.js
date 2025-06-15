@@ -41,6 +41,7 @@ import paymentRoutes from './src/routes/paymentRoutes.js';
 import posRoutes from './src/routes/posRoutes.js';
 import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
 import projectInvoiceRoutes from './src/routes/projectInvoiceRoutes.js';
+import publicRoutes from './src/routes/publicRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import stripeRoutes from './src/routes/stripeRoutes.js';
 import tablesRoutes from './src/routes/tablesRoutes.js';
@@ -175,6 +176,9 @@ app.use(`${routesPrefix}/lead-forms`, leadFormRoutes);
 
 // POS Terminal Routes
 app.use(`${routesPrefix}/pos`, posRoutes);
+
+// Public routes (no authentication)
+app.use(`${routesPrefix}/public`, publicRoutes);
 
 // API Documentation
 app.use(`${routesPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
