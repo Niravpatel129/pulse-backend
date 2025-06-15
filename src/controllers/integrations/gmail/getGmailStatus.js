@@ -11,7 +11,7 @@ const getGmailStatus = asyncHandler(async (req, res) => {
     // Find all Gmail integrations for this workspace
     const integrations = await GmailIntegration.find({
       workspace: workspaceId,
-    }).select('email isPrimary isActive lastSynced tokenExpiry createdAt');
+    }).select('email isPrimary isActive lastSynced tokenExpiry createdAt refreshTokenLastUsedAt');
 
     if (!integrations || integrations.length === 0) {
       return res.status(200).json({
@@ -25,12 +25,17 @@ const getGmailStatus = asyncHandler(async (req, res) => {
     const processedIntegrations = integrations.map((integration) => {
       const isExpired = integration.tokenExpiry < new Date();
 
+      // Re-auth is needed if the short-lived access token is expired AND we have
+      // never successfully used (or stored) the refresh token to get a new one.
+      // If refreshTokenLastUsedAt is absent, it means we have not refreshed yet.
+      const needsReauth = isExpired && !integration.refreshTokenLastUsedAt;
+
       return {
         email: integration.email,
         isPrimary: integration.isPrimary,
         isActive: integration.isActive,
         lastSynced: integration.lastSynced,
-        isExpired,
+        isExpired: needsReauth,
         connectedAt: integration.createdAt,
       };
     });
