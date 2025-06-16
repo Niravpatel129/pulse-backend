@@ -122,6 +122,10 @@ const clientSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    labels: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,
