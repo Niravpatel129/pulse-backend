@@ -5,6 +5,7 @@ import {
   getClient,
   getClients,
   updateClient,
+  updateClientStatus,
 } from '../controllers/client/clientController.js';
 import {
   addClientLabel,
@@ -38,6 +39,9 @@ router.post('/', createClient);
 
 // Update a client
 router.put('/:id', updateClient);
+
+// Update client status
+router.patch('/:id', updateClientStatus);
 
 // Delete a client
 router.delete('/:id', deleteClient);
