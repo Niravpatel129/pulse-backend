@@ -7,8 +7,24 @@ import AppError from '../../utils/AppError.js';
 // Get all clients
 export const getClients = async (req, res, next) => {
   try {
-    // First get all clients
-    const clients = await Client.find({ workspace: req.workspace._id }).sort({ createdAt: -1 });
+    const { search } = req.query;
+
+    // Build query
+    let query = { workspace: req.workspace._id };
+
+    // Add search condition if search parameter exists
+    if (search) {
+      query = {
+        ...query,
+        $or: [
+          { 'user.name': { $regex: search, $options: 'i' } },
+          { 'user.email': { $regex: search, $options: 'i' } },
+        ],
+      };
+    }
+
+    // First get all clients with search filter
+    const clients = await Client.find(query).sort({ createdAt: -1 });
 
     // Get total spent for each client by aggregating payments
     const clientPayments = await Payment.aggregate([
