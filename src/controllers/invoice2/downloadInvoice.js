@@ -23,6 +23,19 @@ async function generateQRCode(text) {
   }
 }
 
+// Helper function to format currency
+function formatCurrency(amount, currencyCode = 'USD') {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode.toUpperCase(),
+    }).format(amount);
+  } catch (error) {
+    // Fallback in case of invalid currency code
+    return `${currencyCode.toUpperCase()} ${amount.toLocaleString()}`;
+  }
+}
+
 // ---- Main Download Invoice Handler ----
 export const downloadInvoice = catchAsync(async (req, res, next) => {
   try {
@@ -99,13 +112,11 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
     invoice.items.forEach((item) => {
       doc.text(item.description, 45, rowY);
       doc.text(item.quantity.toString(), 230, rowY);
-      doc.text(`${invoice.settings.currency}${item.price.toLocaleString()}`, 310, rowY);
-      doc.text(
-        `${invoice.settings.currency}${(item.quantity * item.price).toLocaleString()}`,
-        455,
-        rowY,
-        { align: 'right', width: 100 },
-      );
+      doc.text(formatCurrency(item.price, invoice.settings.currency), 310, rowY);
+      doc.text(formatCurrency(item.quantity * item.price, invoice.settings.currency), 455, rowY, {
+        align: 'right',
+        width: 100,
+      });
       rowY += 20;
     });
 
@@ -137,29 +148,26 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
       summaryY += 20;
     };
 
-    writePair(
-      'Subtotal:',
-      `${invoice.settings.currency}${invoice.totals.subtotal.toLocaleString()}`,
-    );
+    writePair('Subtotal:', formatCurrency(invoice.totals.subtotal, invoice.settings.currency));
 
     if (invoice.settings.vat?.enabled) {
       writePair(
         `VAT (${invoice.settings.vat.rate}%)`,
-        `${invoice.settings.currency}${invoice.totals.vatAmount.toLocaleString()}`,
+        formatCurrency(invoice.totals.vatAmount, invoice.settings.currency),
       );
     }
 
     if (invoice.settings.salesTax?.enabled) {
       writePair(
         `Tax (${invoice.settings.salesTax.rate}%)`,
-        `${invoice.settings.currency}${invoice.totals.taxAmount.toLocaleString()}`,
+        formatCurrency(invoice.totals.taxAmount, invoice.settings.currency),
       );
     }
 
     if (invoice.settings.discount?.enabled) {
       writePair(
         'Discount:',
-        `-${invoice.settings.currency}${invoice.totals.discount.toLocaleString()}`,
+        `-${formatCurrency(invoice.totals.discount, invoice.settings.currency)}`,
       );
     }
 
@@ -174,12 +182,10 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
     doc.font('Helvetica-Bold').fontSize(13);
     doc.text('Total:', labelX, summaryY);
     doc.font('Helvetica-Bold').fontSize(18);
-    doc.text(
-      `${invoice.settings.currency}${invoice.totals.total.toLocaleString()}`,
-      labelX,
-      summaryY,
-      { width: valueWidth, align: 'right' },
-    );
+    doc.text(formatCurrency(invoice.totals.total, invoice.settings.currency), labelX, summaryY, {
+      width: valueWidth,
+      align: 'right',
+    });
 
     // 9. ───── Notes (optional) ─────────────────────────────────────────
     if (invoice.notes) {
