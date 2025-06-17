@@ -81,7 +81,7 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
 
     doc.font('Helvetica-Bold').text('To:', 300, fromToY);
     doc.font('Helvetica').text(invoice.to, 300, fromToY + 15);
-    doc.moveDown(2);
+    doc.moveDown(5);
 
     // 5. ───── Items table header ───────────────────────────────────────
     const tableTopY = doc.y;
