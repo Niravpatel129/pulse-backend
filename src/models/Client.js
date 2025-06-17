@@ -65,6 +65,11 @@ const clientSchema = new mongoose.Schema(
       ref: 'Workspace',
       required: true,
     },
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'archived'],
+      default: 'active',
+    },
     phone: {
       type: String,
       default: '',
