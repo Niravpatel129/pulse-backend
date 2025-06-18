@@ -242,15 +242,15 @@ class GmailListenerService {
 
       // Get current profile to check history ID
       const profile = await gmail.users.getProfile({ userId: 'me' });
-      console.log('[Gmail Push] Current Gmail profile:', {
-        email: profile.data.emailAddress,
-        currentHistoryId: profile.data.historyId,
-        ourHistoryId: historyId,
-        difference: Number(profile.data.historyId) - Number(historyId),
-      });
+      // console.log('[Gmail Push] Current Gmail profile:', {
+      //   email: profile.data.emailAddress,
+      //   currentHistoryId: profile.data.historyId,
+      //   ourHistoryId: historyId,
+      //   difference: Number(profile.data.historyId) - Number(historyId),
+      // });
 
       // List changes since last history ID
-      console.log('[Gmail Push] Fetching history since:', historyId);
+      // console.log('[Gmail Push] Fetching history since:', historyId);
       const history = await gmail.users.history.list({
         userId: 'me',
         startHistoryId: historyId,
@@ -259,7 +259,7 @@ class GmailListenerService {
 
       // No changes
       if (!history.data.history || !history.data.history.length) {
-        console.log('[Gmail Push] No new changes found');
+        // console.log('[Gmail Push] No new changes found');
         return;
       }
 
@@ -632,11 +632,11 @@ class GmailListenerService {
         await this.releaseLock(messageId, integration.workspace._id);
       }
     } catch (error) {
-      console.error('[Gmail] Error processing email:', {
-        error: error.message,
-        messageId,
-        workspaceId: integration.workspace._id,
-      });
+      // console.error('[Gmail] Error processing email:', {
+      //   error: error.message,
+      //   messageId,
+      //   workspaceId: integration.workspace._id,
+      // });
       throw error;
     }
   }
@@ -1028,11 +1028,11 @@ class GmailListenerService {
         inlineImages,
       };
     } catch (error) {
-      console.error('[Gmail] Error processing email parts:', {
-        error: error.message,
-        messageId,
-        mimeType: part.mimeType,
-      });
+      // console.error('[Gmail] Error processing email parts:', {
+      //   error: error.message,
+      //   messageId,
+      //   mimeType: part.mimeType,
+      // });
       throw error;
     }
   }
