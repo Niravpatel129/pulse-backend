@@ -72,7 +72,6 @@ class GmailListenerService {
   setupShutdownHandlers() {
     // Register with the centralized shutdown handler
     registerShutdownHandler(async () => {
-      console.info('[Gmail] Initiating graceful shutdown...');
       await this.stop();
     });
   }
@@ -845,12 +844,6 @@ class GmailListenerService {
             isRead: false,
           },
         });
-
-        console.info('[Gmail] New thread created:', {
-          emailId: email._id,
-          threadId: thread._id,
-          workspaceId: email.workspaceId,
-        });
       }
     } catch (error) {
       console.error('[Gmail] Error handling thread management:', {
@@ -1254,8 +1247,6 @@ class GmailListenerService {
 
       // Mark service as not initialized
       this.isInitialized = false;
-
-      console.info('[Gmail] Watch service stopped on server:', this.serverId);
     } catch (error) {
       console.error('[Gmail] Error stopping watch service:', error);
       throw error;
