@@ -14,26 +14,12 @@ const gmailWebhook = asyncHandler(async (req, res) => {
     const data = JSON.parse(message);
     const { emailAddress, historyId: webhookHistoryId } = data;
 
-    console.log('[Gmail Webhook] Received notification:', {
-      emailAddress,
-      webhookHistoryId,
-      timestamp: new Date().toISOString(),
-    });
-
     // Find the Gmail integration for this email
     const integration = await GmailIntegration.findOne({ email: emailAddress });
     if (!integration) {
       console.warn('[Gmail Webhook] No integration found for email:', emailAddress);
       return res.status(200).send('OK'); // Still return 200 to acknowledge receipt
     }
-
-    // Log the stored history ID for debugging
-    console.log('[Gmail Webhook] Integration details:', {
-      email: integration.email,
-      storedHistoryId: integration.historyId,
-      webhookHistoryId,
-      lastSynced: integration.lastSynced,
-    });
 
     // Process the notification using the integration's stored historyId
     await gmailListenerService.handlePushNotification(integration, integration.historyId);
