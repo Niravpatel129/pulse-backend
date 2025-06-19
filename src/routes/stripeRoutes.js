@@ -2,6 +2,7 @@ import express from 'express';
 
 import { createPaymentIntent } from '../controllers/stripe/createPaymentIntent.js';
 import { createStripeAccount } from '../controllers/stripe/createStripeAccount.js';
+import { disconnectStripeAccount } from '../controllers/stripe/disconnectStripeAccount.js';
 import { getBalance } from '../controllers/stripe/getBalance.js';
 import { getPaymentTimeline } from '../controllers/stripe/getPaymentTimeline.js';
 import { getStripeAccountStatus } from '../controllers/stripe/getStripeAccountStatus.js';
@@ -24,6 +25,7 @@ router.use(extractWorkspace);
 // Stripe Connect routes
 router.post('/connect/create-account', createStripeAccount);
 router.get('/connect/account-status', getStripeAccountStatus);
+router.delete('/connect/disconnect', disconnectStripeAccount);
 
 // Payment routes
 router.get('/balance', getBalance);
