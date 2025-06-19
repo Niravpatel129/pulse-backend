@@ -9,6 +9,7 @@ import StripeService from '../../services/stripeService.js';
 export const createStripeAccount = asyncHandler(async (req, res) => {
   const userId = req.user.userId;
   const workspaceId = req.workspace._id;
+  console.log('🚀 req.body:', req.body);
 
   // find user
   const type = 'express';
@@ -21,11 +22,9 @@ export const createStripeAccount = asyncHandler(async (req, res) => {
 
   // Use URLs from frontend if provided, otherwise use hardcoded ones
   const refreshUrl =
-    req.query.refreshUrl || `https://${workspaceName}.hourblock.com/dashboard/settings/refresh`;
+    req.body.refreshUrl || `https://${workspaceName}.hourblock.com/dashboard/settings/refresh`;
   const returnUrl =
-    req.query.redirectUrl ||
-    req.query.returnUrl ||
-    `https://${workspaceName}.hourblock.com/dashboard/settings/return`;
+    req.body.redirectUrl || `https://${workspaceName}.hourblock.com/dashboard/settings/return`;
 
   console.log('Request Host:', req.headers.host);
   console.log('Return URL:', returnUrl);
