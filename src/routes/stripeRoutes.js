@@ -25,7 +25,7 @@ router.use(extractWorkspace);
 // Stripe Connect routes
 router.post('/connect/create-account', createStripeAccount);
 router.get('/connect/account-status', getStripeAccountStatus);
-router.delete('/connect/disconnect', disconnectStripeAccount);
+router.post('/connect/disconnect', disconnectStripeAccount);
 
 // Payment routes
 router.get('/balance', getBalance);
