@@ -89,6 +89,7 @@ app.use(
         /^http?:\/\/pay\.bolocreate\.com(?::\d+)?$/,
         /^https?:\/\/(?:[\w-]+\.)*printscala\.com(?::\d+)?$/,
         /^http?:\/\/(?:[\w-]+\.)*printscala\.com(?::\d+)?$/,
+        /^https:\/\/(?:[\w-]+\.)*gtaresumebuilder\.com(?::\d+)?$/,
         'pay.bolocreate.com',
         'http://pay.bolocreate.com',
         'https://pay.bolocreate.com',
