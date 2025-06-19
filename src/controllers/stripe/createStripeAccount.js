@@ -19,9 +19,13 @@ export const createStripeAccount = asyncHandler(async (req, res) => {
   const workspace = await Workspace.findById(workspaceId);
   const workspaceName = workspace.name || workspace.subdomain;
 
-  // Get workspace URL from request host
-  const refreshUrl = `https://${workspaceName}.hourblock.com/dashboard/settings/refresh`;
-  const returnUrl = `https://${workspaceName}.hourblock.com/dashboard/settings/return`;
+  // Use URLs from frontend if provided, otherwise use hardcoded ones
+  const refreshUrl =
+    req.query.refreshUrl || `https://${workspaceName}.hourblock.com/dashboard/settings/refresh`;
+  const returnUrl =
+    req.query.redirectUrl ||
+    req.query.returnUrl ||
+    `https://${workspaceName}.hourblock.com/dashboard/settings/return`;
 
   console.log('Request Host:', req.headers.host);
   console.log('Return URL:', returnUrl);

@@ -22,11 +22,18 @@ export const createStripeAccountLink = asyncHandler(async (req, res) => {
     });
   }
 
+  // Use URLs from frontend if provided, otherwise use environment variables
+  const refreshUrl = req.query.refreshUrl || `https://${process.env.FRONTEND_URL}/invoices/refresh`;
+  const returnUrl =
+    req.query.redirectUrl ||
+    req.query.returnUrl ||
+    `https://${process.env.FRONTEND_URL}/invoices/return`;
+
   // Create account link using the service
   const accountLink = await StripeService.createAccountLink(
     connectAccount.accountId,
-    `https://${process.env.FRONTEND_URL}/invoices/refresh`,
-    `https://${process.env.FRONTEND_URL}/invoices/return`,
+    refreshUrl,
+    returnUrl,
   );
 
   res.status(200).json({
