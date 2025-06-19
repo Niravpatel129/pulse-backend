@@ -113,7 +113,9 @@ export const createClient = async (req, res, next) => {
       phone,
       address,
       shippingAddress,
-      contact,
+      contact: contact || {
+        firstName: user.name,
+      },
       taxId,
       accountNumber,
       fax,
