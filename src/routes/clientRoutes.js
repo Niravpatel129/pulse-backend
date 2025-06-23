@@ -4,6 +4,7 @@ import {
   deleteClient,
   getClient,
   getClients,
+  getClientStats,
   updateClient,
   updateClientStatus,
 } from '../controllers/client/clientController.js';
@@ -30,6 +31,9 @@ router.get('/:id/labels', getClientLabels);
 router.post('/:id/labels', addClientLabel);
 router.delete('/:id/labels/:labelName', deleteClientLabel);
 router.patch('/:id/labels', updateClientLabels);
+
+// Client Stats route (placed before /:id to avoid route conflicts)
+router.get('/:id/stats', getClientStats);
 
 // Get a single client
 router.get('/:id', getClient);
