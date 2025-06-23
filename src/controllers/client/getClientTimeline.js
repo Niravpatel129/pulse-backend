@@ -205,11 +205,11 @@ export const getClientTimeline = async (req, res, next) => {
 
     // 4. Email events (with improved descriptions)
     const emails = await Email.find({
-      workspace: workspaceId,
+      workspaceId: workspaceId,
       $or: [{ 'from.email': client.user.email }, { 'to.email': client.user.email }],
     })
-      .select('_id subject from to receivedAt')
-      .sort({ receivedAt: -1 })
+      .select('_id subject from to sentAt internalDate')
+      .sort({ sentAt: -1 })
       .limit(20);
 
     emails.forEach((email) => {
@@ -222,16 +222,19 @@ export const getClientTimeline = async (req, res, next) => {
       const truncatedSubject =
         emailSubject.length > 50 ? emailSubject.substring(0, 50) + '...' : emailSubject;
 
+      // Use sentAt or internalDate as fallback for the email date
+      const emailDate = email.sentAt || email.internalDate || new Date();
+
       timeline.push({
         id: `email-${email._id}`,
         type: isReceived ? 'email_sent' : 'email_received',
         message: `Email ${isReceived ? 'Sent' : 'Received'}`,
-        date: email.receivedAt.toLocaleDateString('en-US', {
+        date: emailDate.toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
         }),
-        timestamp: email.receivedAt.toLocaleTimeString('en-US', {
+        timestamp: emailDate.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
           second: '2-digit',
@@ -244,7 +247,7 @@ export const getClientTimeline = async (req, res, next) => {
           emailId: email._id.toString(),
           subject: emailSubject,
         },
-        sortTimestamp: email.receivedAt,
+        sortTimestamp: emailDate,
       });
     });
 
