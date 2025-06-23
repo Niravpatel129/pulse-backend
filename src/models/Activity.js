@@ -19,7 +19,7 @@ const activitySchema = new mongoose.Schema(
     type: {
       type: String,
       required: true,
-      enum: ['project', 'meeting', 'task', 'document', 'comment', 'invoice', 'other'],
+      enum: ['project', 'meeting', 'task', 'document', 'comment', 'invoice', 'client', 'other'],
     },
     action: {
       type: String,
@@ -47,7 +47,7 @@ const activitySchema = new mongoose.Schema(
     entityType: {
       type: String,
       required: true,
-      enum: ['project', 'task', 'document', 'comment', 'invoice', 'payment'],
+      enum: ['project', 'task', 'document', 'comment', 'invoice', 'payment', 'client'],
     },
     metadata: {
       type: mongoose.Schema.Types.Mixed,

@@ -5,6 +5,7 @@ import {
   getClient,
   getClients,
   getClientStats,
+  getClientTimeline,
   updateClient,
   updateClientStatus,
 } from '../controllers/client/clientController.js';
@@ -34,6 +35,9 @@ router.patch('/:id/labels', updateClientLabels);
 
 // Client Stats route (placed before /:id to avoid route conflicts)
 router.get('/:id/stats', getClientStats);
+
+// Client Timeline route (placed before /:id to avoid route conflicts)
+router.get('/:id/timeline', getClientTimeline);
 
 // Get a single client
 router.get('/:id', getClient);
