@@ -1,20 +1,18 @@
 import express from 'express';
-import {
-  createClient,
-  deleteClient,
-  getClient,
-  getClients,
-  getClientStats,
-  getClientTimeline,
-  updateClient,
-  updateClientStatus,
-} from '../controllers/client/clientController.js';
+import { createClient } from '../controllers/client/createClient.js';
+import { deleteClient } from '../controllers/client/deleteClient.js';
+import { getClient } from '../controllers/client/getClient.js';
+import { getClients } from '../controllers/client/getClients.js';
+import { getClientStats } from '../controllers/client/getClientStats.js';
+import { getClientTimeline } from '../controllers/client/getClientTimeline.js';
 import {
   addClientLabel,
   deleteClientLabel,
   getClientLabels,
   updateClientLabels,
 } from '../controllers/client/labelController.js';
+import { updateClient } from '../controllers/client/updateClient.js';
+import { updateClientStatus } from '../controllers/client/updateClientStatus.js';
 import { authenticate } from '../middleware/auth.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
