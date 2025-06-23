@@ -110,14 +110,31 @@ export const downloadInvoice = catchAsync(async (req, res, next) => {
     let rowY = tableTopY + 25;
 
     invoice.items.forEach((item) => {
-      doc.text(item.description, 45, rowY);
-      doc.text(item.quantity.toString(), 230, rowY);
-      doc.text(formatCurrency(item.price, invoice.settings.currency), 310, rowY);
-      doc.text(formatCurrency(item.quantity * item.price, invoice.settings.currency), 455, rowY, {
+      const startY = rowY;
+
+      // Description with width constraint (allows wrapping)
+      const descriptionWidth = 175; // Width for description column
+      doc.text(item.description, 45, rowY, {
+        width: descriptionWidth,
+        lineGap: -2, // Tight line spacing similar to lineHeight: 1.1
+      });
+
+      // Calculate the height used by the description text
+      const descriptionHeight = doc.heightOfString(item.description, {
+        width: descriptionWidth,
+        lineGap: -2,
+      });
+
+      // Position other columns at the same starting Y
+      doc.text(item.quantity.toString(), 230, startY);
+      doc.text(formatCurrency(item.price, invoice.settings.currency), 310, startY);
+      doc.text(formatCurrency(item.quantity * item.price, invoice.settings.currency), 455, startY, {
         align: 'right',
         width: 100,
       });
-      rowY += 20;
+
+      // Move to next row based on actual height used, with minimum spacing
+      rowY += Math.max(descriptionHeight + 8, 20);
     });
 
     // Leave a gap after items
