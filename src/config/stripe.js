@@ -49,6 +49,16 @@ export const getAccountDetails = async (accountId) => {
 
 // Create a payment intent
 export const createPaymentIntent = async (amount, currency, connectedAccountId) => {
+  // Define percentage fee (e.g., 10%)
+  const percentageFee = 0.05;
+
+  // Payment amount ($100 = 10000 cents)
+  const paymentAmount = amount;
+
+  // Calculate application fee amount
+  const applicationFeeAmount = Math.round(amount * percentageFee);
+  console.log('🚀 applicationFeeAmount:', applicationFeeAmount);
+
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
