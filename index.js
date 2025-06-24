@@ -46,6 +46,7 @@ import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import stripeRoutes from './src/routes/stripeRoutes.js';
 import tablesRoutes from './src/routes/tablesRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
+import workspaceSearchRoutes from './src/routes/workspaceSearchRoutes.js';
 import AppError from './src/utils/AppError.js';
 import { registerShutdownHandler } from './src/utils/shutdownHandler.js';
 
@@ -124,6 +125,7 @@ app.use(`${routesPrefix}/auth`, authRoutes);
 // Project management
 app.use(`${routesPrefix}/projects`, projectRoutes);
 app.use(`${routesPrefix}/workspaces`, workspaceRoutes);
+app.use(`${routesPrefix}/workspace-search`, workspaceSearchRoutes);
 app.use(`${routesPrefix}/deliverables`, deliverableRoutes);
 app.use(`${routesPrefix}/elements`, elementRoutes);
 app.use(`${routesPrefix}/clients`, clientRoutes);
