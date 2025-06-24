@@ -1,6 +1,7 @@
 import Activity from '../../models/Activity.js';
 import Client from '../../models/Client.js';
 import Email from '../../models/Email.js';
+import EmailThread from '../../models/Email/EmailThreadModel.js';
 import Invoice2 from '../../models/invoice2.js';
 import Note from '../../models/Note.js';
 import Project from '../../models/Project.js';
@@ -206,16 +207,30 @@ export const getClientTimeline = async (req, res, next) => {
     // 4. Email events (with improved descriptions)
     const emails = await Email.find({
       workspaceId: workspaceId,
-      $or: [{ 'from.email': client.user.email }, { 'to.email': client.user.email }],
+      $or: [
+        { 'from.email': client.user.email }, // Emails from client
+        { 'to.email': { $elemMatch: { email: client.user.email } } }, // Emails to client
+        { 'cc.email': { $elemMatch: { email: client.user.email } } }, // Emails where client is CC'd
+        { 'bcc.email': { $elemMatch: { email: client.user.email } } }, // Emails where client is BCC'd
+      ],
     })
-      .select('_id subject from to sentAt internalDate')
+      .select('_id subject from to cc bcc sentAt internalDate direction status')
       .sort({ sentAt: -1 })
-      .limit(20);
+      .limit(30);
 
     emails.forEach((email) => {
-      const isReceived = email.to.some(
-        (recipient) => recipient.email.toLowerCase() === client.user.email?.toLowerCase(),
+      // More accurate inbound/outbound detection
+      const isFromClient = email.from?.email?.toLowerCase() === client.user.email?.toLowerCase();
+      const isToClient = email.to?.some(
+        (recipient) => recipient.email?.toLowerCase() === client.user.email?.toLowerCase(),
       );
+      const isCcClient = email.cc?.some(
+        (recipient) => recipient.email?.toLowerCase() === client.user.email?.toLowerCase(),
+      );
+
+      // Determine if this is inbound (from client) or outbound (to client)
+      const isInbound = isFromClient;
+      const isOutbound = isToClient || isCcClient;
 
       // Create more descriptive email subjects
       const emailSubject = email.subject || 'No Subject';
@@ -225,10 +240,27 @@ export const getClientTimeline = async (req, res, next) => {
       // Use sentAt or internalDate as fallback for the email date
       const emailDate = email.sentAt || email.internalDate || new Date();
 
+      // Determine event type and message based on direction
+      let eventType, message, details;
+      if (isInbound) {
+        eventType = 'email_received';
+        message = 'Email Received from Customer';
+        details = `Received email from ${client.user.name}: "${truncatedSubject}"`;
+      } else if (isOutbound) {
+        eventType = 'email_sent';
+        message = 'Email Sent to Customer';
+        details = `Sent email to ${client.user.name}: "${truncatedSubject}"`;
+      } else {
+        // Fallback for edge cases
+        eventType = 'email_activity';
+        message = 'Email Activity';
+        details = `Email activity with ${client.user.name}: "${truncatedSubject}"`;
+      }
+
       timeline.push({
         id: `email-${email._id}`,
-        type: isReceived ? 'email_sent' : 'email_received',
-        message: `Email ${isReceived ? 'Sent' : 'Received'}`,
+        type: eventType,
+        message,
         date: emailDate.toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'short',
@@ -240,15 +272,93 @@ export const getClientTimeline = async (req, res, next) => {
           second: '2-digit',
           hour12: true,
         }),
-        details: `${isReceived ? 'Sent email to' : 'Received email from'} ${
-          client.user.name
-        }: "${truncatedSubject}"`,
+        details,
         actionData: {
           emailId: email._id.toString(),
           subject: emailSubject,
+          direction: isInbound ? 'inbound' : 'outbound',
+          status: email.status,
         },
         sortTimestamp: emailDate,
       });
+    });
+
+    // 4.5. Email Thread events
+    const emailThreads = await EmailThread.find({
+      workspaceId: workspaceId,
+      'participants.email': client.user.email,
+      status: 'active',
+    })
+      .select(
+        '_id threadId title subject participants firstMessageDate lastMessageDate messageCount',
+      )
+      .sort({ createdAt: -1 })
+      .limit(15);
+
+    emailThreads.forEach((thread) => {
+      // Add thread creation event
+      timeline.push({
+        id: `thread-created-${thread._id}`,
+        type: 'thread_created',
+        message: 'Email Conversation Started',
+        date: thread.firstMessageDate.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+        }),
+        timestamp: thread.firstMessageDate.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+        }),
+        details: `New email conversation started: "${thread.title || thread.subject}" with ${
+          thread.participants.length
+        } participant(s)`,
+        actionData: {
+          threadId: thread._id.toString(),
+          gmailThreadId: thread.threadId,
+          subject: thread.subject,
+          messageCount: thread.messageCount,
+          participantCount: thread.participants.length,
+        },
+        sortTimestamp: thread.firstMessageDate,
+      });
+
+      // Add thread last activity event if different from creation
+      if (
+        thread.lastMessageDate &&
+        thread.lastMessageDate.getTime() !== thread.firstMessageDate.getTime() &&
+        thread.messageCount > 1
+      ) {
+        timeline.push({
+          id: `thread-activity-${thread._id}`,
+          type: 'thread_activity',
+          message: 'Email Conversation Updated',
+          date: thread.lastMessageDate.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+          }),
+          timestamp: thread.lastMessageDate.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+          }),
+          details: `Email conversation "${thread.title || thread.subject}" updated (${
+            thread.messageCount
+          } messages total)`,
+          actionData: {
+            threadId: thread._id.toString(),
+            gmailThreadId: thread.threadId,
+            subject: thread.subject,
+            messageCount: thread.messageCount,
+            participantCount: thread.participants.length,
+          },
+          sortTimestamp: thread.lastMessageDate,
+        });
+      }
     });
 
     // 5. Note events (from projects where client is involved)
