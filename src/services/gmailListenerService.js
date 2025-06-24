@@ -202,7 +202,7 @@ class GmailListenerService {
       integration.historyId = res.data.historyId;
       await integration.save();
 
-      console.log(`[Gmail Watch] Registered for ${integration.email}`);
+      // console.log(`[Gmail Watch] Registered for ${integration.email}`);
       return true;
     } catch (error) {
       console.error(`[Gmail Watch] Failed ${integration.email}:`, error.message);
@@ -214,13 +214,13 @@ class GmailListenerService {
    * Handle push notification from Gmail
    */
   async handlePushNotification(integration, historyId) {
-    console.info('[Gmail Push] Starting push notification handling:', {
-      email: integration.email,
-      workspaceId: integration.workspace._id,
-      historyId,
-      timestamp: new Date().toISOString(),
-      serverId: this.serverId,
-    });
+    // console.info('[Gmail Push] Starting push notification handling:', {
+    //   email: integration.email,
+    //   workspaceId: integration.workspace._id,
+    //   historyId,
+    //   timestamp: new Date().toISOString(),
+    //   serverId: this.serverId,
+    // });
 
     try {
       // Create OAuth client
@@ -346,26 +346,26 @@ class GmailListenerService {
       integration.lastSynced = new Date();
       await integration.save();
 
-      console.info('[Gmail Push] Successfully completed push notification handling:', {
-        email: integration.email,
-        workspaceId: integration.workspace._id,
-        timestamp: new Date().toISOString(),
-      });
+      // console.info('[Gmail Push] Successfully completed push notification handling:', {
+      //   email: integration.email,
+      //   workspaceId: integration.workspace._id,
+      //   timestamp: new Date().toISOString(),
+      // });
     } catch (error) {
-      console.error('[Gmail Push] Error handling push notification:', {
-        error: error.message,
-        stack: error.stack,
-        email: integration.email,
-        workspaceId: integration.workspace._id,
-        historyId,
-      });
+      // console.error('[Gmail Push] Error handling push notification:', {
+      //   error: error.message,
+      //   stack: error.stack,
+      //   email: integration.email,
+      //   workspaceId: integration.workspace._id,
+      //   historyId,
+      // });
 
       // If token expired or invalid, deactivate the integration
       if (error.code === 401) {
-        console.warn('[Gmail Push] Token expired or invalid, deactivating integration:', {
-          email: integration.email,
-          workspaceId: integration.workspace._id,
-        });
+        // console.warn('[Gmail Push] Token expired or invalid, deactivating integration:', {
+        //   email: integration.email,
+        //   workspaceId: integration.workspace._id,
+        // });
         integration.isActive = false;
         await integration.save();
       }
@@ -378,13 +378,13 @@ class GmailListenerService {
    */
   async processEmail(gmail, integration, messageId) {
     try {
-      console.log('[Gmail] Processing email:', {
-        messageId,
-        workspaceId: integration.workspace._id,
-        workspaceName: integration.workspace.name,
-        email: integration.email,
-        timestamp: new Date().toISOString(),
-      });
+      // console.log('[Gmail] Processing email:', {
+      //   messageId,
+      //   workspaceId: integration.workspace._id,
+      //   workspaceName: integration.workspace.name,
+      //   email: integration.email,
+      //   timestamp: new Date().toISOString(),
+      // });
 
       // Acquire lock for this message
       const lock = await this.acquireLock(messageId, integration.workspace._id);

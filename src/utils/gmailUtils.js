@@ -408,10 +408,10 @@ export async function prepareEmailContext(emails, workspaceId, options = {}) {
       return `\n--- EMAIL CONTEXT ERROR: ${integrationStatus.message} ---\n`;
     }
 
-    console.log(
-      '📧 Processing emails:',
-      emails.map((e) => ({ id: e.id, subject: e.subject })),
-    );
+    // console.log(
+    //   '📧 Processing emails:',
+    //   emails.map((e) => ({ id: e.id, subject: e.subject })),
+    // );
     let emailContext = '\n--- EMAIL CONTEXT START ---\n';
     let successCount = 0;
     let failureCount = 0;
