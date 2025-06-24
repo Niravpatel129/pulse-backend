@@ -2,7 +2,6 @@ import asyncHandler from '../../middleware/asyncHandler.js';
 import Client from '../../models/Client.js';
 import Email from '../../models/Email.js';
 import Invoice2 from '../../models/invoice2.js';
-import Project from '../../models/Project.js';
 import AppError from '../../utils/AppError.js';
 
 /**
@@ -123,49 +122,24 @@ async function searchClients(workspaceId, query, limit, skip) {
     .select('user phone contact website internalNotes createdAt updatedAt')
     .lean();
 
-  return clients.map((client) => ({
-    id: client._id,
-    type: 'client',
-    title: client.user.name,
-    subtitle: client.user.email || client.phone,
-    description: `Client • ${client.contact?.firstName || ''} ${
+  return clients.map((client) => {
+    const contactName = `${client.contact?.firstName || ''} ${
       client.contact?.lastName || ''
-    }`.trim(),
-    url: `/clients/${client._id}`,
-    createdAt: client.createdAt,
-    updatedAt: client.updatedAt,
-    icon: 'user',
-  }));
-}
+    }`.trim();
+    const description = contactName ? `Client • ${contactName}` : 'Client';
 
-async function searchProjects(workspaceId, query, limit, skip) {
-  const searchRegex = new RegExp(query, 'i');
-
-  const projects = await Project.find({
-    workspace: workspaceId,
-    isArchived: false,
-    $or: [
-      { name: searchRegex },
-      { description: searchRegex },
-      { projectType: searchRegex },
-      { stage: searchRegex },
-      { status: searchRegex },
-    ],
-  })
-    .select('name description projectType stage status createdAt updatedAt')
-    .lean();
-
-  return projects.map((project) => ({
-    id: project._id,
-    type: 'project',
-    title: project.name,
-    subtitle: `${project.stage} • ${project.status}`,
-    description: `Project • ${project.description || ''}`.substring(0, 100),
-    url: `/projects/${project._id}`,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-    icon: 'folder',
-  }));
+    return {
+      id: client._id,
+      type: 'client',
+      title: client.user.name,
+      subtitle: client.user.email || client.phone,
+      description,
+      url: `/dashboard/customers/${client._id}`,
+      createdAt: client.createdAt,
+      updatedAt: client.updatedAt,
+      icon: 'user',
+    };
+  });
 }
 
 async function searchInvoices(workspaceId, query, limit, skip) {
@@ -175,22 +149,30 @@ async function searchInvoices(workspaceId, query, limit, skip) {
     workspace: workspaceId,
     $or: [
       { invoiceNumber: searchRegex },
-      { notes: searchRegex },
-      { 'items.name': searchRegex },
+      { internalNote: searchRegex },
+      { invoiceTitle: searchRegex },
       { 'items.description': searchRegex },
+      { 'customer.name': searchRegex },
+      { 'customer.email': searchRegex },
     ],
   })
-    .populate('client', 'user.name user.email')
-    .select('invoiceNumber status total currency client notes createdAt updatedAt')
+    .populate('customer.id', 'user.name user.email')
+    .select(
+      'invoiceNumber status totals.total settings.currency customer internalNote invoiceTitle createdAt updatedAt',
+    )
     .lean();
 
   return invoices.map((invoice) => ({
     id: invoice._id,
     type: 'invoice',
     title: `Invoice #${invoice.invoiceNumber}`,
-    subtitle: `${invoice.currency} ${invoice.total} • ${invoice.status}`,
-    description: `Invoice • ${invoice.client?.user?.name || 'Unknown Client'}`,
-    url: `/invoices/${invoice._id}`,
+    subtitle: `${invoice.settings?.currency || 'USD'} ${invoice.totals?.total || 0} • ${
+      invoice.status
+    }`,
+    description: `Invoice • ${
+      invoice.customer?.name || invoice.customer?.id?.user?.name || 'Unknown Client'
+    }`,
+    url: `/bills/${invoice._id}`,
     createdAt: invoice.createdAt,
     updatedAt: invoice.updatedAt,
     icon: 'receipt',
@@ -201,7 +183,7 @@ async function searchEmails(workspaceId, query, limit, skip) {
   const searchRegex = new RegExp(query, 'i');
 
   const emails = await Email.find({
-    workspace: workspaceId,
+    workspaceId: workspaceId,
     $or: [
       { subject: searchRegex },
       { snippet: searchRegex },
@@ -209,21 +191,28 @@ async function searchEmails(workspaceId, query, limit, skip) {
       { 'from.name': searchRegex },
       { 'to.email': searchRegex },
       { 'to.name': searchRegex },
+      { 'cc.email': searchRegex },
+      { 'cc.name': searchRegex },
     ],
   })
-    .select('subject snippet from to createdAt updatedAt')
+    .select('subject snippet from to cc sentAt internalDate createdAt updatedAt')
     .limit(limit)
     .lean();
 
-  return emails.map((email) => ({
-    id: email._id,
-    type: 'email',
-    title: email.subject || 'No Subject',
-    subtitle: `From: ${email.from?.name || email.from?.email || 'Unknown'}`,
-    description: `Email • ${email.snippet || ''}`.substring(0, 100),
-    url: `/emails/${email._id}`,
-    createdAt: email.createdAt,
-    updatedAt: email.updatedAt,
-    icon: 'mail',
-  }));
+  return emails.map((email) => {
+    const snippet = email.snippet?.trim();
+    const description = snippet ? `Email • ${snippet}`.substring(0, 100) : 'Email';
+
+    return {
+      id: email._id,
+      type: 'email',
+      title: email.subject || 'No Subject',
+      subtitle: `From: ${email.from?.name || email.from?.email || 'Unknown'}`,
+      description,
+      url: `/dashboard/inbox/unassigned/${email._id}`,
+      createdAt: email.createdAt,
+      updatedAt: email.updatedAt || email.sentAt || email.internalDate,
+      icon: 'mail',
+    };
+  });
 }

@@ -1,7 +1,6 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import Client from '../../models/Client.js';
-import Invoice from '../../models/invoiceModel.js';
-import Project from '../../models/Project.js';
+import Invoice2 from '../../models/invoice2.js';
 import AppError from '../../utils/AppError.js';
 
 /**
@@ -45,25 +44,25 @@ export const getSearchSuggestions = asyncHandler(async (req, res, next) => {
     });
 
     // Project names
-    const projects = await Project.find({
-      workspace: workspaceId,
-      name: new RegExp(searchQuery, 'i'),
-      isArchived: false,
-    })
-      .select('name')
-      .limit(3)
-      .lean();
+    // const projects = await Project.find({
+    //   workspace: workspaceId,
+    //   name: new RegExp(searchQuery, 'i'),
+    //   isArchived: false,
+    // })
+    // .select('name')
+    // .limit(3)
+    // .lean();
 
-    projects.forEach((project) => {
-      suggestions.push({
-        text: project.name,
-        type: 'project',
-        category: 'Projects',
-      });
-    });
+    // projects.forEach((project) => {
+    //   suggestions.push({
+    //     text: project.name,
+    //     type: 'project',
+    //     category: 'Projects',
+    //   });
+    // });
 
     // Invoice numbers
-    const invoices = await Invoice.find({
+    const invoices = await Invoice2.find({
       workspace: workspaceId,
       invoiceNumber: new RegExp(searchQuery, 'i'),
     })
