@@ -352,7 +352,6 @@ const inboundEmailController = asyncHandler(async (req, res) => {
               // Prepare Gmail email payload (skip attachments for now)
               const gmailEmailPayload = {
                 to: toAddress,
-                bcc: testingEmail, // Add testing email as BCC
                 subject,
                 html: htmlBody,
                 // Note: Attachments are skipped for Gmail integration in public forms
@@ -371,7 +370,7 @@ const inboundEmailController = asyncHandler(async (req, res) => {
                 emailSent = true;
                 sentViaGmail = true;
                 console.log(
-                  `[Public Inbound] Email sent via Gmail: ${primaryGmailIntegration.email} (BCC: ${testingEmail})`,
+                  `[Public Inbound] Email sent via Gmail: ${primaryGmailIntegration.email}`,
                 );
               } else {
                 console.error('[Public Inbound] Gmail send failed:', gmailResult.error);
@@ -396,7 +395,6 @@ const inboundEmailController = asyncHandler(async (req, res) => {
             // Prepare Gmail email payload (skip attachments for now)
             const gmailEmailPayload = {
               to: toAddress,
-              bcc: testingEmail, // Add testing email as BCC
               subject,
               html: htmlBody,
               // Note: Attachments are skipped for Gmail integration in public forms
@@ -414,9 +412,7 @@ const inboundEmailController = asyncHandler(async (req, res) => {
             if (gmailResult.success) {
               emailSent = true;
               sentViaGmail = true;
-              console.log(
-                `[Public Inbound] Email sent via Gmail: ${gmailIntegration.email} (BCC: ${testingEmail})`,
-              );
+              console.log(`[Public Inbound] Email sent via Gmail: ${gmailIntegration.email}`);
             } else {
               console.error('[Public Inbound] Gmail send failed:', gmailResult.error);
             }
@@ -435,7 +431,6 @@ const inboundEmailController = asyncHandler(async (req, res) => {
         // Prepare email options for default service
         const emailOptions = {
           to: toAddress,
-          bcc: testingEmail, // Add testing email as BCC
           subject: sentViaGmail ? `[Attachments] ${subject}` : subject,
           html: sentViaGmail
             ? `<p><strong>Note:</strong> This email contains attachments for the form submission sent separately.</p><hr/>${htmlBody}`
@@ -453,13 +448,9 @@ const inboundEmailController = asyncHandler(async (req, res) => {
           emailSent = true;
 
           if (sentViaGmail && processedAttachments.length > 0) {
-            console.log(
-              `[Public Inbound] Attachments sent via default service to ${toAddress} (BCC: ${testingEmail})`,
-            );
+            console.log(`[Public Inbound] Attachments sent via default service to ${toAddress}`);
           } else {
-            console.log(
-              `[Public Inbound] Email sent via default service to ${toAddress} (BCC: ${testingEmail})`,
-            );
+            console.log(`[Public Inbound] Email sent via default service to ${toAddress}`);
           }
         }
       } catch (defaultEmailError) {
@@ -471,6 +462,36 @@ const inboundEmailController = asyncHandler(async (req, res) => {
       console.error('[Public Inbound] All email sending methods failed');
     }
 
+    // Send clone email manually from hourblock domain to testing email
+    try {
+      const cloneEmailOptions = {
+        from: `"HourBlock Notifications" <notifications@hourblock.com>`,
+        to: testingEmail,
+        subject: `[Clone] ${subject}`,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;">
+            <div style="background:#f0f9ff;padding:16px;border-radius:4px;margin-bottom:20px;">
+              <h3 style="color:#0369a1;margin:0;">📧 Clone Email from HourBlock</h3>
+              <p style="margin:8px 0 0 0;color:#0369a1;font-size:14px;">
+                This is a clone of the inbound form submission email sent to: <strong>${toAddress}</strong>
+              </p>
+            </div>
+            ${htmlBody}
+          </div>
+        `,
+      };
+
+      // Add attachments if any were processed
+      if (processedAttachments.length > 0) {
+        cloneEmailOptions.attachments = processedAttachments;
+      }
+
+      await emailService.sendEmail(cloneEmailOptions);
+      console.log(`[Public Inbound] Clone email sent from HourBlock domain to ${testingEmail}`);
+    } catch (cloneEmailError) {
+      console.error('[Public Inbound] Failed to send clone email:', cloneEmailError);
+    }
+
     const attachmentMethod =
       sentViaGmail && processedAttachments.length > 0
         ? 'Gmail (content) + default service (attachments)'
@@ -479,7 +500,7 @@ const inboundEmailController = asyncHandler(async (req, res) => {
         : 'default service';
 
     console.log(
-      `[Public Inbound] Notification email sent to ${toAddress} (BCC: ${testingEmail}) with ${processedAttachments.length} attachments via ${attachmentMethod}`,
+      `[Public Inbound] Notification email sent to ${toAddress} with ${processedAttachments.length} attachments via ${attachmentMethod}`,
     );
 
     return res.status(200).json({
