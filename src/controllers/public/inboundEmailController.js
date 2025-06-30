@@ -302,7 +302,7 @@ const inboundEmailController = asyncHandler(async (req, res) => {
 
         <hr style="margin-top:32px;border:none;border-top:1px solid #eee;" />
         <p style="font-size:12px;color:#999;text-align:center;">
-          This email was generated automatically by the Pulse public inbound webhook.
+          This email was generated automatically by the hourblock.com public inbound webhook.
         </p>
       </div>
     `;
