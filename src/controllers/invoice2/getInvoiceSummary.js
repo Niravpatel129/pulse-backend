@@ -18,42 +18,97 @@ export const getInvoiceSummary = catchAsync(async (req, res, next) => {
     {
       $match: {
         workspace: new mongoose.Types.ObjectId(workspace),
-        status: { $in: ['open', 'paid'] },
+        status: { $in: ['open', 'paid', 'overdue'] },
       },
     },
     {
       $addFields: {
-        effectiveStatus: {
+        // Keep original status
+        originalStatus: '$status',
+        // Add calculated overdue status for open invoices past due date
+        calculatedStatus: {
           $cond: {
             if: {
               $and: [{ $eq: ['$status', 'open'] }, { $lt: ['$dueDate', new Date()] }],
             },
-            then: 'overdue',
+            then: 'overdue_calculated',
             else: '$status',
           },
         },
       },
     },
     {
-      $group: {
-        _id: {
-          status: '$effectiveStatus',
-          currency: '$settings.currency',
-        },
-        total_amount: { $sum: '$totals.total' },
-        invoice_count: { $sum: 1 },
+      $facet: {
+        // Get original status summaries
+        originalSummary: [
+          {
+            $group: {
+              _id: {
+                status: '$originalStatus',
+                currency: '$settings.currency',
+              },
+              total_amount: { $sum: '$totals.total' },
+              invoice_count: { $sum: 1 },
+            },
+          },
+          {
+            $group: {
+              _id: '$_id.status',
+              currencies: {
+                $push: {
+                  currency: '$_id.currency',
+                  total_amount: '$total_amount',
+                  invoice_count: '$invoice_count',
+                },
+              },
+            },
+          },
+        ],
+        // Get calculated overdue summary
+        overdueSummary: [
+          {
+            $match: {
+              calculatedStatus: 'overdue_calculated',
+            },
+          },
+          {
+            $group: {
+              _id: {
+                status: 'overdue',
+                currency: '$settings.currency',
+              },
+              total_amount: { $sum: '$totals.total' },
+              invoice_count: { $sum: 1 },
+            },
+          },
+          {
+            $group: {
+              _id: '$_id.status',
+              currencies: {
+                $push: {
+                  currency: '$_id.currency',
+                  total_amount: '$total_amount',
+                  invoice_count: '$invoice_count',
+                },
+              },
+            },
+          },
+        ],
       },
     },
     {
-      $group: {
-        _id: '$_id.status',
-        currencies: {
-          $push: {
-            currency: '$_id.currency',
-            total_amount: '$total_amount',
-            invoice_count: '$invoice_count',
-          },
+      $project: {
+        combined: {
+          $concatArrays: ['$originalSummary', '$overdueSummary'],
         },
+      },
+    },
+    {
+      $unwind: '$combined',
+    },
+    {
+      $replaceRoot: {
+        newRoot: '$combined',
       },
     },
   ]);
