@@ -63,6 +63,9 @@ connectDB();
 // Initialize Gmail listener
 initializeGmailListener();
 
+// Special handling for Stripe webhooks (must be before express.json())
+app.use('/api/digital-products/webhook', express.raw({ type: 'application/json' }));
+
 // Body parser with increased limits
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));

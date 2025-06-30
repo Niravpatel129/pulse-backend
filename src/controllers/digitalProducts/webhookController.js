@@ -1,3 +1,4 @@
+import stripe from '../../config/stripe.js';
 import DigitalProduct from '../../models/DigitalProduct.js';
 import DigitalProductPurchase from '../../models/DigitalProductPurchase.js';
 import emailService from '../../services/emailService.js';
@@ -5,30 +6,41 @@ import emailService from '../../services/emailService.js';
 // Handle Stripe webhook events for digital products
 export const handleStripeWebhook = async (req, res, next) => {
   try {
-    const event = req.body;
+    const sig = req.headers['stripe-signature'];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    // Verify the webhook signature (you should implement this for production)
-    // const sig = req.headers['stripe-signature'];
-    // const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    // stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    let event;
 
+    try {
+      // Verify the webhook signature - req.body is now raw buffer thanks to express.raw()
+      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+      console.log(`✅ Webhook signature verified for event: ${event.type}`);
+    } catch (err) {
+      console.error('❌ Webhook signature verification failed:', err.message);
+      return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+    }
+
+    // Handle the event
     switch (event.type) {
       case 'payment_intent.succeeded':
+        console.log(`🎉 Processing payment success for: ${event.data.object.id}`);
         await handlePaymentSucceeded(event.data.object);
         break;
       case 'payment_intent.payment_failed':
+        console.log(`❌ Processing payment failure for: ${event.data.object.id}`);
         await handlePaymentFailed(event.data.object);
         break;
       case 'payment_intent.canceled':
+        console.log(`🚫 Processing payment cancellation for: ${event.data.object.id}`);
         await handlePaymentCanceled(event.data.object);
         break;
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        console.log(`ℹ️ Unhandled event type: ${event.type}`);
     }
 
     res.status(200).json({ received: true });
   } catch (error) {
-    console.error('Error handling webhook:', error);
+    console.error('💥 Error handling webhook:', error);
     res.status(400).json({ error: 'Webhook handler failed' });
   }
 };
