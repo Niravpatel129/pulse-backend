@@ -148,6 +148,13 @@ const workspaceSchema = new mongoose.Schema(
       type: Object,
       default: {},
     },
+    currency: {
+      type: String,
+      required: true,
+      default: 'usd',
+      enum: ['usd', 'cad', 'eur', 'gbp'],
+      lowercase: true,
+    },
   },
   {
     timestamps: true,

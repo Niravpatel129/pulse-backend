@@ -70,14 +70,20 @@ class StripeService {
     try {
       const statementDescriptor = workspaceName ? workspaceName.substring(0, 22) : 'PAYMENT';
 
-      const response = await stripeApi.post('/payment_intents', {
+      const paymentIntentData = {
         amount,
         currency,
-        transfer_data: {
-          destination: connectedAccountId,
-        },
         statement_descriptor_suffix: statementDescriptor,
-      });
+      };
+
+      // Only add transfer_data if there's a connected account
+      if (connectedAccountId) {
+        paymentIntentData.transfer_data = {
+          destination: connectedAccountId,
+        };
+      }
+
+      const response = await stripeApi.post('/payment_intents', paymentIntentData);
       return response.data;
     } catch (error) {
       throw new Error(

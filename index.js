@@ -23,6 +23,7 @@ import clientRoutes from './src/routes/clientRoutes.js';
 import cmsRoutes from './src/routes/cmsRoutes.js';
 import projectRoutes from './src/routes/dashboard/projectRoutes.js';
 import deliverableRoutes from './src/routes/deliverableRoutes.js';
+import digitalProductRoutes from './src/routes/digitalProductRoutes.js';
 import elementRoutes from './src/routes/elementRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
 import externalInvoiceRoutes from './src/routes/externalInvoiceRoutes.js';
@@ -196,6 +197,9 @@ app.use(`${routesPrefix}/external/invoices`, externalInvoiceRoutes);
 
 // File Manager
 app.use(`${routesPrefix}/file-manager`, fileManagerRoutes);
+
+// Digital Products
+app.use(`${routesPrefix}/digital-products`, digitalProductRoutes);
 
 // Handle 404 routes
 app.use((req, res, next) => {
