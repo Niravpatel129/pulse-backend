@@ -45,6 +45,7 @@ import projectInvoiceRoutes from './src/routes/projectInvoiceRoutes.js';
 import publicRoutes from './src/routes/publicRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import stripeRoutes from './src/routes/stripeRoutes.js';
+import stripeWebhookRoutes from './src/routes/stripeWebhookRoutes.js';
 import tablesRoutes from './src/routes/tablesRoutes.js';
 import workspaceRoutes from './src/routes/workspaceRoutes.js';
 import workspaceSearchRoutes from './src/routes/workspaceSearchRoutes.js';
@@ -63,10 +64,10 @@ connectDB();
 // Initialize Gmail listener
 initializeGmailListener();
 
-// Special handling for Stripe webhooks (must be before express.json())
-app.use('/api/digital-products/webhook', express.raw({ type: 'application/json' }));
+// Stripe webhooks MUST come before JSON body parser
+app.use('/api/stripe-webhooks', stripeWebhookRoutes);
 
-// Body parser with increased limits
+// Body parser with increased limits (after webhook routes)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 

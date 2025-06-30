@@ -1,24 +1,15 @@
-import stripe from '../../config/stripe.js';
 import DigitalProduct from '../../models/DigitalProduct.js';
 import DigitalProductPurchase from '../../models/DigitalProductPurchase.js';
 import emailService from '../../services/emailService.js';
 
 // Handle Stripe webhook events for digital products
 export const handleStripeWebhook = async (req, res, next) => {
+  console.log('🚀 Digital Products webhook handler called');
+
   try {
-    const sig = req.headers['stripe-signature'];
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    let event;
-
-    try {
-      // Verify the webhook signature - req.body is now raw buffer thanks to express.raw()
-      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-      console.log(`✅ Webhook signature verified for event: ${event.type}`);
-    } catch (err) {
-      console.error('❌ Webhook signature verification failed:', err.message);
-      return res.status(400).json({ error: `Webhook Error: ${err.message}` });
-    }
+    // Event is already verified and parsed by eventParser middleware
+    const event = req.body;
+    console.log(`🔍 Processing event: ${event.type} (ID: ${event.id})`);
 
     // Handle the event
     switch (event.type) {

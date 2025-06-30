@@ -26,7 +26,6 @@ import {
   getAllDigitalProductsAdmin,
   updateDigitalProduct,
 } from '../controllers/digitalProducts/manageDigitalProducts.js';
-import { handleStripeWebhook } from '../controllers/digitalProducts/webhookController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 
@@ -48,9 +47,6 @@ router.post('/confirm-payment', validateRequest({ body: confirmPaymentSchema }),
 router.get('/download/:orderId/:token', downloadProduct);
 router.get('/purchases/customer/:email', getPurchasesByEmail);
 router.get('/stripe-status/:workspaceId', checkStripeAccountStatus);
-
-// Webhook route (should be before authentication middleware)
-router.post('/webhook', handleStripeWebhook);
 
 // Protected routes (authentication required)
 router.use(authenticate); // Apply authentication middleware to all routes below
