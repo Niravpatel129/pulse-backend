@@ -1,9 +1,11 @@
 import mongoose from 'mongoose';
 import DigitalProduct from '../../models/DigitalProduct.js';
+import StripeConnectAccount from '../../models/StripeConnectAccount.js';
 import AppError from '../../utils/AppError.js';
 
 // Create a new digital product
 export const createDigitalProduct = async (req, res, next) => {
+  const userId = req.user.userId;
   try {
     const {
       name,
@@ -31,27 +33,6 @@ export const createDigitalProduct = async (req, res, next) => {
       return next(new AppError('Features must be a non-empty array', 400));
     }
 
-    // Verify workspace has a connected Stripe account
-    const stripeAccount = await StripeConnectAccount.findOne({ workspace: workspace });
-    if (!stripeAccount) {
-      return next(
-        new AppError(
-          'Workspace must have a connected Stripe account to sell digital products',
-          400,
-        ),
-      );
-    }
-
-    // Verify the connected account is properly configured
-    if (!stripeAccount.chargesEnabled || !stripeAccount.detailsSubmitted) {
-      return next(
-        new AppError(
-          'Stripe account must be fully configured before selling digital products',
-          400,
-        ),
-      );
-    }
-
     // Create new digital product
     const digitalProduct = new DigitalProduct({
       name,
@@ -67,7 +48,7 @@ export const createDigitalProduct = async (req, res, next) => {
       downloadLimit,
       popular: popular || false,
       workspace: new mongoose.Types.ObjectId(workspace),
-      createdBy: req.user._id, // Assuming user is attached to req by auth middleware
+      createdBy: userId,
     });
 
     await digitalProduct.save();
