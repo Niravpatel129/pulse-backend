@@ -67,6 +67,33 @@ export const confirmPaymentSchema = Joi.object({
   }),
 });
 
+// Validation schema for payment complete
+export const paymentCompleteSchema = Joi.object({
+  paymentIntentId: Joi.string().required().messages({
+    'string.base': 'Payment intent ID must be a string',
+    'any.required': 'Payment intent ID is required',
+  }),
+  amount: Joi.number().positive().optional(),
+  currency: Joi.string().optional(),
+  product: Joi.object({
+    id: Joi.string().optional(),
+    name: Joi.string().optional(),
+    description: Joi.string().optional(),
+    price: Joi.number().optional(),
+  }).optional(),
+  customer: Joi.object({
+    firstName: Joi.string().trim().min(1).max(50).optional(),
+    lastName: Joi.string().trim().min(1).max(50).optional(),
+    email: Joi.string().email().optional(),
+    phone: Joi.string().allow('', null).optional(),
+    company: Joi.string().allow('', null).optional(),
+    country: Joi.string().min(2).max(3).optional(),
+    acceptsMarketing: Joi.boolean().optional(),
+  }).optional(),
+  workspaceId: Joi.string().optional().allow('', null),
+  paymentMethod: Joi.string().optional().allow('', null),
+});
+
 // Validation schema for creating digital product
 export const createDigitalProductSchema = Joi.object({
   name: Joi.string().trim().min(1).max(200).required().messages({

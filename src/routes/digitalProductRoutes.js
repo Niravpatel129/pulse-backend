@@ -4,6 +4,7 @@ import {
   createDigitalProductSchema,
   createPaymentIntentSchema,
   getDigitalProductsQuerySchema,
+  paymentCompleteSchema,
   updateDigitalProductSchema,
 } from '../config/validators/digitalProductValidators.js';
 import { checkStripeAccountStatus } from '../controllers/digitalProducts/checkStripeAccount.js';
@@ -26,6 +27,7 @@ import {
   getAllDigitalProductsAdmin,
   updateDigitalProduct,
 } from '../controllers/digitalProducts/manageDigitalProducts.js';
+import { paymentComplete } from '../controllers/digitalProducts/paymentComplete.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 
@@ -44,6 +46,7 @@ router.post(
   createPaymentIntent,
 );
 router.post('/confirm-payment', validateRequest({ body: confirmPaymentSchema }), confirmPayment);
+router.post('/payment-complete', validateRequest({ body: paymentCompleteSchema }), paymentComplete);
 router.get('/download/:orderId/:token', downloadProduct);
 router.get('/purchases/customer/:email', getPurchasesByEmail);
 router.get('/stripe-status/:workspaceId', checkStripeAccountStatus);
