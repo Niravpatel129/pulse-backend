@@ -66,7 +66,7 @@ export const paymentComplete = async (req, res, next) => {
       success: true,
       data: {
         orderId: purchase.orderId,
-        order_id: purchase.orderId, // Fallback for frontend compatibility
+        order_id: purchase._id, // MongoDB document ID
         status: purchase.status,
         paymentStatus: purchase.paymentInfo.paymentStatus,
         downloadToken: purchase.status === 'completed' ? purchase.downloadInfo.downloadToken : null,
