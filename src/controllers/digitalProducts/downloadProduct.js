@@ -45,8 +45,82 @@ export const downloadProduct = async (req, res, next) => {
 
     // Handle different file storage types
     if (product.fileUrl.startsWith('http')) {
-      // External URL - redirect to the file
-      res.redirect(product.fileUrl);
+      // External URL (like Firebase) - fetch and stream the file
+      try {
+        const response = await fetch(product.fileUrl);
+
+        if (!response.ok) {
+          return next(new AppError('Product file not accessible', 404));
+        }
+
+        // Extract filename from Firebase URL
+        let fileName;
+        try {
+          const url = new URL(product.fileUrl);
+          // For Firebase storage URLs, the filename is in the path after 'o/'
+          const pathParts = decodeURIComponent(url.pathname).split('/');
+          const fileIndex = pathParts.indexOf('o') + 1;
+          if (fileIndex > 0 && fileIndex < pathParts.length) {
+            // Get the last part which should be the filename
+            const fullPath = pathParts.slice(fileIndex).join('/');
+            fileName = path.basename(fullPath);
+          }
+
+          // Fallback if extraction fails
+          if (!fileName || !fileName.includes('.')) {
+            fileName = `download_${orderId}.png`; // Default to .png for images
+          }
+        } catch (error) {
+          fileName = `download_${orderId}.png`;
+        }
+
+        // Determine content type from filename extension
+        const getContentType = (filename) => {
+          const ext = path.extname(filename).toLowerCase();
+          const mimeTypes = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.pdf': 'application/pdf',
+            '.zip': 'application/zip',
+            '.txt': 'text/plain',
+            '.json': 'application/json',
+          };
+          return mimeTypes[ext] || 'application/octet-stream';
+        };
+
+        // Set appropriate headers
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        const contentType = response.headers.get('content-type') || getContentType(fileName);
+        res.setHeader('Content-Type', contentType);
+
+        if (response.headers.get('content-length')) {
+          res.setHeader('Content-Length', response.headers.get('content-length'));
+        }
+
+        // Stream the file to the response
+        const reader = response.body.getReader();
+
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(value);
+            }
+            res.end();
+          } catch (error) {
+            console.error('Error streaming file:', error);
+            res.end();
+          }
+        };
+
+        await pump();
+      } catch (error) {
+        console.error('Error fetching external file:', error);
+        return next(new AppError('Failed to fetch product file', 500));
+      }
     } else {
       // Local file - serve the file
       const filePath = path.resolve(product.fileUrl);
