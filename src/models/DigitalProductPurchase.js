@@ -128,7 +128,6 @@ const digitalProductPurchaseSchema = new mongoose.Schema({
 digitalProductPurchaseSchema.index({ workspace: 1, status: 1 });
 digitalProductPurchaseSchema.index({ 'customerInfo.email': 1 });
 digitalProductPurchaseSchema.index({ 'paymentInfo.stripePaymentIntentId': 1 });
-digitalProductPurchaseSchema.index({ orderId: 1 });
 
 // Update the updatedAt field before saving
 digitalProductPurchaseSchema.pre('save', function (next) {
