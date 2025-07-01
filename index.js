@@ -107,6 +107,12 @@ app.use(
         'http://workspace1.toastify.io:3000',
         'https://workspace1.toastify.io:3000',
         'workspace1.toastify.io:3000',
+        'www.hourblock.com',
+        'www.resumaster.co',
+        'www.printscala.com',
+        'www.gtaresumebuilder.com',
+        'www.mindsettherapy.com',
+        'hourblock.com',
       ];
       if (
         !origin ||
