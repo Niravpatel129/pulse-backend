@@ -17,6 +17,7 @@ import apiKeyRoutes from './src/routes/apiKeyRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
+import blogRoutes from './src/routes/blogRoutes.js';
 import calendarRoutes from './src/routes/calendarRoutes.js';
 import chatSettingsRoutes from './src/routes/chatSettingsRoutes.js';
 import clientRoutes from './src/routes/clientRoutes.js';
@@ -162,6 +163,9 @@ app.use(`${routesPrefix}/product-catalog`, productCatalogRoutes);
 
 // CMS
 app.use(`${routesPrefix}/cms`, cmsRoutes);
+
+// Blog Posts
+app.use(`${routesPrefix}/blog-posts`, blogRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
