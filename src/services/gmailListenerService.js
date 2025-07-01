@@ -332,11 +332,11 @@ class GmailListenerService {
             }
           }
         } catch (error) {
-          console.error('[Gmail] Error processing thread:', {
-            error: error.message,
-            threadId,
-            messageIds,
-          });
+          // console.error('[Gmail] Error processing thread:', {
+          //   error: error.message,
+          //   threadId,
+          //   messageIds,
+          // });
           continue;
         }
       }
