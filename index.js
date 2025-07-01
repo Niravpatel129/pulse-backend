@@ -1,3 +1,10 @@
+// Suppress glib/Sharp conflict warnings on macOS
+process.env.GLIB_SLICE = 'always-malloc';
+process.env.OBJC_DISABLE_INITIALIZE_FORK_SAFETY = 'YES';
+process.env.SHARP_IGNORE_GLOBAL_LIBVIPS = '1';
+process.env.SHARP_PLATFORM = 'darwin';
+process.env.SHARP_ARCH = 'arm64';
+
 import * as Sentry from '@sentry/node';
 import cors from 'cors';
 import dotenv from 'dotenv';
