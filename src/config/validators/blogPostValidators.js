@@ -56,13 +56,21 @@ const seoDescriptionValidation = body('seoDescription')
   .trim();
 
 const publishDateValidation = body('publishDate')
-  .optional()
+  .optional({ checkFalsy: true })
+  .if((value, { req }) => {
+    // Only validate if status is not draft and value exists
+    return req.body.status !== 'draft' && value && value.trim() !== '';
+  })
   .matches(/^\d{4}-\d{2}-\d{2}$/)
   .withMessage('Publish date must be in YYYY-MM-DD format')
   .trim();
 
 const publishTimeValidation = body('publishTime')
-  .optional()
+  .optional({ checkFalsy: true })
+  .if((value, { req }) => {
+    // Only validate if status is not draft and value exists
+    return req.body.status !== 'draft' && value && value.trim() !== '';
+  })
   .matches(/^\d{2}:\d{2}$/)
   .withMessage('Publish time must be in HH:MM format')
   .trim();

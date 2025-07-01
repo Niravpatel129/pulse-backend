@@ -16,7 +16,7 @@ import {
   updateBlogPost,
 } from '../controllers/blog/index.js';
 import { authenticate } from '../middleware/auth.js';
-import { validateRequest } from '../middleware/validateRequest.js';
+import { validateRequest } from '../middleware/expressValidatorMiddleware.js';
 import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();

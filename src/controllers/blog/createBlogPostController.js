@@ -8,7 +8,6 @@ import asyncHandler from '../../utils/asyncHandler.js';
  */
 export const createBlogPost = asyncHandler(async (req, res) => {
   const workspaceId = req.workspace._id;
-  const userId = req.user._id;
 
   const {
     title,
@@ -53,8 +52,8 @@ export const createBlogPost = asyncHandler(async (req, res) => {
     categories,
     author: postAuthor,
     workspace: workspaceId,
-    createdBy: userId,
-    lastModifiedBy: userId,
+    createdBy: req.user.userId,
+    lastModifiedBy: req.user.userId,
   };
 
   const newBlogPost = await BlogPost.create(blogPostData);
