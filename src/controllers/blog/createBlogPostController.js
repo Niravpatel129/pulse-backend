@@ -1,7 +1,7 @@
 import BlogPost from '../../models/BlogPost.js';
-import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 import asyncHandler from '../../utils/asyncHandler.js';
+import { slugify } from '../../utils/slugify.js';
 
 /**
  * Create a new blog post
@@ -11,7 +11,6 @@ export const createBlogPost = asyncHandler(async (req, res) => {
 
   const {
     title,
-    slug,
     excerpt,
     content,
     status = 'draft',
@@ -25,11 +24,7 @@ export const createBlogPost = asyncHandler(async (req, res) => {
     author,
   } = req.body;
 
-  // Check if slug already exists for this workspace
-  const existingPost = await BlogPost.findOne({ workspace: workspaceId, slug });
-  if (existingPost) {
-    throw new ApiError(400, 'A blog post with this slug already exists');
-  }
+  const slug = slugify(title, { lower: true });
 
   // If no author provided, use the current user's name
   let postAuthor = author;
@@ -39,7 +34,6 @@ export const createBlogPost = asyncHandler(async (req, res) => {
 
   const blogPostData = {
     title,
-    slug,
     excerpt,
     content,
     status,
@@ -54,6 +48,7 @@ export const createBlogPost = asyncHandler(async (req, res) => {
     workspace: workspaceId,
     createdBy: req.user.userId,
     lastModifiedBy: req.user.userId,
+    slug,
   };
 
   const newBlogPost = await BlogPost.create(blogPostData);

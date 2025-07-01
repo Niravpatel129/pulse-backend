@@ -8,15 +8,6 @@ const titleValidation = body('title')
   .withMessage('Title must be between 1 and 200 characters')
   .trim();
 
-const slugValidation = body('slug')
-  .notEmpty()
-  .withMessage('Slug is required')
-  .isLength({ min: 1, max: 200 })
-  .withMessage('Slug must be between 1 and 200 characters')
-  .matches(/^[a-z0-9-]+$/)
-  .withMessage('Slug must contain only lowercase letters, numbers, and hyphens')
-  .trim();
-
 const excerptValidation = body('excerpt')
   .notEmpty()
   .withMessage('Excerpt is required')
@@ -86,7 +77,6 @@ const authorValidation = body('author').notEmpty().withMessage('Author is requir
 // Validation for creating a blog post
 export const validateCreateBlogPost = [
   titleValidation,
-  slugValidation,
   excerptValidation,
   contentValidation,
   statusValidation,
@@ -108,14 +98,6 @@ export const validateUpdateBlogPost = [
     .optional()
     .isLength({ min: 1, max: 200 })
     .withMessage('Title must be between 1 and 200 characters')
-    .trim(),
-
-  body('slug')
-    .optional()
-    .isLength({ min: 1, max: 200 })
-    .withMessage('Slug must be between 1 and 200 characters')
-    .matches(/^[a-z0-9-]+$/)
-    .withMessage('Slug must contain only lowercase letters, numbers, and hyphens')
     .trim(),
 
   body('excerpt')
