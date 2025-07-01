@@ -1,9 +1,11 @@
+import * as Sentry from '@sentry/node';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import multer from 'multer';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/api-docs.js';
+import './instrument.js';
 import connectDB from './src/config/db.js';
 import { initializeGmailListener } from './src/init/gmailListener.js';
 import { resolveInactivityAlerts } from './src/middleware/alertsMiddleware.js';
@@ -209,6 +211,9 @@ app.use(`${routesPrefix}/file-manager`, fileManagerRoutes);
 // Digital Products
 app.use(`${routesPrefix}/digital-products`, digitalProductRoutes);
 
+// The error handler must be registered before any other error middleware and after all controllers
+Sentry.setupExpressErrorHandler(app);
+
 // Handle 404 routes
 app.use((req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
@@ -222,6 +227,9 @@ app.use((err, req, res, next) => {
   res.status(err.statusCode).json({
     status: err.status,
     message: err.message,
+    // The error id is attached to `res.sentry` to be returned
+    // and optionally displayed to the user for support.
+    ...(res.sentry && { sentryId: res.sentry }),
   });
 });
 
