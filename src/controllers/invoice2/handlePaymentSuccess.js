@@ -1,7 +1,11 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
+import GmailIntegration from '../../models/GmailIntegration.js';
 import Invoice2 from '../../models/invoice2.js';
 import Payment from '../../models/paymentModel.js';
+import Workspace from '../../models/Workspace.js';
+import { paymentNotification } from '../../services/emailTemplates/paymentNotification.js';
 import StripeService from '../../services/stripeService.js';
+import { sendGmailEmail } from '../../utils/gmailApi.js';
 
 // Helper function to handle decimal comparisons
 const isAmountEqual = (amount1, amount2) => {
@@ -213,7 +217,10 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
 
   // Send payment notifications
   if (payment.type === 'payment' || payment.type === 'deposit') {
-    // TODO: Send notifications asynchronously - don't wait for completion
+    // Send notifications asynchronously - don't wait for completion
+    sendPaymentNotificationViaGmail(payment, invoice, req.workspace._id).catch((err) =>
+      console.error('Error sending payment notification via Gmail:', err),
+    );
   }
 
   res.status(200).json({
@@ -232,3 +239,114 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     },
   });
 });
+
+// Helper function to send payment notifications via Gmail
+const sendPaymentNotificationViaGmail = async (payment, invoice, workspaceId) => {
+  try {
+    // Get workspace information
+    const workspace = await Workspace.findById(workspaceId).select('name members logo');
+    if (!workspace) {
+      console.log('Workspace not found for payment notification');
+      return;
+    }
+
+    // Get Gmail integration for the workspace (primary integration)
+    const gmailIntegration = await GmailIntegration.findOne({
+      workspace: workspaceId,
+      isActive: true,
+      isPrimary: true,
+    });
+
+    if (!gmailIntegration) {
+      console.log('No active Gmail integration found for workspace');
+      return;
+    }
+
+    // Check if token needs refresh
+    if (new Date() >= gmailIntegration.tokenExpiry) {
+      console.log('Gmail token expired, skipping notification');
+      return;
+    }
+
+    // Create Gmail client
+    const { google } = await import('googleapis');
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI,
+    );
+
+    oauth2Client.setCredentials({
+      access_token: gmailIntegration.accessToken,
+      refresh_token: gmailIntegration.refreshToken,
+      expiry_date: gmailIntegration.tokenExpiry?.getTime(),
+    });
+
+    const gmailClient = google.gmail({ version: 'v1', auth: oauth2Client });
+
+    // Get client name from invoice
+    const clientName = invoice.customer?.name || 'Customer';
+
+    // Generate payment link (adjust URL based on your app structure)
+    const paymentLink = `${
+      process.env.FRONTEND_URL || 'https://app.hourblock.com'
+    }/dashboard/invoices/${invoice._id}`;
+
+    // Format payment date
+    const paymentDate = new Date(payment.date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    // Format payment method
+    const paymentMethod = payment.metadata?.paymentMethod?.details?.brand
+      ? `${
+          payment.metadata.paymentMethod.details.brand.charAt(0).toUpperCase() +
+          payment.metadata.paymentMethod.details.brand.slice(1)
+        } **** ${payment.metadata.paymentMethod.details.last4}`
+      : payment.method?.charAt(0).toUpperCase() + payment.method?.slice(1) || 'Online Payment';
+
+    // Generate email content using the template
+    const emailTemplate = paymentNotification({
+      workspaceName: workspace.name || 'Your Workspace',
+      clientName,
+      amount: payment.amount,
+      currency: payment.metadata?.currency || invoice.settings?.currency || 'USD',
+      invoiceNumber: invoice.invoiceNumber || '-',
+      paymentDate,
+      paymentMethod,
+      paymentLink,
+      workspaceLogo: workspace.logo || '',
+    });
+
+    // Format subject line
+    const formattedAmount = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: payment.metadata?.currency || invoice.settings?.currency || 'USD',
+    }).format(payment.amount);
+
+    const isDepositPayment = payment.type === 'deposit';
+    const subject = `${
+      isDepositPayment ? 'Deposit' : 'Payment'
+    } Received: ${clientName} - ${formattedAmount}`;
+
+    // Prepare email data
+    const emailData = {
+      to: gmailIntegration.email, // Send to the workspace's primary email
+      subject,
+      html: emailTemplate.html,
+    };
+
+    // Send the email
+    const result = await sendGmailEmail(gmailClient, emailData, gmailIntegration);
+
+    if (result.success) {
+      console.log(`Payment notification sent via Gmail to ${gmailIntegration.email}`);
+    } else {
+      console.error('Failed to send payment notification via Gmail:', result.error);
+    }
+  } catch (error) {
+    console.error('Error in sendPaymentNotificationViaGmail:', error);
+  }
+};
