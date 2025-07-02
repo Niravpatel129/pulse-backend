@@ -32,6 +32,8 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
     workspace: invoice.workspace,
   });
 
+  console.log('🚀 connectAccount:', connectAccount);
+
   if (!connectAccount) {
     return res.status(404).json({
       success: false,
