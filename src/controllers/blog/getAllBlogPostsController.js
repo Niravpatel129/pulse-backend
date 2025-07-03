@@ -4,9 +4,23 @@ import asyncHandler from '../../utils/asyncHandler.js';
 
 /**
  * Get all blog posts with pagination, filtering, and search
+ * Supports both authenticated (workspace from middleware) and public (workspaceId from query) access
  */
 export const getAllBlogPosts = asyncHandler(async (req, res) => {
-  const workspaceId = req.workspace._id;
+  // Check if workspaceId is provided in query (public access)
+  const workspaceId = req.query.workspaceId || req.workspace?._id;
+
+  if (!workspaceId) {
+    return res
+      .status(400)
+      .json(
+        new ApiResponse(
+          400,
+          null,
+          'workspaceId is required for public access or user must be authenticated',
+        ),
+      );
+  }
 
   const {
     page = 1,
@@ -22,8 +36,12 @@ export const getAllBlogPosts = asyncHandler(async (req, res) => {
   // Build query
   const query = { workspace: workspaceId };
 
-  // Filter by status
-  if (status) {
+  // Filter by status - for public access, only show published posts
+  if (req.query.workspaceId) {
+    // Public access - only published posts
+    query.status = 'published';
+  } else if (status) {
+    // Authenticated access - can filter by status
     query.status = status;
   }
 
@@ -47,9 +65,10 @@ export const getAllBlogPosts = asyncHandler(async (req, res) => {
   const limitNumber = Math.min(parseInt(limit, 10), 50); // Max 50 items per page
   const skip = (pageNumber - 1) * limitNumber;
 
-  // Sort options
+  // Sort options - for public access, default to publishedAt
   const sortOptions = {};
-  sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+  const defaultSortBy = req.query.workspaceId ? 'publishedAt' : 'createdAt';
+  sortOptions[sortBy || defaultSortBy] = sortOrder === 'desc' ? -1 : 1;
 
   // Execute query with pagination
   const blogPosts = await BlogPost.find(query)
@@ -72,7 +91,9 @@ export const getAllBlogPosts = asyncHandler(async (req, res) => {
     hasPrevPage: pageNumber > 1,
   };
 
-  res
-    .status(200)
-    .json(new ApiResponse(200, blogPosts, 'Blog posts retrieved successfully', { pagination }));
+  const message = req.query.workspaceId
+    ? 'Public blog posts retrieved successfully'
+    : 'Blog posts retrieved successfully';
+
+  res.status(200).json(new ApiResponse(200, blogPosts, message, { pagination }));
 });

@@ -15,31 +15,31 @@ import {
   unpublishBlogPost,
   updateBlogPost,
 } from '../controllers/blog/index.js';
-import { authenticate } from '../middleware/auth.js';
+import { conditionalAuth } from '../middleware/conditionalAuth.js';
 import { validateRequest } from '../middleware/expressValidatorMiddleware.js';
-import { extractWorkspace } from '../middleware/workspace.js';
 
 const router = express.Router();
 
-// Apply authentication middleware to all routes
-router.use(authenticate);
-
-// Apply workspace extraction middleware to all routes
-router.use(extractWorkspace);
+// Apply conditional authentication middleware to all routes
+// If workspaceId is provided in query, it's public access (no auth required)
+// Otherwise, normal authentication and workspace extraction is applied
+router.use(conditionalAuth);
 
 /**
  * @route   GET /api/blog-posts
  * @desc    Get all blog posts with pagination, filtering, and search
- * @access  Private (workspace member)
+ * @access  Public (with workspaceId) or Private (authenticated workspace member)
+ * @query   {string} [workspaceId] - Workspace ID for public access (optional if authenticated)
  * @query   {number} [page=1] - Page number for pagination
  * @query   {number} [limit=20] - Number of posts per page (max 50)
- * @query   {string} [status] - Filter by status (draft, published, scheduled)
+ * @query   {string} [status] - Filter by status (draft, published, scheduled) - only for authenticated users
  * @query   {string} [search] - Search in title, excerpt, content, tags, categories, author
  * @query   {string} [category] - Filter by category
  * @query   {string} [tag] - Filter by tag
  * @query   {string} [sortBy=createdAt] - Sort field
  * @query   {string} [sortOrder=desc] - Sort order (asc, desc)
- * @example GET /api/blog-posts?page=1&limit=10&status=published&search=react&sortBy=publishedAt&sortOrder=desc
+ * @example Public: GET /api/blog-posts?workspaceId=685d82e2a70f7eb7b0f9a606&page=1&limit=10&search=react&sortBy=publishedAt&sortOrder=desc
+ * @example Private: GET /api/blog-posts?page=1&limit=10&status=published&search=react&sortBy=publishedAt&sortOrder=desc
  */
 router.get('/', validateBlogPostQuery, validateRequest, getAllBlogPosts);
 
@@ -66,8 +66,11 @@ router.post('/', validateCreateBlogPost, validateRequest, createBlogPost);
 /**
  * @route   GET /api/blog-posts/:id
  * @desc    Get single blog post by ID
- * @access  Private (workspace member)
+ * @access  Public (with workspaceId) or Private (authenticated workspace member)
  * @param   {string} id - Blog post ID
+ * @query   {string} [workspaceId] - Workspace ID for public access (optional if authenticated)
+ * @example Public: GET /api/blog-posts/507f1f77bcf86cd799439011?workspaceId=685d82e2a70f7eb7b0f9a606
+ * @example Private: GET /api/blog-posts/507f1f77bcf86cd799439011
  */
 router.get('/:id', validateBlogPostId, validateRequest, getBlogPost);
 

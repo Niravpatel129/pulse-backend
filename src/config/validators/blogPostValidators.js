@@ -121,10 +121,15 @@ export const validateUpdateBlogPost = [
 ];
 
 // Validation for blog post ID parameter
-export const validateBlogPostId = [param('id').isMongoId().withMessage('Invalid blog post ID')];
+export const validateBlogPostId = [
+  param('id').isMongoId().withMessage('Invalid blog post ID'),
+  query('workspaceId').optional().isMongoId().withMessage('Invalid workspaceId format'),
+];
 
 // Validation for query parameters
 export const validateBlogPostQuery = [
+  query('workspaceId').optional().isMongoId().withMessage('Invalid workspaceId format'),
+
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer').toInt(),
 
   query('limit')
