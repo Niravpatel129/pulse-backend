@@ -1,6 +1,7 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import GmailIntegration from '../../models/GmailIntegration.js';
 import Invoice2 from '../../models/invoice2.js';
+import PaymentIntent from '../../models/PaymentIntent.js';
 import Payment from '../../models/paymentModel.js';
 import Workspace from '../../models/Workspace.js';
 import { paymentNotification } from '../../services/emailTemplates/paymentNotification.js';
@@ -34,12 +35,25 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
   }
 
   // Find the invoice
-  const invoice = await Invoice2.findById(id).populate('customer.id');
+  const invoice = await Invoice2.findById(id).populate('customer.id workspace');
 
   if (!invoice) {
     return res.status(404).json({
       success: false,
       message: 'Invoice not found',
+    });
+  }
+
+  // Find the payment intent record in our database
+  const paymentIntentRecord = await PaymentIntent.findOne({
+    stripePaymentIntentId: paymentIntent,
+    invoice: invoice._id,
+  }).populate('stripeConnectAccount');
+
+  if (!paymentIntentRecord) {
+    return res.status(404).json({
+      success: false,
+      message: 'Payment intent record not found',
     });
   }
 
@@ -56,11 +70,19 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     });
   }
 
-  // Verify the payment intent matches
-  if (invoice.paymentIntentId !== paymentIntent) {
+  // Verify the payment intent matches our record
+  if (paymentIntentRecord.stripePaymentIntentId !== paymentIntent) {
     return res.status(400).json({
       success: false,
       message: 'Invalid payment intent for this invoice',
+    });
+  }
+
+  // Check if payment intent is already used
+  if (paymentIntentRecord.used) {
+    return res.status(400).json({
+      success: false,
+      message: 'Payment intent has already been processed',
     });
   }
 
@@ -75,11 +97,17 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     });
   }
 
+  // Validate payment amount against our stored amount
+  if (!isAmountEqual(paymentAmount, paymentIntentRecord.amount / 100)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Payment amount does not match expected amount',
+    });
+  }
+
   // Determine payment type and status
   const isFullPayment = isAmountEqual(paymentAmount, invoiceTotal);
-  const isDepositPayment =
-    invoice.settings.deposit.enabled &&
-    isAmountEqual(paymentAmount, (invoiceTotal * invoice.settings.deposit.percentage) / 100);
+  const isDepositPayment = paymentIntentRecord.isDeposit;
 
   // Validate deposit payment
   if (isDepositPayment && !invoice.settings.deposit.enabled) {
@@ -119,7 +147,42 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     newStatus = 'partially_paid';
   }
 
-  // Add status change to history
+  // Update payment intent record
+  paymentIntentRecord.status = 'succeeded';
+  paymentIntentRecord.used = true;
+  paymentIntentRecord.statusHistory.push({
+    status: 'succeeded',
+    timestamp: new Date(),
+    reason: 'Payment completed successfully via payment success endpoint',
+  });
+
+  // Update payment method details if available
+  if (paymentIntentDetails.payment_method) {
+    paymentIntentRecord.paymentMethod = {
+      type: paymentIntentDetails.payment_method_types?.[0] || 'card',
+      card: paymentIntentDetails.payment_method_details?.card
+        ? {
+            brand: paymentIntentDetails.payment_method_details.card.brand,
+            last4: paymentIntentDetails.payment_method_details.card.last4,
+            expMonth: paymentIntentDetails.payment_method_details.card.exp_month,
+            expYear: paymentIntentDetails.payment_method_details.card.exp_year,
+            country: paymentIntentDetails.payment_method_details.card.country,
+          }
+        : null,
+      billingDetails: paymentIntentDetails.payment_method_details?.billing_details
+        ? {
+            name: paymentIntentDetails.payment_method_details.billing_details.name,
+            email: paymentIntentDetails.payment_method_details.billing_details.email,
+            phone: paymentIntentDetails.payment_method_details.billing_details.phone,
+            address: paymentIntentDetails.payment_method_details.billing_details.address,
+          }
+        : null,
+    };
+  }
+
+  await paymentIntentRecord.save();
+
+  // Add status change to invoice history
   const statusChangeEntry = {
     status: newStatus,
     changedAt: new Date(),
@@ -158,7 +221,7 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     amount: paymentAmount,
     date: new Date(paymentIntentDetails.created * 1000),
     method: normalizedPaymentMethod,
-    workspace: invoice.workspace,
+    workspace: invoice.workspace._id,
     createdBy: invoice.createdBy,
     paymentNumber,
     previousPayment,
@@ -167,7 +230,7 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     status: 'completed',
     memo: isDepositPayment
       ? `Deposit payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()} (${
-          invoice.settings.deposit.percentage
+          paymentIntentRecord.depositPercentage || invoice.settings.deposit.percentage
         }%)`
       : `Payment of ${paymentAmount} ${paymentIntentDetails.currency.toUpperCase()}`,
     // Add receipt information
@@ -180,7 +243,9 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     // Add metadata
     metadata: {
       isDeposit: isDepositPayment,
-      depositPercentage: isDepositPayment ? invoice.settings.deposit.percentage : null,
+      depositPercentage: isDepositPayment
+        ? paymentIntentRecord.depositPercentage || invoice.settings.deposit.percentage
+        : null,
       depositDueDate: isDepositPayment ? invoice.settings.deposit.dueDate : null,
       paymentSequence: {
         number: paymentNumber,
@@ -215,12 +280,18 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
     },
   });
 
+  // Link payment to payment intent record
+  paymentIntentRecord.payment = payment._id;
+  await paymentIntentRecord.save();
+
   // Send payment notifications
   if (payment.type === 'payment' || payment.type === 'deposit') {
     // Send notifications asynchronously - don't wait for completion
-    sendPaymentNotificationViaGmail(payment, invoice, req.workspace._id).catch((err) =>
-      console.error('Error sending payment notification via Gmail:', err),
-    );
+    sendPaymentNotificationViaGmail(
+      payment,
+      invoice,
+      req.workspace?._id || invoice.workspace._id,
+    ).catch((err) => console.error('Error sending payment notification via Gmail:', err));
   }
 
   res.status(200).json({
@@ -230,6 +301,11 @@ export const handlePaymentSuccess = asyncHandler(async (req, res) => {
       invoice,
       payment,
       paymentIntent: paymentIntentDetails,
+      paymentIntentRecord: {
+        id: paymentIntentRecord._id,
+        status: paymentIntentRecord.status,
+        used: paymentIntentRecord.used,
+      },
       remainingBalance,
       receipt: {
         number: receiptNumber,

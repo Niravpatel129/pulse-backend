@@ -1,6 +1,7 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
-import StripeConnectAccount from '../../models/StripeConnectAccount.js';
 import Invoice2 from '../../models/invoice2.js';
+import PaymentIntent from '../../models/PaymentIntent.js';
+import StripeConnectAccount from '../../models/StripeConnectAccount.js';
 import StripeService from '../../services/stripeService.js';
 
 // @desc    Create a payment intent for an invoice2
@@ -73,19 +74,65 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
   try {
     // Create payment intent using the service
-    const paymentIntent = await StripeService.createPaymentIntent(
+    const stripePaymentIntent = await StripeService.createPaymentIntent(
       paymentAmount,
       paymentCurrency,
       connectAccount.accountId,
       invoice.workspace.name || invoice.workspace.subdomain,
     );
 
-    // Store the payment intent ID in the invoice
-    invoice.paymentIntentId = paymentIntent.id;
+    // Determine payment type
+    let paymentType = 'full_payment';
+    if (isDeposit) {
+      paymentType = 'deposit';
+    } else if (amount && amount < Math.round(invoice.totals.total * 100)) {
+      paymentType = 'partial_payment';
+    }
+
+    // Create payment intent record in database
+    const paymentIntentRecord = new PaymentIntent({
+      stripePaymentIntentId: stripePaymentIntent.id,
+      clientSecret: stripePaymentIntent.client_secret,
+      invoice: invoice._id,
+      workspace: invoice.workspace._id,
+      amount: paymentAmount,
+      currency: paymentCurrency,
+      status: stripePaymentIntent.status,
+      paymentType,
+      isDeposit,
+      depositPercentage: isDeposit ? invoice.depositPercentage : null,
+      stripeConnectAccount: connectAccount._id,
+      customer: {
+        id: invoice.customer?.id,
+        name: invoice.customer?.name,
+        email: invoice.customer?.email,
+      },
+      description: `Payment for invoice ${invoice.invoiceNumber}`,
+      metadata: {
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceTitle: invoice.invoiceTitle,
+        source: 'invoice_payment',
+      },
+      createdBy: invoice.createdBy,
+      clientIp: req.ip,
+      userAgent: req.get('User-Agent'),
+      source: 'web',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+    });
+
+    // Add initial status to history
+    paymentIntentRecord.statusHistory.push({
+      status: stripePaymentIntent.status,
+      timestamp: new Date(),
+      reason: 'Payment intent created',
+    });
+
+    await paymentIntentRecord.save();
+
+    // Store the payment intent ID in the invoice (for backward compatibility)
+    invoice.paymentIntentId = stripePaymentIntent.id;
 
     // Add a timeline entry for the payment intent creation
-    // Don't add timeline entry if request comes from workspace user (for testing)
-
     const paymentAttemptEntry = {
       status: 'seen',
       changedAt: new Date(),
@@ -102,8 +149,11 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: paymentIntent,
-      clientSecret: paymentIntent.client_secret,
+      data: {
+        ...stripePaymentIntent,
+        paymentIntentRecordId: paymentIntentRecord._id,
+      },
+      clientSecret: stripePaymentIntent.client_secret,
     });
   } catch (error) {
     return res.status(400).json({
