@@ -48,6 +48,7 @@ import invoiceRoutes from './src/routes/invoiceRoutes.js';
 import invoiceTaxRateRoutes from './src/routes/invoiceTaxRateRoutes.js';
 import leadFormRoutes from './src/routes/leadFormRoutes.js';
 import meetingRoutes from './src/routes/meetingRoutes.js';
+import newsletterRoutes from './src/routes/newsletterRoutes.js';
 import paymentRoutes from './src/routes/paymentRoutes.js';
 import posRoutes from './src/routes/posRoutes.js';
 import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
@@ -225,6 +226,9 @@ app.use(`${routesPrefix}/file-manager`, fileManagerRoutes);
 
 // Digital Products
 app.use(`${routesPrefix}/digital-products`, digitalProductRoutes);
+
+// Newsletter
+app.use(`${routesPrefix}/newsletter`, newsletterRoutes);
 
 // The error handler must be registered before any other error middleware and after all controllers
 Sentry.setupExpressErrorHandler(app);
