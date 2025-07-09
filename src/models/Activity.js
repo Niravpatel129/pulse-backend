@@ -5,7 +5,7 @@ const activitySchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: false, // Make optional to allow public submissions
     },
     workspace: {
       type: mongoose.Schema.Types.ObjectId,

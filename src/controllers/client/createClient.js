@@ -22,8 +22,14 @@ export const createClient = async (req, res, next) => {
       customFields,
     } = req.body;
 
+    // Handle empty email by setting it to null to avoid unique constraint violations
+    const userData = {
+      ...user,
+      email: user.email && user.email.trim() !== '' ? user.email : null,
+    };
+
     const client = await Client.create({
-      user,
+      user: userData,
       workspace: req.workspace._id,
       phone,
       address,
@@ -52,7 +58,7 @@ export const createClient = async (req, res, next) => {
       entityType: 'client',
       metadata: {
         clientName: client.user.name,
-        clientEmail: client.user.email,
+        clientEmail: client.user.email || '', // Provide empty string fallback for null emails
       },
     });
 

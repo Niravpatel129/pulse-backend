@@ -24,10 +24,18 @@ export const updateClient = async (req, res, next) => {
       isActive,
     } = req.body;
 
+    // Handle empty email by setting it to null to avoid unique constraint violations
+    const userData = user
+      ? {
+          ...user,
+          email: user.email && user.email.trim() !== '' ? user.email : null,
+        }
+      : user;
+
     const client = await Client.findByIdAndUpdate(
       req.params.id,
       {
-        user,
+        user: userData,
         phone,
         address,
         shippingAddress,
@@ -71,7 +79,7 @@ export const updateClient = async (req, res, next) => {
       entityType: 'client',
       metadata: {
         clientName: client.user.name,
-        clientEmail: client.user.email,
+        clientEmail: client.user.email || '', // Provide empty string fallback for null emails
       },
     });
 

@@ -143,6 +143,17 @@ clientSchema.pre(/^find/, function (next) {
   next();
 });
 
+// Add sparse compound index for workspace and user.email to handle unique constraints
+// This allows multiple clients with null emails in the same workspace
+clientSchema.index(
+  { workspace: 1, 'user.email': 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: { 'user.email': { $exists: true, $ne: null } },
+  },
+);
+
 const Client = mongoose.model('Client', clientSchema);
 
 export default Client;

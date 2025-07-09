@@ -251,7 +251,7 @@ const inboundEmailController = asyncHandler(async (req, res) => {
             // For callback forms, we might not have email, so create a basic client
             clientData.user = {
               name: standardFields.name,
-              email: '', // Empty email for callback-only clients
+              email: null, // Set to null to avoid unique constraint violations
             };
             clientData.contact = {
               firstName: standardFields.name.split(' ')[0] || '',
@@ -288,7 +288,7 @@ const inboundEmailController = asyncHandler(async (req, res) => {
             entityType: 'client',
             metadata: {
               clientName: createdClient.user.name,
-              clientEmail: createdClient.user.email,
+              clientEmail: createdClient.user.email || '', // Provide empty string fallback for null emails
               source: 'form_submission',
               formType: type,
             },
