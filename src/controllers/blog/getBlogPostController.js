@@ -28,9 +28,9 @@ export const getBlogPost = asyncHandler(async (req, res) => {
   const query = { _id: id, workspace: workspaceId };
 
   // For public access, only show published posts
-  if (req.query.workspaceId) {
-    query.status = 'published';
-  }
+  // if (req.query.workspaceId) {
+  //   query.status = 'published';
+  // }
 
   const blogPost = await BlogPost.findOne(query)
     .populate('createdBy', 'name email')
