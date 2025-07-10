@@ -36,14 +36,14 @@ export const getAllBlogPosts = asyncHandler(async (req, res) => {
   // Build query
   const query = { workspace: workspaceId };
 
-  // Filter by status - for public access, only show published posts
-  if (req.query.workspaceId) {
-    // Public access - only published posts
-    query.status = 'published';
-  } else if (status) {
-    // Authenticated access - can filter by status
-    query.status = status;
-  }
+  // // Filter by status - for public access, only show published posts
+  // if (req.query.workspaceId) {
+  //   // Public access - only published posts
+  //   query.status = 'published';
+  // } else if (status) {
+  //   // Authenticated access - can filter by status
+  //   query.status = status;
+  // }
 
   // Filter by category
   if (category) {
