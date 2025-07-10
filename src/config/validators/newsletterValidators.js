@@ -18,7 +18,7 @@ export const createNewsletterSignupValidation = [
 
 // Validation for getting newsletter signups
 export const getNewsletterSignupsValidation = [
-  query('workspaceId').isMongoId().withMessage('Please provide a valid workspace ID'),
+  // workspaceId removed, handled by extractWorkspace
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
   query('limit')
     .optional()
@@ -35,14 +35,14 @@ export const getNewsletterSignupsValidation = [
   query('search')
     .optional()
     .trim()
-    .isLength({ min: 1, max: 100 })
-    .withMessage('Search term must be between 1 and 100 characters'),
+    .isLength({ min: 0, max: 100 })
+    .withMessage('Search term must be up to 100 characters'),
   validateRequest,
 ];
 
 // Validation for getting newsletter stats
 export const getNewsletterStatsValidation = [
-  query('workspaceId').isMongoId().withMessage('Please provide a valid workspace ID'),
+  // workspaceId removed, handled by extractWorkspace
   validateRequest,
 ];
 

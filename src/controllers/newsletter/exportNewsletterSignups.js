@@ -1,6 +1,5 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import newsletterService from '../../services/newsletterService.js';
-import AppError from '../../utils/AppError.js';
 
 /**
  * @desc    Export newsletter signups for a workspace
@@ -8,12 +7,8 @@ import AppError from '../../utils/AppError.js';
  * @access  Private (workspace admins)
  */
 const exportNewsletterSignups = asyncHandler(async (req, res, next) => {
-  const { workspaceId, format = 'json' } = req.query;
-
-  // Validate workspace ID
-  if (!workspaceId) {
-    return next(new AppError('Workspace ID is required', 400));
-  }
+  const workspaceId = req.workspace._id;
+  const { format = 'json' } = req.query;
 
   // Get signups data
   const signups = await newsletterService.exportSignups(workspaceId);

@@ -1,6 +1,5 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
 import NewsletterSignup from '../../models/NewsletterSignup.js';
-import AppError from '../../utils/AppError.js';
 
 /**
  * @desc    Get newsletter signups for a workspace
@@ -8,17 +7,12 @@ import AppError from '../../utils/AppError.js';
  * @access  Private (workspace members)
  */
 const getNewsletterSignups = asyncHandler(async (req, res, next) => {
-  const { workspaceId } = req.query;
+  const workspaceId = req.workspace._id;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const status = req.query.status;
   const source = req.query.source;
   const search = req.query.search;
-
-  // Validate workspace ID
-  if (!workspaceId) {
-    return next(new AppError('Workspace ID is required', 400));
-  }
 
   // Build query
   const query = { workspaceId };
