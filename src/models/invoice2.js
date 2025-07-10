@@ -167,6 +167,10 @@ const invoice2Schema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    notes: {
+      type: String,
+      default: '',
+    },
     issueDate: {
       type: Date,
       required: true,
