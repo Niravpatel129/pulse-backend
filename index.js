@@ -22,6 +22,7 @@ import agentRoutes from './src/routes/agentRoutes.js';
 import aiRoutes2 from './src/routes/ai/aiRoutes.js';
 import aiSettingsRoutes from './src/routes/ai/aiSettingsRoutes.js';
 import alertRoutes from './src/routes/alertRoutes.js';
+import analyticsRoutes from './src/routes/analyticsRoutes.js';
 import apiKeyRoutes from './src/routes/apiKeyRoutes.js';
 import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
@@ -184,6 +185,9 @@ app.use(`${routesPrefix}/cms`, cmsRoutes);
 
 // Blog Posts
 app.use(`${routesPrefix}/blog-posts`, blogRoutes);
+
+// Analytics
+app.use(`${routesPrefix}/analytics`, analyticsRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
