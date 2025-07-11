@@ -10,8 +10,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
 import multer from 'multer';
-import swaggerUi from 'swagger-ui-express';
-import swaggerSpec from './docs/api-docs.js';
 import './instrument.js';
 import connectDB from './src/config/db.js';
 import { initializeGmailListener } from './src/init/gmailListener.js';
@@ -56,6 +54,7 @@ import productCatalogRoutes from './src/routes/productCatalogRoutes.js';
 import projectInvoiceRoutes from './src/routes/projectInvoiceRoutes.js';
 import publicRoutes from './src/routes/publicRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
+import shippingRoutes from './src/routes/shippingRoutes.js';
 import stripeRoutes from './src/routes/stripeRoutes.js';
 import stripeWebhookRoutes from './src/routes/stripeWebhookRoutes.js';
 import tablesRoutes from './src/routes/tablesRoutes.js';
@@ -216,9 +215,6 @@ app.use(`${routesPrefix}/pos`, posRoutes);
 // Public routes (no authentication)
 app.use(`${routesPrefix}/public`, publicRoutes);
 
-// API Documentation
-app.use(`${routesPrefix}/docs`, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
 // API Key Management
 app.use(`${routesPrefix}/api-keys`, apiKeyRoutes);
 
@@ -233,6 +229,9 @@ app.use(`${routesPrefix}/digital-products`, digitalProductRoutes);
 
 // Newsletter
 app.use(`${routesPrefix}/newsletter`, newsletterRoutes);
+
+// Shipping
+app.use(`${routesPrefix}/shipping`, shippingRoutes);
 
 // The error handler must be registered before any other error middleware and after all controllers
 Sentry.setupExpressErrorHandler(app);
