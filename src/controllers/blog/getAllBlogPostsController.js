@@ -8,7 +8,7 @@ import asyncHandler from '../../utils/asyncHandler.js';
  *
  * This controller now includes comprehensive analytics data for each blog post when:
  * - includeAnalytics=true (default)
- * - User is authenticated (not public access)
+ * - Available for both authenticated users and public access
  *
  * Analytics data includes:
  * - Total views and unique visitors
@@ -321,18 +321,16 @@ export const getAllBlogPosts = asyncHandler(async (req, res) => {
 
   // Add analytics data to each blog post if requested
   let blogPostsWithAnalytics = blogPosts;
-  if (includeAnalytics === 'true' && !req.query.workspaceId) {
-    // Only include analytics for authenticated users, not public access
-    blogPostsWithAnalytics = await Promise.all(
-      blogPosts.map(async (post) => {
-        const analytics = await getBlogPostAnalytics(post._id, workspaceId);
-        return {
-          ...post.toObject(),
-          analytics,
-        };
-      }),
-    );
-  }
+  // Include analytics for both authenticated users and public access
+  blogPostsWithAnalytics = await Promise.all(
+    blogPosts.map(async (post) => {
+      const analytics = await getBlogPostAnalytics(post._id, workspaceId);
+      return {
+        ...post.toObject(),
+        analytics,
+      };
+    }),
+  );
 
   const pagination = {
     page: pageNumber,
