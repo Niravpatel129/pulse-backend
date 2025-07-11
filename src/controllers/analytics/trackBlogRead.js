@@ -79,7 +79,11 @@ export const trackBlogRead = asyncHandler(async (req, res) => {
     os: finalOS,
   });
 
-  await analyticsRecord.save();
+  // Save analytics record and increment blog post views atomically
+  await Promise.all([
+    analyticsRecord.save(),
+    BlogPost.findByIdAndUpdate(postId, { $inc: { views: 1 } }),
+  ]);
 
   res
     .status(200)
