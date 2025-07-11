@@ -53,11 +53,23 @@ export const getShippingRates = async (req, res) => {
         Authorization: `Bearer ${process.env.STALLION_API_KEY}`,
       },
     });
+    console.log('🚀 response:', response.data);
 
-    res.json({
-      status: 'success',
-      data: response.data,
-    });
+    if (response.data.success) {
+      res.json({
+        status: 'success',
+        data: {
+          rates: response.data.rates,
+          success: response.data.success,
+        },
+      });
+    } else {
+      res.status(400).json({
+        status: 'error',
+        message: 'Failed to get shipping rates from Stallion API',
+        details: response.data,
+      });
+    }
   } catch (error) {
     console.error('Stallion API Error:', error.response?.data || error.message);
 
