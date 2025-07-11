@@ -20,16 +20,15 @@ export const getShippingRates = async (req, res) => {
     tax_identifier,
   } = req.body;
 
-  if (!to_address || !return_address || !weight || !length || !width || !height) {
+  if (!to_address || !weight || !length || !width || !height) {
     return res.status(400).json({
       status: 'error',
-      message: 'Missing required fields: to_address, return_address, weight, length, width, height',
+      message: 'Missing required fields: to_address, weight, length, width, height',
     });
   }
 
   const payload = {
     to_address,
-    return_address,
     is_return,
     weight_unit,
     weight,
