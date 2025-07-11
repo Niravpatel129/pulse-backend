@@ -67,7 +67,6 @@ const getBlogPostAnalytics = async (postId, workspaceId) => {
     {
       $match: {
         postId: new mongoose.Types.ObjectId(postId),
-        workspaceId: new mongoose.Types.ObjectId(workspaceId),
       },
     },
     {
