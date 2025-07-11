@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import BlogAnalytics from '../../models/BlogAnalytics.js';
 import BlogPost from '../../models/BlogPost.js';
 import ApiResponse from '../../utils/apiResponse.js';
@@ -65,8 +66,8 @@ const getBlogPostAnalytics = async (postId, workspaceId) => {
   const analytics = await BlogAnalytics.aggregate([
     {
       $match: {
-        postId: postId,
-        workspaceId: workspaceId,
+        postId: new mongoose.Types.ObjectId(postId),
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
       },
     },
     {
