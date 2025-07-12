@@ -1,4 +1,5 @@
 import asyncHandler from '../../middleware/asyncHandler.js';
+import { BusinessIntelligenceService } from '../../services/businessIntelligenceService.js';
 import { GooglePlacesService } from '../../services/googlePlacesService.js';
 import { RecommendationService } from '../../services/recommendationService.js';
 import { ReviewSentimentService } from '../../services/reviewSentimentService.js';
@@ -51,7 +52,27 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       rating: businessProfile.rating,
     });
 
-    // Step 2: Parallel analysis execution
+    // Step 2: Infer industry and keywords if not provided
+    let finalIndustry = industry;
+    let finalKeywords = keywords;
+
+    if (!industry || !keywords.length) {
+      console.log('🤖 Using AI to infer business details...');
+      const inferredDetails = await BusinessIntelligenceService.inferBusinessDetails(
+        business_name,
+        location,
+      );
+
+      finalIndustry = industry || inferredDetails.industry;
+      finalKeywords = keywords.length > 0 ? keywords : inferredDetails.keywords;
+
+      console.log('✅ AI-inferred business details:', {
+        industry: finalIndustry,
+        keywords: finalKeywords,
+      });
+    }
+
+    // Step 3: Parallel analysis execution
     const analysisPromises = [];
 
     // Website analysis (if website exists)
@@ -60,7 +81,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       websiteAnalysisPromise = WebsiteAnalysisService.analyzeWebsite(businessProfile.website, {
         businessName: businessProfile.name,
         location: businessProfile.formatted_address,
-        industry,
+        industry: finalIndustry,
       });
       analysisPromises.push(websiteAnalysisPromise);
     }
@@ -69,8 +90,8 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
     const serpAnalysisPromise = SerpAnalysisService.analyzeLocalRankings(
       businessProfile.name,
       businessProfile.formatted_address,
-      keywords,
-      industry,
+      finalKeywords,
+      finalIndustry,
     );
     analysisPromises.push(serpAnalysisPromise);
 
@@ -101,7 +122,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
         ? results[websiteAnalysisPromise ? 2 : 1].value
         : null;
 
-    // Step 3: Calculate scores
+    // Step 4: Calculate scores
     const scoringResult = ScoringService.calculateScores({
       businessProfile,
       websiteAnalysis,
@@ -110,17 +131,17 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       hasWebsite: !!businessProfile.website,
     });
 
-    // Step 4: Generate recommendations
+    // Step 5: Generate recommendations
     const recommendations = RecommendationService.generateRecommendations({
       businessProfile,
       websiteAnalysis,
       serpAnalysis,
       reviewAnalysis,
       scoringResult,
-      industry,
+      industry: finalIndustry,
     });
 
-    // Step 5: Calculate summary metrics
+    // Step 6: Calculate summary metrics
     const totalIssues = [
       ...scoringResult.seoIssues,
       ...scoringResult.uxIssues,
@@ -138,7 +159,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
     const uxScoreFormatted = Math.round((scoringResult.uxScore / 100) * 40);
     const localScoreFormatted = Math.round((scoringResult.localListingScore / 100) * 20);
 
-    // Step 6: Compile final report
+    // Step 7: Compile final report
     const analysisReport = {
       // Summary scores (formatted to match expected output)
       summary_score: scoringResult.summaryScore,
@@ -247,20 +268,51 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
               review_count: businessProfile.user_ratings_total,
               position: serpAnalysis.rankings_summary?.average_map_pack_position || null,
             },
-            competitors: serpAnalysis.competitors
-              .filter((c) => c.type === 'local')
-              .slice(0, 6)
-              .map((competitor, index) => ({
+            competitors: (() => {
+              // Get local competitors first (they're more important for local businesses)
+              const localCompetitors = serpAnalysis.competitors.filter((c) => c.type === 'local');
+
+              // If we have enough local competitors, use them
+              if (localCompetitors.length >= 6) {
+                return localCompetitors.slice(0, 6).map((competitor, index) => ({
+                  name: competitor.name,
+                  rating: competitor.rating,
+                  review_count: competitor.reviews,
+                  position: competitor.average_position,
+                  rank: index + 1,
+                  type: 'local',
+                  beating_you:
+                    competitor.average_position <
+                    (serpAnalysis.rankings_summary?.average_map_pack_position || 999),
+                }));
+              }
+
+              // Otherwise, combine local and organic competitors
+              const organicCompetitors = serpAnalysis.competitors.filter(
+                (c) => c.type === 'organic',
+              );
+              const combinedCompetitors = [...localCompetitors, ...organicCompetitors];
+
+              return combinedCompetitors.slice(0, 6).map((competitor, index) => ({
                 name: competitor.name,
-                rating: competitor.rating,
-                review_count: competitor.reviews,
+                rating: competitor.rating || null,
+                review_count: competitor.reviews || null,
                 position: competitor.average_position,
                 rank: index + 1,
+                type: competitor.type,
                 beating_you:
-                  competitor.average_position <
-                  (serpAnalysis.rankings_summary?.average_map_pack_position || 999),
-              })),
+                  competitor.type === 'local'
+                    ? competitor.average_position <
+                      (serpAnalysis.rankings_summary?.average_map_pack_position || 999)
+                    : competitor.average_position <
+                      (serpAnalysis.rankings_summary?.average_organic_position || 999),
+              }));
+            })(),
             total_competitors_found: serpAnalysis.competitors.length,
+            local_competitors_found: serpAnalysis.competitors.filter((c) => c.type === 'local')
+              .length,
+            organic_competitors_found: serpAnalysis.competitors.filter((c) => c.type === 'organic')
+              .length,
           }
         : null,
 
@@ -314,7 +366,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
             : 0,
           potential_monthly_revenue_gain: serpAnalysis?.rankings_summary
             ? Math.round(
-                (keywords.length || 3) *
+                (finalKeywords.length || 3) *
                   800 *
                   (serpAnalysis.rankings_summary.average_map_pack_position
                     ? (serpAnalysis.rankings_summary.average_map_pack_position - 1) / 3
@@ -362,21 +414,21 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
               }))
           : [],
         industry_benchmarks: {
-          average_rating_in_industry: industry === 'restaurant' ? 4.2 : 4.1,
+          average_rating_in_industry: finalIndustry === 'restaurant' ? 4.2 : 4.1,
           your_rating_vs_industry: businessProfile.rating
             ? businessProfile.rating >= 4.2
               ? 'Above average'
               : 'Below average'
             : 'No rating',
-          average_reviews_in_industry: industry === 'restaurant' ? 150 : 120,
+          average_reviews_in_industry: finalIndustry === 'restaurant' ? 150 : 120,
           your_reviews_vs_industry: businessProfile.user_ratings_total
             ? businessProfile.user_ratings_total >= 150
               ? 'Above average'
               : 'Below average'
             : 'No reviews',
-          top_25_percent_rating: industry === 'restaurant' ? 4.5 : 4.4,
+          top_25_percent_rating: finalIndustry === 'restaurant' ? 4.5 : 4.4,
           gap_to_top_quartile: businessProfile.rating
-            ? Math.max(0, (industry === 'restaurant' ? 4.5 : 4.4) - businessProfile.rating)
+            ? Math.max(0, (finalIndustry === 'restaurant' ? 4.5 : 4.4) - businessProfile.rating)
             : 0,
           businesses_outperforming_you: serpAnalysis?.competitors
             ? serpAnalysis.competitors.filter(
@@ -474,8 +526,9 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       analysis_metadata: {
         analyzed_at: new Date().toISOString(),
         analysis_duration_ms: Date.now() - startTime,
-        keywords_analyzed: keywords,
-        industry: industry,
+        keywords_analyzed: finalKeywords,
+        industry: finalIndustry,
+        ai_inferred: !industry || !keywords.length,
       },
     };
 
@@ -484,6 +537,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       summary_score: scoringResult.summaryScore,
       has_website: !!businessProfile.website,
       recommendations_count: recommendations.length,
+      ai_inferred: !industry || !keywords.length,
     });
 
     res
