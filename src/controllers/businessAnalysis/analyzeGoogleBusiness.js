@@ -10,6 +10,375 @@ import ApiError from '../../utils/apiError.js';
 import ApiResponse from '../../utils/apiResponse.js';
 
 /**
+ * Analyze website experience and optimization
+ */
+const analyzeWebsiteExperience = (websiteAnalysis, businessProfile, keywords, industry) => {
+  const analysis = {
+    overall_score: 0,
+    max_score: 40,
+    components: {},
+    recommendations: [],
+  };
+
+  let currentScore = 0;
+
+  // If no website analysis, return empty analysis
+  if (!websiteAnalysis || websiteAnalysis.error) {
+    analysis.recommendations.push({
+      component: 'website_existence',
+      recommendation: 'Create a professional website to establish online presence and credibility',
+      priority: 'critical',
+    });
+
+    analysis.components.website_existence = {
+      label: 'Website Existence',
+      points_possible: 40,
+      points_earned: 0,
+      status: 'missing',
+      value: 'No website found',
+      recommendation: 'Create a professional website to establish online presence and credibility',
+    };
+
+    analysis.overall_status = 'critical';
+    analysis.completion_percentage = 0;
+
+    return analysis;
+  }
+
+  const content = websiteAnalysis.page_content || {};
+  const technical = websiteAnalysis.technical_seo || {};
+  const ux = websiteAnalysis.ux_analysis || {};
+  const mobile = websiteAnalysis.mobile_analysis || {};
+  const performance = websiteAnalysis.performance_metrics || {};
+
+  // Website experience checks
+  const checks = [
+    {
+      key: 'page_title',
+      label: 'Page Title',
+      points: 4,
+      check: () => !!content.title,
+      value: content.title || 'Missing',
+      status: content.title ? 'complete' : 'missing',
+      recommendation: !content.title
+        ? 'Add a descriptive page title that includes your business name and main keywords'
+        : null,
+    },
+    {
+      key: 'meta_description',
+      label: 'Meta Description',
+      points: 3,
+      check: () => !!content.metaDescription,
+      value: content.metaDescription || 'Missing',
+      status: content.metaDescription ? 'complete' : 'missing',
+      recommendation: !content.metaDescription
+        ? 'Add a compelling meta description to improve search click-through rates'
+        : null,
+    },
+    {
+      key: 'mobile_friendly',
+      label: 'Mobile-Friendly Design',
+      points: 6,
+      check: () => mobile.is_mobile_friendly,
+      value: mobile.is_mobile_friendly ? 'Mobile-friendly' : 'Not mobile-friendly',
+      status: mobile.is_mobile_friendly ? 'complete' : 'needs_improvement',
+      recommendation: !mobile.is_mobile_friendly
+        ? 'Optimize your website for mobile devices - over 60% of users browse on mobile'
+        : null,
+    },
+    {
+      key: 'page_speed',
+      label: 'Page Loading Speed',
+      points: 5,
+      check: () => (performance.page_load_time || 0) < 3000,
+      value: performance.page_load_time
+        ? `${Math.round(performance.page_load_time / 1000)}s`
+        : 'Unknown',
+      status: (() => {
+        if (!performance.page_load_time) return 'unknown';
+        if (performance.page_load_time < 3000) return 'excellent';
+        if (performance.page_load_time < 5000) return 'good';
+        return 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        if (!performance.page_load_time)
+          return 'Test your website speed and optimize for faster loading';
+        if (performance.page_load_time >= 5000)
+          return 'Critical: Your website loads too slowly. Compress images and optimize code';
+        if (performance.page_load_time >= 3000)
+          return 'Improve page speed - aim for under 3 seconds load time';
+        return null;
+      })(),
+    },
+    {
+      key: 'contact_options',
+      label: 'Contact Options',
+      points: 5,
+      check: () => {
+        const hasContactForm = (ux.contactForms || 0) > 0;
+        const hasPhoneVisible = (content.contactInfo?.phones?.length || 0) > 0;
+        const hasEmailVisible = (content.contactInfo?.emails?.length || 0) > 0;
+        const hasChat = (ux.chatWidgets || 0) > 0;
+        return hasContactForm || hasPhoneVisible || hasEmailVisible || hasChat;
+      },
+      value: (() => {
+        const options = [];
+        if ((ux.contactForms || 0) > 0) options.push('Contact form');
+        if ((content.contactInfo?.phones?.length || 0) > 0) options.push('Phone visible');
+        if ((content.contactInfo?.emails?.length || 0) > 0) options.push('Email visible');
+        if ((ux.chatWidgets || 0) > 0) options.push('Live chat');
+        return options.length > 0 ? options.join(', ') : 'No contact options';
+      })(),
+      status: (() => {
+        const hasContactForm = (ux.contactForms || 0) > 0;
+        const hasPhoneVisible = (content.contactInfo?.phones?.length || 0) > 0;
+        const hasEmailVisible = (content.contactInfo?.emails?.length || 0) > 0;
+        const hasChat = (ux.chatWidgets || 0) > 0;
+        const totalOptions = [hasContactForm, hasPhoneVisible, hasEmailVisible, hasChat].filter(
+          Boolean,
+        ).length;
+
+        if (totalOptions === 0) return 'missing';
+        if (totalOptions >= 3) return 'excellent';
+        if (totalOptions >= 2) return 'good';
+        return 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const hasContactForm = (ux.contactForms || 0) > 0;
+        const hasPhoneVisible = (content.contactInfo?.phones?.length || 0) > 0;
+        const hasEmailVisible = (content.contactInfo?.emails?.length || 0) > 0;
+        const hasChat = (ux.chatWidgets || 0) > 0;
+        const totalOptions = [hasContactForm, hasPhoneVisible, hasEmailVisible, hasChat].filter(
+          Boolean,
+        ).length;
+
+        if (totalOptions === 0)
+          return 'Add multiple ways for customers to contact you (phone, email, contact form)';
+        if (totalOptions === 1)
+          return 'Add more contact options to make it easier for customers to reach you';
+        return null;
+      })(),
+    },
+    {
+      key: 'call_to_action',
+      label: 'Call-to-Action Buttons',
+      points: 4,
+      check: () => (content.ctaElements || 0) >= 2,
+      value: content.ctaElements ? `${content.ctaElements} CTA buttons` : 'No CTA buttons',
+      status: (() => {
+        const ctas = content.ctaElements || 0;
+        if (ctas === 0) return 'missing';
+        if (ctas >= 3) return 'excellent';
+        if (ctas >= 2) return 'good';
+        return 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const ctas = content.ctaElements || 0;
+        if (ctas === 0)
+          return 'Add clear call-to-action buttons (e.g., "Call Now", "Get Quote", "Book Now")';
+        if (ctas === 1) return 'Add more call-to-action buttons throughout your website';
+        return null;
+      })(),
+    },
+    {
+      key: 'trust_signals',
+      label: 'Trust Signals',
+      points: 4,
+      check: () => {
+        const hasTestimonials = (ux.testimonialElements || 0) > 0;
+        const hasSocialLinks = (ux.socialLinks || 0) > 0;
+        const hasSSL = technical.is_secure;
+        return hasTestimonials || hasSocialLinks || hasSSL;
+      },
+      value: (() => {
+        const signals = [];
+        if ((ux.testimonialElements || 0) > 0) signals.push('Testimonials');
+        if ((ux.socialLinks || 0) > 0) signals.push('Social links');
+        if (technical.is_secure) signals.push('SSL certificate');
+        return signals.length > 0 ? signals.join(', ') : 'No trust signals';
+      })(),
+      status: (() => {
+        const hasTestimonials = (ux.testimonialElements || 0) > 0;
+        const hasSocialLinks = (ux.socialLinks || 0) > 0;
+        const hasSSL = technical.is_secure;
+        const totalSignals = [hasTestimonials, hasSocialLinks, hasSSL].filter(Boolean).length;
+
+        if (totalSignals === 0) return 'missing';
+        if (totalSignals >= 3) return 'excellent';
+        if (totalSignals >= 2) return 'good';
+        return 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const hasTestimonials = (ux.testimonialElements || 0) > 0;
+        const hasSocialLinks = (ux.socialLinks || 0) > 0;
+        const hasSSL = technical.is_secure;
+        const totalSignals = [hasTestimonials, hasSocialLinks, hasSSL].filter(Boolean).length;
+
+        if (totalSignals === 0)
+          return 'Add trust signals like customer testimonials, SSL certificate, and social media links';
+        if (totalSignals === 1) return 'Add more trust signals to build customer confidence';
+        return null;
+      })(),
+    },
+    {
+      key: 'content_quality',
+      label: 'Content Quality',
+      points: 3,
+      check: () => (content.wordCount || 0) >= 300,
+      value: content.wordCount ? `${content.wordCount} words` : 'Unknown word count',
+      status: (() => {
+        const words = content.wordCount || 0;
+        if (words === 0) return 'unknown';
+        if (words >= 500) return 'excellent';
+        if (words >= 300) return 'good';
+        return 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const words = content.wordCount || 0;
+        if (words === 0) return 'Add quality content to inform visitors about your services';
+        if (words < 300)
+          return 'Add more content - aim for at least 300 words of quality information';
+        return null;
+      })(),
+    },
+    {
+      key: 'business_info',
+      label: 'Business Information',
+      points: 3,
+      check: () => {
+        const hasBusinessName = content.title
+          ?.toLowerCase()
+          .includes(businessProfile.name?.toLowerCase());
+        const hasLocation = content.textContent
+          ?.toLowerCase()
+          .includes(businessProfile.formatted_address?.toLowerCase().split(',')[0]);
+        return hasBusinessName || hasLocation;
+      },
+      value: (() => {
+        const hasBusinessName = content.title
+          ?.toLowerCase()
+          .includes(businessProfile.name?.toLowerCase());
+        const hasLocation = content.textContent
+          ?.toLowerCase()
+          .includes(businessProfile.formatted_address?.toLowerCase().split(',')[0]);
+        const info = [];
+        if (hasBusinessName) info.push('Business name');
+        if (hasLocation) info.push('Location');
+        return info.length > 0 ? info.join(', ') : 'Business info missing';
+      })(),
+      status: (() => {
+        const hasBusinessName = content.title
+          ?.toLowerCase()
+          .includes(businessProfile.name?.toLowerCase());
+        const hasLocation = content.textContent
+          ?.toLowerCase()
+          .includes(businessProfile.formatted_address?.toLowerCase().split(',')[0]);
+        const totalInfo = [hasBusinessName, hasLocation].filter(Boolean).length;
+
+        if (totalInfo === 0) return 'missing';
+        if (totalInfo >= 2) return 'complete';
+        return 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const hasBusinessName = content.title
+          ?.toLowerCase()
+          .includes(businessProfile.name?.toLowerCase());
+        const hasLocation = content.textContent
+          ?.toLowerCase()
+          .includes(businessProfile.formatted_address?.toLowerCase().split(',')[0]);
+        const totalInfo = [hasBusinessName, hasLocation].filter(Boolean).length;
+
+        if (totalInfo === 0)
+          return 'Include your business name and location prominently on your website';
+        if (totalInfo === 1)
+          return 'Add more business information to help customers find and identify you';
+        return null;
+      })(),
+    },
+    {
+      key: 'technical_seo',
+      label: 'Technical SEO',
+      points: 3,
+      check: () => {
+        const hasSSL = technical.is_secure;
+        const hasViewport = technical.hasMetaViewport;
+        const hasCanonical = technical.hasCanonical;
+        return hasSSL && hasViewport;
+      },
+      value: (() => {
+        const factors = [];
+        if (technical.is_secure) factors.push('SSL');
+        if (technical.hasMetaViewport) factors.push('Mobile viewport');
+        if (technical.hasCanonical) factors.push('Canonical URL');
+        return factors.length > 0 ? factors.join(', ') : 'Technical issues';
+      })(),
+      status: (() => {
+        const hasSSL = technical.is_secure;
+        const hasViewport = technical.hasMetaViewport;
+        const hasCanonical = technical.hasCanonical;
+        const totalFactors = [hasSSL, hasViewport, hasCanonical].filter(Boolean).length;
+
+        if (totalFactors === 0) return 'poor';
+        if (totalFactors >= 3) return 'excellent';
+        if (totalFactors >= 2) return 'good';
+        return 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const missingFactors = [];
+        if (!technical.is_secure) missingFactors.push('SSL certificate');
+        if (!technical.hasMetaViewport) missingFactors.push('mobile viewport tag');
+        if (!technical.hasCanonical) missingFactors.push('canonical URL');
+
+        if (missingFactors.length > 0) {
+          return `Fix technical SEO issues: ${missingFactors.join(', ')}`;
+        }
+        return null;
+      })(),
+    },
+  ];
+
+  // Calculate scores and build components
+  checks.forEach((check) => {
+    const passed = check.check();
+    if (passed) {
+      currentScore += check.points;
+    }
+
+    analysis.components[check.key] = {
+      label: check.label,
+      points_possible: check.points,
+      points_earned: passed ? check.points : 0,
+      status: check.status,
+      value: check.value,
+      recommendation: check.recommendation,
+    };
+
+    if (check.recommendation) {
+      analysis.recommendations.push({
+        component: check.key,
+        recommendation: check.recommendation,
+        priority: check.points >= 5 ? 'high' : check.points >= 3 ? 'medium' : 'low',
+      });
+    }
+  });
+
+  analysis.overall_score = currentScore;
+
+  // Calculate completion percentage
+  analysis.completion_percentage = Math.round((currentScore / analysis.max_score) * 100);
+
+  // Overall status
+  analysis.overall_status = (() => {
+    if (analysis.completion_percentage >= 90) return 'excellent';
+    if (analysis.completion_percentage >= 75) return 'good';
+    if (analysis.completion_percentage >= 50) return 'fair';
+    return 'needs_improvement';
+  })();
+
+  return analysis;
+};
+
+/**
  * Analyze Google Business Profile completeness and optimization
  */
 const analyzeGoogleBusinessProfile = (businessProfile, keywords, industry) => {
@@ -736,7 +1105,15 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       finalIndustry,
     );
 
-    // Step 5: Calculate scores
+    // Step 5: Analyze website experience
+    const websiteExperienceAnalysis = analyzeWebsiteExperience(
+      websiteAnalysis,
+      businessProfile,
+      finalKeywords,
+      finalIndustry,
+    );
+
+    // Step 6: Calculate scores
     const scoringResult = ScoringService.calculateScores({
       businessProfile,
       websiteAnalysis,
@@ -745,7 +1122,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       hasWebsite: !!businessProfile.website,
     });
 
-    // Step 6: Generate recommendations
+    // Step 7: Generate recommendations
     const recommendations = RecommendationService.generateRecommendations({
       businessProfile,
       websiteAnalysis,
@@ -755,7 +1132,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       industry: finalIndustry,
     });
 
-    // Step 7: Calculate summary metrics
+    // Step 8: Calculate summary metrics
     const totalIssues = [
       ...scoringResult.seoIssues,
       ...scoringResult.uxIssues,
@@ -773,7 +1150,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
     const uxScoreFormatted = Math.round((scoringResult.uxScore / 100) * 40);
     const localScoreFormatted = Math.round((scoringResult.localListingScore / 100) * 20);
 
-    // Step 8: Compile final report
+    // Step 9: Compile final report
     const analysisReport = {
       // Summary scores (formatted to match expected output)
       summary_score: scoringResult.summaryScore,
@@ -852,6 +1229,39 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
               c.status === 'needs_more' ||
               c.status === 'fair' ||
               c.status === 'poor',
+          ).length,
+        },
+      },
+
+      // Website experience analysis
+      website_experience_analysis: {
+        title: 'Website Experience',
+        subtitle: "Your website's customer experience",
+        overall_score: websiteExperienceAnalysis.overall_score,
+        max_score: websiteExperienceAnalysis.max_score,
+        completion_percentage: websiteExperienceAnalysis.completion_percentage,
+        overall_status: websiteExperienceAnalysis.overall_status,
+        components: websiteExperienceAnalysis.components,
+        recommendations: websiteExperienceAnalysis.recommendations,
+        summary: {
+          completed_items: Object.values(websiteExperienceAnalysis.components).filter(
+            (c) =>
+              c.status === 'complete' ||
+              c.status === 'optimized' ||
+              c.status === 'excellent' ||
+              c.status === 'good',
+          ).length,
+          total_items: Object.keys(websiteExperienceAnalysis.components).length,
+          missing_items: Object.values(websiteExperienceAnalysis.components).filter(
+            (c) => c.status === 'missing',
+          ).length,
+          needs_optimization: Object.values(websiteExperienceAnalysis.components).filter(
+            (c) =>
+              c.status === 'needs_optimization' ||
+              c.status === 'needs_more' ||
+              c.status === 'fair' ||
+              c.status === 'poor' ||
+              c.status === 'needs_improvement',
           ).length,
         },
       },
