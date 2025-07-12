@@ -5,16 +5,6 @@ import { validateRequest } from '../middleware/expressValidatorMiddleware.js';
 
 const router = express.Router();
 
-// Test endpoint to verify routing
-router.get('/test', (req, res) => {
-  res.json({ message: 'Business analysis routes working!', timestamp: new Date().toISOString() });
-});
-
-router.post(
-  '/analyze-google-business',
-  validateAnalyzeGoogleBusiness,
-  validateRequest,
-  analyzeGoogleBusiness,
-);
+router.post('/', validateAnalyzeGoogleBusiness, validateRequest, analyzeGoogleBusiness);
 
 export default router;

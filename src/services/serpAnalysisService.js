@@ -130,10 +130,14 @@ export class SerpAnalysisService {
     try {
       console.log(`🔍 Analyzing keyword: "${keyword}" in ${location}`);
 
+      // Convert full address to supported location format
+      const supportedLocation = this.convertToSupportedLocation(location);
+      console.log(`📍 Converted location: "${location}" -> "${supportedLocation}"`);
+
       const searchParams = {
         engine: 'google',
         q: keyword,
-        location: location,
+        location: supportedLocation,
         hl: 'en',
         gl: 'us',
         api_key: this.API_KEY,
@@ -216,6 +220,7 @@ export class SerpAnalysisService {
 
       return result;
     } catch (error) {
+      console.log('🚀 serp error:', error);
       console.error(`❌ Keyword analysis failed for "${keyword}":`, error.message);
       throw error;
     }
@@ -228,12 +233,14 @@ export class SerpAnalysisService {
    * @returns {number|null} Position or null if not found
    */
   static findBusinessInResults(results, businessName) {
-    if (!results || !Array.isArray(results)) return null;
+    if (!results || !Array.isArray(results) || results.length === 0) return null;
 
     const normalizedBusinessName = businessName.toLowerCase();
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
+      if (!result) continue;
+
       const title = (result.title || '').toLowerCase();
       const snippet = (result.snippet || '').toLowerCase();
 
@@ -256,8 +263,12 @@ export class SerpAnalysisService {
   static extractCompetitorsFromResults(organicResults, localResults, businessName) {
     const normalizedBusinessName = businessName.toLowerCase();
 
+    // Ensure arrays are properly defined
+    const safeLocalResults = Array.isArray(localResults) ? localResults : [];
+    const safeOrganicResults = Array.isArray(organicResults) ? organicResults : [];
+
     // Extract local competitors
-    const localCompetitors = (localResults || [])
+    const localCompetitors = safeLocalResults
       .filter((result) => {
         const title = (result.title || '').toLowerCase();
         return !title.includes(normalizedBusinessName);
@@ -274,7 +285,7 @@ export class SerpAnalysisService {
       }));
 
     // Extract organic competitors
-    const organicCompetitors = (organicResults || [])
+    const organicCompetitors = safeOrganicResults
       .filter((result) => {
         const title = (result.title || '').toLowerCase();
         return !title.includes(normalizedBusinessName);
@@ -484,6 +495,118 @@ export class SerpAnalysisService {
       map_pack_appearance_rate: mapPackAppearances,
       organic_appearance_rate: organicAppearances,
     };
+  }
+
+  /**
+   * Convert full address to SerpAPI supported location format
+   * @param {string} location - Full address
+   * @returns {string} Supported location format
+   */
+  static convertToSupportedLocation(location) {
+    // Extract city and state from full address
+    // Example: "5337 US-321, Gaston, SC 29053, United States" -> "Gaston,South Carolina,United States"
+
+    try {
+      // Common state abbreviations to full names
+      const stateAbbreviations = {
+        AL: 'Alabama',
+        AK: 'Alaska',
+        AZ: 'Arizona',
+        AR: 'Arkansas',
+        CA: 'California',
+        CO: 'Colorado',
+        CT: 'Connecticut',
+        DE: 'Delaware',
+        FL: 'Florida',
+        GA: 'Georgia',
+        HI: 'Hawaii',
+        ID: 'Idaho',
+        IL: 'Illinois',
+        IN: 'Indiana',
+        IA: 'Iowa',
+        KS: 'Kansas',
+        KY: 'Kentucky',
+        LA: 'Louisiana',
+        ME: 'Maine',
+        MD: 'Maryland',
+        MA: 'Massachusetts',
+        MI: 'Michigan',
+        MN: 'Minnesota',
+        MS: 'Mississippi',
+        MO: 'Missouri',
+        MT: 'Montana',
+        NE: 'Nebraska',
+        NV: 'Nevada',
+        NH: 'New Hampshire',
+        NJ: 'New Jersey',
+        NM: 'New Mexico',
+        NY: 'New York',
+        NC: 'North Carolina',
+        ND: 'North Dakota',
+        OH: 'Ohio',
+        OK: 'Oklahoma',
+        OR: 'Oregon',
+        PA: 'Pennsylvania',
+        RI: 'Rhode Island',
+        SC: 'South Carolina',
+        SD: 'South Dakota',
+        TN: 'Tennessee',
+        TX: 'Texas',
+        UT: 'Utah',
+        VT: 'Vermont',
+        VA: 'Virginia',
+        WA: 'Washington',
+        WV: 'West Virginia',
+        WI: 'Wisconsin',
+        WY: 'Wyoming',
+      };
+
+      // Parse the location string
+      const parts = location.split(',').map((part) => part.trim());
+
+      if (parts.length >= 2) {
+        // Look for city and state
+        let city = null;
+        let state = null;
+
+        // Try to find state abbreviation in each part
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i].trim();
+
+          // Check if this part contains a state abbreviation
+          // Handle cases like "Gaston, SC 29053" where state and zip are together
+          const words = part.split(' ');
+          for (let j = 0; j < words.length; j++) {
+            const word = words[j].trim();
+            if (stateAbbreviations[word]) {
+              state = stateAbbreviations[word];
+              // City is usually the part before the state
+              if (i > 0) {
+                city = parts[i - 1].trim();
+              }
+              break;
+            }
+          }
+
+          if (state) break;
+        }
+
+        if (city && state) {
+          return `${city},${state},United States`;
+        }
+
+        // Fallback: try to use the state only
+        if (state) {
+          return `${state},United States`;
+        }
+      }
+
+      // If parsing fails, return a general location
+      return 'United States';
+    } catch (error) {
+      console.warn('⚠️ Failed to parse location, using fallback:', error.message);
+      return 'United States';
+    }
   }
 
   /**
