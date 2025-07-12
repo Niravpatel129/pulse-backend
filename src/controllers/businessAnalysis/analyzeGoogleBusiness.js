@@ -602,51 +602,45 @@ const analyzeSearchResults = (websiteAnalysis, businessProfile, keywords, indust
       key: 'images_have_alt_tags',
       label: 'Images have "alt tags"',
       points: 3,
-      check: () => (technical.images_with_alt || 0) > 0,
+      check: () => {
+        const images = content.images || [];
+        const imagesWithAlt = images.filter((img) => img.hasAlt).length;
+        return imagesWithAlt > 0;
+      },
       value: (() => {
-        const totalImages = technical.total_images || 0;
-        const imagesWithAlt = technical.images_with_alt || 0;
-
-        // If we have alt tags but no total count, assume there are images
-        if (imagesWithAlt > 0 && totalImages === 0) {
-          return `${imagesWithAlt} images have alt tags`;
-        }
+        const images = content.images || [];
+        const totalImages = images.length;
+        const imagesWithAlt = images.filter((img) => img.hasAlt).length;
 
         return totalImages > 0
           ? `${imagesWithAlt}/${totalImages} images have alt tags`
-          : imagesWithAlt > 0
-          ? `${imagesWithAlt} images have alt tags`
           : 'No images found';
       })(),
       status: (() => {
-        const totalImages = technical.total_images || 0;
-        const imagesWithAlt = technical.images_with_alt || 0;
-
-        // If we have alt tags, consider it complete regardless of total count
-        if (imagesWithAlt > 0) {
-          if (totalImages === 0) return 'complete'; // Can't calculate percentage, but has alt tags
-          const percentage = (imagesWithAlt / totalImages) * 100;
-          if (percentage >= 80) return 'complete';
-          if (percentage >= 50) return 'needs_improvement';
-          return 'poor';
-        }
+        const images = content.images || [];
+        const totalImages = images.length;
+        const imagesWithAlt = images.filter((img) => img.hasAlt).length;
 
         if (totalImages === 0) return 'unknown';
-        return 'missing';
+        if (imagesWithAlt === 0) return 'missing';
+
+        const percentage = (imagesWithAlt / totalImages) * 100;
+        if (percentage >= 80) return 'complete';
+        if (percentage >= 50) return 'needs_improvement';
+        return 'poor';
       })(),
       recommendation: (() => {
-        const totalImages = technical.total_images || 0;
-        const imagesWithAlt = technical.images_with_alt || 0;
+        const images = content.images || [];
+        const totalImages = images.length;
+        const imagesWithAlt = images.filter((img) => img.hasAlt).length;
 
-        if (imagesWithAlt > 0 && totalImages > 0) {
-          const percentage = (imagesWithAlt / totalImages) * 100;
-          if (percentage < 80) return 'Add alt tags to more images - aim for 100% coverage';
-          return null;
-        }
+        if (totalImages === 0) return 'No images to analyze';
+        if (imagesWithAlt === 0)
+          return 'Add alt tags to all images for better SEO and accessibility';
 
-        if (imagesWithAlt > 0) return null; // Has alt tags, no recommendation needed
-        if (totalImages === 0 && imagesWithAlt === 0) return 'No images to analyze';
-        return 'Add alt tags to all images for better SEO and accessibility';
+        const percentage = (imagesWithAlt / totalImages) * 100;
+        if (percentage < 80) return 'Add alt tags to more images - aim for 100% coverage';
+        return null;
       })(),
     },
     {
