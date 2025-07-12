@@ -26,6 +26,7 @@ import approvalRoutes from './src/routes/approvalRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import availabilityRoutes from './src/routes/availabilityRoutes.js';
 import blogRoutes from './src/routes/blogRoutes.js';
+import businessAnalysisRoutes from './src/routes/businessAnalysisRoutes.js';
 import calendarRoutes from './src/routes/calendarRoutes.js';
 import chatSettingsRoutes from './src/routes/chatSettingsRoutes.js';
 import clientRoutes from './src/routes/clientRoutes.js';
@@ -187,6 +188,9 @@ app.use(`${routesPrefix}/blog-posts`, blogRoutes);
 
 // Analytics
 app.use(`${routesPrefix}/analytics`, analyticsRoutes);
+
+// Business Analysis
+app.use(`${routesPrefix}/analyze-google-business`, businessAnalysisRoutes);
 
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
