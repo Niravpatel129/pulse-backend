@@ -157,6 +157,75 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       // Local SEO analysis
       local_seo_analysis: serpAnalysis,
 
+      // Keyword performance breakdown (How you're doing online)
+      keyword_performance: serpAnalysis?.keyword_results
+        ? {
+            summary: {
+              total_keywords_analyzed: serpAnalysis.keyword_results.length,
+              ranking_in_map_pack: serpAnalysis.keyword_results.filter((k) => k.in_map_pack).length,
+              ranking_in_organic: serpAnalysis.keyword_results.filter(
+                (k) => k.organic_position !== null,
+              ).length,
+              average_map_pack_position: serpAnalysis.rankings_summary?.average_map_pack_position,
+              average_organic_position: serpAnalysis.rankings_summary?.average_organic_position,
+            },
+            detailed_results: serpAnalysis.keyword_results.map((result) => ({
+              keyword: result.keyword,
+              location: result.location,
+              your_business: {
+                map_pack_position: result.local_position,
+                organic_position: result.organic_position,
+                map_pack_status: result.in_map_pack
+                  ? `#${result.local_position} map pack`
+                  : 'Unranked map pack',
+                organic_status: result.organic_position
+                  ? `#${result.organic_position} organic`
+                  : 'Unranked organic',
+                in_top_3_map_pack: result.in_top_3_map_pack,
+                in_top_10_organic: result.in_top_10_organic,
+              },
+              top_competitor:
+                result.competitors_in_map_pack?.length > 0
+                  ? {
+                      name: result.competitors_in_map_pack[0].name,
+                      position: result.competitors_in_map_pack[0].position,
+                      rating: result.competitors_in_map_pack[0].rating,
+                      review_count: result.competitors_in_map_pack[0].reviews,
+                    }
+                  : null,
+              all_competitors_in_map_pack: result.competitors_in_map_pack || [],
+              search_volume_estimate: result.search_volume_estimate,
+              analyzed_at: result.analyzed_at,
+            })),
+          }
+        : null,
+
+      // Competitors ranking (Who's beating you on Google)
+      competitors_ranking: serpAnalysis?.competitors
+        ? {
+            your_business: {
+              name: businessProfile.name,
+              rating: businessProfile.rating,
+              review_count: businessProfile.user_ratings_total,
+              position: serpAnalysis.rankings_summary?.average_map_pack_position || null,
+            },
+            competitors: serpAnalysis.competitors
+              .filter((c) => c.type === 'local')
+              .slice(0, 6)
+              .map((competitor, index) => ({
+                name: competitor.name,
+                rating: competitor.rating,
+                review_count: competitor.reviews,
+                position: competitor.average_position,
+                rank: index + 1,
+                beating_you:
+                  competitor.average_position <
+                  (serpAnalysis.rankings_summary?.average_map_pack_position || 999),
+              })),
+            total_competitors_found: serpAnalysis.competitors.length,
+          }
+        : null,
+
       // Review sentiment
       review_sentiment: reviewAnalysis,
 
