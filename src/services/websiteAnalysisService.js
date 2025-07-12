@@ -25,6 +25,7 @@ export class WebsiteAnalysisService {
       // Launch browser
       browser = await puppeteer.launch({
         headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -32,6 +33,8 @@ export class WebsiteAnalysisService {
           '--disable-gpu',
           '--disable-web-security',
           '--disable-features=VizDisplayCompositor',
+          '--single-process',
+          '--no-zygote',
         ],
       });
 

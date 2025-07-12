@@ -1621,55 +1621,50 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       });
     }
 
-    // Step 4: Parallel analysis execution
-    const analysisPromises = [];
+    // Step 4: Sequential analysis execution (for Basic dyno memory management)
+    let websiteAnalysis = null;
+    let serpAnalysis = null;
+    let reviewAnalysis = null;
 
     // Website analysis (if website exists)
-    let websiteAnalysisPromise = null;
     if (businessProfile.website) {
-      websiteAnalysisPromise = WebsiteAnalysisService.analyzeWebsite(businessProfile.website, {
-        businessName: businessProfile.name,
-        location: businessProfile.formatted_address,
-        industry: finalIndustry,
-      });
-      analysisPromises.push(websiteAnalysisPromise);
+      try {
+        websiteAnalysis = await WebsiteAnalysisService.analyzeWebsite(businessProfile.website, {
+          businessName: businessProfile.name,
+          location: businessProfile.formatted_address,
+          industry: finalIndustry,
+        });
+      } catch (error) {
+        console.error('Website analysis failed:', error.message);
+        websiteAnalysis = null;
+      }
     }
 
     // SERP analysis for local rankings
-    const serpAnalysisPromise = SerpAnalysisService.analyzeLocalRankings(
-      businessProfile.name,
-      businessProfile.formatted_address,
-      finalKeywords,
-      finalIndustry,
-    );
-    analysisPromises.push(serpAnalysisPromise);
+    try {
+      serpAnalysis = await SerpAnalysisService.analyzeLocalRankings(
+        businessProfile.name,
+        businessProfile.formatted_address,
+        finalKeywords,
+        finalIndustry,
+      );
+    } catch (error) {
+      console.error('SERP analysis failed:', error.message);
+      serpAnalysis = null;
+    }
 
     // Review sentiment analysis
-    const reviewAnalysisPromise = ReviewSentimentService.analyzeReviews(
-      businessProfile.reviews || [],
-      resolvedPlaceId,
-    );
-    analysisPromises.push(reviewAnalysisPromise);
+    try {
+      reviewAnalysis = await ReviewSentimentService.analyzeReviews(
+        businessProfile.reviews || [],
+        resolvedPlaceId,
+      );
+    } catch (error) {
+      console.error('Review analysis failed:', error.message);
+      reviewAnalysis = null;
+    }
 
-    // Execute all analyses
-    const results = await Promise.allSettled(analysisPromises);
-
-    // Process results
-    const websiteAnalysis = websiteAnalysisPromise
-      ? results[0].status === 'fulfilled'
-        ? results[0].value
-        : null
-      : null;
-
-    const serpAnalysis =
-      results[websiteAnalysisPromise ? 1 : 0].status === 'fulfilled'
-        ? results[websiteAnalysisPromise ? 1 : 0].value
-        : null;
-
-    const reviewAnalysis =
-      results[websiteAnalysisPromise ? 2 : 1].status === 'fulfilled'
-        ? results[websiteAnalysisPromise ? 2 : 1].value
-        : null;
+    // Analysis results are now available from sequential execution above
 
     // Step 4: Analyze Google Business Profile completeness
     const profileAnalysis = analyzeGoogleBusinessProfile(
