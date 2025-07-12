@@ -379,9 +379,9 @@ const analyzeWebsiteExperience = (websiteAnalysis, businessProfile, keywords, in
 };
 
 /**
- * Analyze search results performance and visibility
+ * Analyze search results optimization (SEO)
  */
-const analyzeSearchResults = (serpAnalysis, businessProfile, keywords, industry) => {
+const analyzeSearchResults = (websiteAnalysis, businessProfile, keywords, industry) => {
   const analysis = {
     overall_score: 0,
     max_score: 40,
@@ -391,23 +391,21 @@ const analyzeSearchResults = (serpAnalysis, businessProfile, keywords, industry)
 
   let currentScore = 0;
 
-  // If no SERP analysis, return low scores
-  if (!serpAnalysis || serpAnalysis.error) {
+  // If no website analysis, return low scores for SEO elements
+  if (!websiteAnalysis || websiteAnalysis.error) {
     analysis.recommendations.push({
-      component: 'search_visibility',
-      recommendation:
-        'Improve your online presence to appear in search results for your target keywords',
+      component: 'website_seo',
+      recommendation: 'Create a website with proper SEO optimization to improve search rankings',
       priority: 'critical',
     });
 
-    analysis.components.search_visibility = {
-      label: 'Search Visibility',
+    analysis.components.website_seo = {
+      label: 'Website SEO',
       points_possible: 40,
       points_earned: 0,
-      status: 'poor',
-      value: 'Not visible in search results',
-      recommendation:
-        'Improve your online presence to appear in search results for your target keywords',
+      status: 'missing',
+      value: 'No website found',
+      recommendation: 'Create a website with proper SEO optimization to improve search rankings',
     };
 
     analysis.overall_status = 'critical';
@@ -416,389 +414,503 @@ const analyzeSearchResults = (serpAnalysis, businessProfile, keywords, industry)
     return analysis;
   }
 
-  const rankingsSummary = serpAnalysis.rankings_summary || {};
-  const keywordResults = serpAnalysis.keyword_results || [];
-  const competitors = serpAnalysis.competitors || [];
+  const content = websiteAnalysis.page_content || {};
+  const technical = websiteAnalysis.technical_seo || {};
+  const domain = websiteAnalysis.domain_analysis || {};
 
-  // Search results performance checks
+  // Extract service areas (cities/regions) from formatted address
+  const serviceArea = (() => {
+    const address = businessProfile.formatted_address || '';
+    const parts = address.split(',').map((p) => p.trim());
+    // Get city (usually second part) and state
+    return parts.length > 1 ? parts[1] : parts[0] || '';
+  })();
+
+  const businessName = businessProfile.name || '';
+
+  // SEO optimization checks
   const checks = [
+    // Domain checks (8 points)
     {
-      key: 'map_pack_presence',
-      label: 'Map Pack Appearances',
-      points: 8,
-      check: () => (rankingsSummary.map_pack_appearances || 0) > 0,
-      value: rankingsSummary.map_pack_appearances
-        ? `${rankingsSummary.map_pack_appearances}/${keywordResults.length} keywords`
-        : 'No map pack appearances',
-      status: (() => {
-        const appearances = rankingsSummary.map_pack_appearances || 0;
-        const total = keywordResults.length || 1;
-        const percentage = (appearances / total) * 100;
-        if (percentage === 0) return 'poor';
-        if (percentage < 30) return 'needs_improvement';
-        if (percentage < 60) return 'fair';
-        if (percentage < 80) return 'good';
-        return 'excellent';
-      })(),
-      recommendation: (() => {
-        const appearances = rankingsSummary.map_pack_appearances || 0;
-        if (appearances === 0)
-          return "Critical: You're not appearing in Google's map pack for any keywords. Focus on local SEO optimization immediately";
-        const total = keywordResults.length || 1;
-        const percentage = (appearances / total) * 100;
-        if (percentage < 50)
-          return "You're missing from map pack results for most keywords. Improve your local SEO strategy";
-        if (percentage < 80)
-          return 'Increase map pack appearances for more keywords to capture more local traffic';
-        return null;
-      })(),
-    },
-    {
-      key: 'average_map_pack_position',
-      label: 'Average Map Pack Position',
-      points: 6,
-      check: () => (rankingsSummary.average_map_pack_position || 0) <= 2,
-      value: rankingsSummary.average_map_pack_position
-        ? `Position ${rankingsSummary.average_map_pack_position.toFixed(1)}`
-        : 'No rankings',
-      status: (() => {
-        const position = rankingsSummary.average_map_pack_position || 0;
-        if (position === 0) return 'poor';
-        if (position <= 1.5) return 'excellent';
-        if (position <= 2.5) return 'good';
-        if (position <= 3.5) return 'fair';
-        return 'needs_improvement';
-      })(),
-      recommendation: (() => {
-        const position = rankingsSummary.average_map_pack_position || 0;
-        if (position === 0) return 'Focus on appearing in map pack results first';
-        if (position > 3)
-          return 'Your average map pack position is too low. Optimize your Google Business Profile and local SEO';
-        if (position > 2)
-          return 'Work on improving your map pack rankings to position 1-2 for better visibility';
-        return null;
-      })(),
-    },
-    {
-      key: 'top_3_map_pack_keywords',
-      label: 'Top 3 Map Pack Keywords',
-      points: 5,
-      check: () => {
-        const top3Count = keywordResults.filter((k) => k.in_top_3_map_pack).length;
-        return top3Count > 0;
-      },
-      value: (() => {
-        const top3Count = keywordResults.filter((k) => k.in_top_3_map_pack).length;
-        return `${top3Count}/${keywordResults.length} keywords in top 3`;
-      })(),
-      status: (() => {
-        const top3Count = keywordResults.filter((k) => k.in_top_3_map_pack).length;
-        const total = keywordResults.length || 1;
-        const percentage = (top3Count / total) * 100;
-        if (percentage === 0) return 'poor';
-        if (percentage < 25) return 'needs_improvement';
-        if (percentage < 50) return 'fair';
-        if (percentage < 75) return 'good';
-        return 'excellent';
-      })(),
-      recommendation: (() => {
-        const top3Count = keywordResults.filter((k) => k.in_top_3_map_pack).length;
-        if (top3Count === 0)
-          return "You're not ranking in the top 3 for any keywords. Focus on local SEO fundamentals";
-        const total = keywordResults.length || 1;
-        const percentage = (top3Count / total) * 100;
-        if (percentage < 50)
-          return 'Increase your top 3 map pack rankings to capture more high-intent local traffic';
-        return null;
-      })(),
-    },
-    {
-      key: 'organic_search_presence',
-      label: 'Organic Search Presence',
-      points: 4,
-      check: () => (rankingsSummary.organic_appearances || 0) > 0,
-      value: rankingsSummary.organic_appearances
-        ? `${rankingsSummary.organic_appearances}/${keywordResults.length} keywords`
-        : 'No organic appearances',
-      status: (() => {
-        const appearances = rankingsSummary.organic_appearances || 0;
-        const total = keywordResults.length || 1;
-        const percentage = (appearances / total) * 100;
-        if (percentage === 0) return 'poor';
-        if (percentage < 30) return 'needs_improvement';
-        if (percentage < 60) return 'fair';
-        if (percentage < 80) return 'good';
-        return 'excellent';
-      })(),
-      recommendation: (() => {
-        const appearances = rankingsSummary.organic_appearances || 0;
-        if (appearances === 0)
-          return "You're not appearing in organic search results. Improve your website SEO and content strategy";
-        const total = keywordResults.length || 1;
-        const percentage = (appearances / total) * 100;
-        if (percentage < 50)
-          return 'Increase your organic search presence with better content and SEO optimization';
-        return null;
-      })(),
-    },
-    {
-      key: 'average_organic_position',
-      label: 'Average Organic Position',
-      points: 3,
-      check: () => (rankingsSummary.average_organic_position || 0) <= 10,
-      value: rankingsSummary.average_organic_position
-        ? `Position ${rankingsSummary.average_organic_position.toFixed(1)}`
-        : 'No organic rankings',
-      status: (() => {
-        const position = rankingsSummary.average_organic_position || 0;
-        if (position === 0) return 'poor';
-        if (position <= 3) return 'excellent';
-        if (position <= 10) return 'good';
-        if (position <= 20) return 'fair';
-        return 'needs_improvement';
-      })(),
-      recommendation: (() => {
-        const position = rankingsSummary.average_organic_position || 0;
-        if (position === 0) return 'Focus on appearing in organic search results first';
-        if (position > 20)
-          return 'Your organic rankings are too low. Improve your website content and SEO';
-        if (position > 10)
-          return 'Work on improving your organic rankings to the first page of Google';
-        return null;
-      })(),
-    },
-    {
-      key: 'keyword_diversity',
-      label: 'Keyword Diversity',
-      points: 3,
-      check: () => keywordResults.length >= 3,
-      value: `${keywordResults.length} keywords analyzed`,
-      status: (() => {
-        const count = keywordResults.length;
-        if (count === 0) return 'poor';
-        if (count < 3) return 'needs_improvement';
-        if (count < 5) return 'fair';
-        if (count < 10) return 'good';
-        return 'excellent';
-      })(),
-      recommendation: (() => {
-        const count = keywordResults.length;
-        if (count === 0) return 'Start tracking keyword performance for your business';
-        if (count < 5)
-          return 'Track more keywords to get better insights into your search performance';
-        return null;
-      })(),
-    },
-    {
-      key: 'competitive_position',
-      label: 'Competitive Position',
+      key: 'using_custom_domain',
+      label: 'Using custom domain',
       points: 4,
       check: () => {
-        const localCompetitors = competitors.filter((c) => c.type === 'local');
-        const yourAvgPosition = rankingsSummary.average_map_pack_position || 10;
-        const betterCompetitors = localCompetitors.filter(
-          (c) => c.average_position < yourAvgPosition,
+        const url = websiteAnalysis.url || businessProfile.website || '';
+        return (
+          !url.includes('wordpress.com') &&
+          !url.includes('wix.com') &&
+          !url.includes('squarespace.com') &&
+          !url.includes('weebly.com')
         );
-        return betterCompetitors.length <= localCompetitors.length / 2;
       },
       value: (() => {
-        const localCompetitors = competitors.filter((c) => c.type === 'local');
-        const yourAvgPosition = rankingsSummary.average_map_pack_position || 10;
-        const betterCompetitors = localCompetitors.filter(
-          (c) => c.average_position < yourAvgPosition,
-        );
-        return `${betterCompetitors.length}/${localCompetitors.length} competitors ranking higher`;
+        const url = websiteAnalysis.url || businessProfile.website || '';
+        if (
+          url.includes('wordpress.com') ||
+          url.includes('wix.com') ||
+          url.includes('squarespace.com') ||
+          url.includes('weebly.com')
+        ) {
+          return 'Using platform subdomain';
+        }
+        return url ? 'Custom domain' : 'No domain';
       })(),
       status: (() => {
-        const localCompetitors = competitors.filter((c) => c.type === 'local');
-        if (localCompetitors.length === 0) return 'unknown';
-        const yourAvgPosition = rankingsSummary.average_map_pack_position || 10;
-        const betterCompetitors = localCompetitors.filter(
-          (c) => c.average_position < yourAvgPosition,
-        );
-        const percentage = (betterCompetitors.length / localCompetitors.length) * 100;
-        if (percentage === 0) return 'excellent';
-        if (percentage <= 25) return 'good';
-        if (percentage <= 50) return 'fair';
-        if (percentage <= 75) return 'needs_improvement';
-        return 'poor';
+        const url = websiteAnalysis.url || businessProfile.website || '';
+        if (!url) return 'missing';
+        if (
+          url.includes('wordpress.com') ||
+          url.includes('wix.com') ||
+          url.includes('squarespace.com') ||
+          url.includes('weebly.com')
+        ) {
+          return 'needs_improvement';
+        }
+        return 'complete';
       })(),
       recommendation: (() => {
-        const localCompetitors = competitors.filter((c) => c.type === 'local');
-        if (localCompetitors.length === 0) return 'No competitive data available';
-        const yourAvgPosition = rankingsSummary.average_map_pack_position || 10;
-        const betterCompetitors = localCompetitors.filter(
-          (c) => c.average_position < yourAvgPosition,
-        );
-        const percentage = (betterCompetitors.length / localCompetitors.length) * 100;
-        if (percentage > 75)
-          return 'Most competitors are outranking you. Focus on comprehensive local SEO improvements';
-        if (percentage > 50)
-          return 'Too many competitors are ranking higher. Analyze their strategies and improve your local SEO';
-        if (percentage > 25)
-          return 'Some competitors are outperforming you. Identify their advantages and optimize accordingly';
-        return null;
-      })(),
-    },
-    {
-      key: 'search_result_features',
-      label: 'Search Result Features',
-      points: 3,
-      check: () => {
-        // Check if business appears in special features like knowledge panel, reviews, etc.
-        const hasKnowledgePanel = businessProfile.place_id && businessProfile.name;
-        const hasReviews = (businessProfile.user_ratings_total || 0) > 0;
-        const hasPhotos = (businessProfile.photos?.length || 0) > 0;
-        return hasKnowledgePanel && hasReviews && hasPhotos;
-      },
-      value: (() => {
-        const features = [];
-        if (businessProfile.place_id && businessProfile.name) features.push('Knowledge Panel');
-        if ((businessProfile.user_ratings_total || 0) > 0) features.push('Reviews');
-        if ((businessProfile.photos?.length || 0) > 0) features.push('Photos');
-        if (businessProfile.opening_hours) features.push('Hours');
-        if (businessProfile.formatted_phone_number) features.push('Phone');
-        return features.length > 0 ? features.join(', ') : 'No special features';
-      })(),
-      status: (() => {
-        const hasKnowledgePanel = businessProfile.place_id && businessProfile.name;
-        const hasReviews = (businessProfile.user_ratings_total || 0) > 0;
-        const hasPhotos = (businessProfile.photos?.length || 0) > 0;
-        const hasHours = businessProfile.opening_hours;
-        const hasPhone = businessProfile.formatted_phone_number;
-
-        const totalFeatures = [hasKnowledgePanel, hasReviews, hasPhotos, hasHours, hasPhone].filter(
-          Boolean,
-        ).length;
-
-        if (totalFeatures === 0) return 'poor';
-        if (totalFeatures < 2) return 'needs_improvement';
-        if (totalFeatures < 4) return 'fair';
-        if (totalFeatures < 5) return 'good';
-        return 'excellent';
-      })(),
-      recommendation: (() => {
-        const hasKnowledgePanel = businessProfile.place_id && businessProfile.name;
-        const hasReviews = (businessProfile.user_ratings_total || 0) > 0;
-        const hasPhotos = (businessProfile.photos?.length || 0) > 0;
-        const hasHours = businessProfile.opening_hours;
-        const hasPhone = businessProfile.formatted_phone_number;
-
-        const missingFeatures = [];
-        if (!hasKnowledgePanel) missingFeatures.push('Knowledge Panel');
-        if (!hasReviews) missingFeatures.push('Reviews');
-        if (!hasPhotos) missingFeatures.push('Photos');
-        if (!hasHours) missingFeatures.push('Business Hours');
-        if (!hasPhone) missingFeatures.push('Phone Number');
-
-        if (missingFeatures.length > 0) {
-          return `Add missing search features: ${missingFeatures.join(', ')}`;
+        const url = websiteAnalysis.url || businessProfile.website || '';
+        if (!url) return 'Set up a website with a custom domain';
+        if (
+          url.includes('wordpress.com') ||
+          url.includes('wix.com') ||
+          url.includes('squarespace.com') ||
+          url.includes('weebly.com')
+        ) {
+          return 'Switch to a custom domain for better SEO and professional appearance';
         }
         return null;
       })(),
     },
     {
-      key: 'local_search_consistency',
-      label: 'Local Search Consistency',
-      points: 2,
+      key: 'only_one_domain',
+      label: 'Only one domain',
+      points: 4,
+      check: () => true, // This would need additional analysis to detect multiple domains
+      value: 'Single domain',
+      status: 'complete',
+      recommendation: null,
+    },
+
+    // Headline (H1) checks (9 points)
+    {
+      key: 'h1_includes_service_area',
+      label: 'Includes the service area',
+      points: 3,
       check: () => {
-        // Check if business name, address, phone are consistent
-        const hasName = !!businessProfile.name;
-        const hasAddress = !!businessProfile.formatted_address;
-        const hasPhone = !!businessProfile.formatted_phone_number;
-        return hasName && hasAddress && hasPhone;
+        const h1 = content.h1 || content.title || '';
+        return serviceArea && h1.toLowerCase().includes(serviceArea.toLowerCase());
       },
       value: (() => {
-        const consistency = [];
-        if (businessProfile.name) consistency.push('Name');
-        if (businessProfile.formatted_address) consistency.push('Address');
-        if (businessProfile.formatted_phone_number) consistency.push('Phone');
-        return consistency.length > 0 ? consistency.join(', ') + ' consistent' : 'Inconsistent NAP';
+        const h1 = content.h1 || content.title || '';
+        return h1 || 'No H1 found';
       })(),
       status: (() => {
-        const hasName = !!businessProfile.name;
-        const hasAddress = !!businessProfile.formatted_address;
-        const hasPhone = !!businessProfile.formatted_phone_number;
-        const total = [hasName, hasAddress, hasPhone].filter(Boolean).length;
-
-        if (total === 0) return 'poor';
-        if (total < 2) return 'needs_improvement';
-        if (total < 3) return 'fair';
-        return 'excellent';
+        const h1 = content.h1 || content.title || '';
+        if (!h1) return 'missing';
+        if (!serviceArea) return 'unknown';
+        return h1.toLowerCase().includes(serviceArea.toLowerCase())
+          ? 'complete'
+          : 'needs_improvement';
       })(),
       recommendation: (() => {
-        const missing = [];
-        if (!businessProfile.name) missing.push('business name');
-        if (!businessProfile.formatted_address) missing.push('address');
-        if (!businessProfile.formatted_phone_number) missing.push('phone number');
-
-        if (missing.length > 0) {
-          return `Ensure consistency in your ${missing.join(', ')} across all online platforms`;
+        const h1 = content.h1 || content.title || '';
+        if (!h1) return 'Add an H1 heading to your homepage';
+        if (!serviceArea) return 'Cannot analyze without service area information';
+        if (!h1.toLowerCase().includes(serviceArea.toLowerCase())) {
+          return `Include your service area "${serviceArea}" in your main headline`;
         }
         return null;
       })(),
     },
     {
-      key: 'search_volume_capture',
-      label: 'Search Volume Capture',
-      points: 2,
+      key: 'h1_includes_relevant_keywords',
+      label: 'Includes relevant keywords',
+      points: 3,
       check: () => {
-        const totalEstimatedVolume = keywordResults.reduce(
-          (sum, k) => sum + (k.search_volume_estimate || 0),
-          0,
-        );
-        const capturedVolume = keywordResults
-          .filter((k) => k.in_map_pack || k.in_top_10_organic)
-          .reduce((sum, k) => sum + (k.search_volume_estimate || 0), 0);
-        return capturedVolume > 0 && capturedVolume / totalEstimatedVolume > 0.3;
+        const h1 = content.h1 || content.title || '';
+        if (!h1 || !keywords.length) return false;
+        return keywords.some((keyword) => {
+          // Check for both exact match and partial matches
+          const keywordLower = keyword.toLowerCase();
+          const h1Lower = h1.toLowerCase();
+
+          // Direct inclusion check
+          if (h1Lower.includes(keywordLower)) return true;
+
+          // Check individual words for compound keywords
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => h1Lower.includes(word));
+        });
       },
       value: (() => {
-        const totalEstimatedVolume = keywordResults.reduce(
-          (sum, k) => sum + (k.search_volume_estimate || 0),
-          0,
-        );
-        const capturedVolume = keywordResults
-          .filter((k) => k.in_map_pack || k.in_top_10_organic)
-          .reduce((sum, k) => sum + (k.search_volume_estimate || 0), 0);
-
-        if (totalEstimatedVolume === 0) return 'No volume data';
-        const percentage = Math.round((capturedVolume / totalEstimatedVolume) * 100);
-        return `${percentage}% of search volume captured`;
+        const h1 = content.h1 || content.title || '';
+        return h1 || 'No H1 found';
       })(),
       status: (() => {
-        const totalEstimatedVolume = keywordResults.reduce(
-          (sum, k) => sum + (k.search_volume_estimate || 0),
-          0,
-        );
-        if (totalEstimatedVolume === 0) return 'unknown';
+        const h1 = content.h1 || content.title || '';
+        if (!h1) return 'missing';
+        if (!keywords.length) return 'unknown';
 
-        const capturedVolume = keywordResults
-          .filter((k) => k.in_map_pack || k.in_top_10_organic)
-          .reduce((sum, k) => sum + (k.search_volume_estimate || 0), 0);
+        const hasKeyword = keywords.some((keyword) => {
+          const keywordLower = keyword.toLowerCase();
+          const h1Lower = h1.toLowerCase();
+          if (h1Lower.includes(keywordLower)) return true;
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => h1Lower.includes(word));
+        });
 
-        const percentage = (capturedVolume / totalEstimatedVolume) * 100;
-        if (percentage === 0) return 'poor';
-        if (percentage < 20) return 'needs_improvement';
-        if (percentage < 40) return 'fair';
-        if (percentage < 60) return 'good';
-        return 'excellent';
+        return hasKeyword ? 'complete' : 'needs_improvement';
       })(),
       recommendation: (() => {
-        const totalEstimatedVolume = keywordResults.reduce(
-          (sum, k) => sum + (k.search_volume_estimate || 0),
-          0,
-        );
-        if (totalEstimatedVolume === 0) return 'No search volume data available';
+        const h1 = content.h1 || content.title || '';
+        if (!h1) return 'Add an H1 heading to your homepage';
+        if (!keywords.length) return 'Cannot analyze without keywords';
 
-        const capturedVolume = keywordResults
-          .filter((k) => k.in_map_pack || k.in_top_10_organic)
-          .reduce((sum, k) => sum + (k.search_volume_estimate || 0), 0);
+        const hasKeyword = keywords.some((keyword) => {
+          const keywordLower = keyword.toLowerCase();
+          const h1Lower = h1.toLowerCase();
+          if (h1Lower.includes(keywordLower)) return true;
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => h1Lower.includes(word));
+        });
 
-        const percentage = (capturedVolume / totalEstimatedVolume) * 100;
-        if (percentage < 30)
-          return "You're missing most of the available search traffic. Focus on ranking for higher-volume keywords";
-        if (percentage < 50)
-          return 'Increase your search volume capture by improving rankings for your target keywords';
+        if (!hasKeyword) {
+          return `Include relevant keywords like "${keywords
+            .slice(0, 2)
+            .join('", "')}" in your main headline`;
+        }
+        return null;
+      })(),
+    },
+    {
+      key: 'h1_exists',
+      label: 'Exists',
+      points: 3,
+      check: () => !!(content.h1 || content.title),
+      value: (() => {
+        const h1 = content.h1 || content.title || '';
+        return h1 || 'No H1 found';
+      })(),
+      status: !!(content.h1 || content.title) ? 'complete' : 'missing',
+      recommendation: !(content.h1 || content.title) ? 'Add an H1 heading to your homepage' : null,
+    },
+
+    // Metadata checks (23 points)
+    {
+      key: 'images_have_alt_tags',
+      label: 'Images have "alt tags"',
+      points: 3,
+      check: () => (technical.images_with_alt || 0) > 0,
+      value: (() => {
+        const totalImages = technical.total_images || 0;
+        const imagesWithAlt = technical.images_with_alt || 0;
+
+        // If we have alt tags but no total count, assume there are images
+        if (imagesWithAlt > 0 && totalImages === 0) {
+          return `${imagesWithAlt} images have alt tags`;
+        }
+
+        return totalImages > 0
+          ? `${imagesWithAlt}/${totalImages} images have alt tags`
+          : imagesWithAlt > 0
+          ? `${imagesWithAlt} images have alt tags`
+          : 'No images found';
+      })(),
+      status: (() => {
+        const totalImages = technical.total_images || 0;
+        const imagesWithAlt = technical.images_with_alt || 0;
+
+        // If we have alt tags, consider it complete regardless of total count
+        if (imagesWithAlt > 0) {
+          if (totalImages === 0) return 'complete'; // Can't calculate percentage, but has alt tags
+          const percentage = (imagesWithAlt / totalImages) * 100;
+          if (percentage >= 80) return 'complete';
+          if (percentage >= 50) return 'needs_improvement';
+          return 'poor';
+        }
+
+        if (totalImages === 0) return 'unknown';
+        return 'missing';
+      })(),
+      recommendation: (() => {
+        const totalImages = technical.total_images || 0;
+        const imagesWithAlt = technical.images_with_alt || 0;
+
+        if (imagesWithAlt > 0 && totalImages > 0) {
+          const percentage = (imagesWithAlt / totalImages) * 100;
+          if (percentage < 80) return 'Add alt tags to more images - aim for 100% coverage';
+          return null;
+        }
+
+        if (imagesWithAlt > 0) return null; // Has alt tags, no recommendation needed
+        if (totalImages === 0 && imagesWithAlt === 0) return 'No images to analyze';
+        return 'Add alt tags to all images for better SEO and accessibility';
+      })(),
+    },
+    {
+      key: 'description_length',
+      label: 'Description length',
+      points: 2,
+      check: () => {
+        const desc = content.metaDescription || '';
+        return desc.length >= 100;
+      },
+      value: (() => {
+        const desc = content.metaDescription || '';
+        return desc ? `${desc.length} characters` : 'No meta description';
+      })(),
+      status: (() => {
+        const desc = content.metaDescription || '';
+        if (!desc) return 'missing';
+        if (desc.length < 100) return 'too_short';
+        if (desc.length > 160) return 'too_long';
+        return 'complete';
+      })(),
+      recommendation: (() => {
+        const desc = content.metaDescription || '';
+        if (!desc) return 'Add a meta description to improve search result appearance';
+        if (desc.length < 100) return 'Make your meta description longer (at least 100 characters)';
+        if (desc.length > 160) return 'Shorten your meta description to under 160 characters';
+        return null;
+      })(),
+    },
+    {
+      key: 'description_includes_service_area',
+      label: 'Description includes the service area',
+      points: 3,
+      check: () => {
+        const desc = content.metaDescription || '';
+        return serviceArea && desc.toLowerCase().includes(serviceArea.toLowerCase());
+      },
+      value: (() => {
+        const desc = content.metaDescription || '';
+        return desc || 'No meta description';
+      })(),
+      status: (() => {
+        const desc = content.metaDescription || '';
+        if (!desc) return 'missing';
+        if (!serviceArea) return 'unknown';
+        return desc.toLowerCase().includes(serviceArea.toLowerCase())
+          ? 'complete'
+          : 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const desc = content.metaDescription || '';
+        if (!desc) return 'Add a meta description first';
+        if (!serviceArea) return 'Cannot analyze without service area information';
+        if (!desc.toLowerCase().includes(serviceArea.toLowerCase())) {
+          return `Include your service area "${serviceArea}" in your meta description`;
+        }
+        return null;
+      })(),
+    },
+    {
+      key: 'description_includes_relevant_keywords',
+      label: 'Description includes relevant keywords',
+      points: 3,
+      check: () => {
+        const desc = content.metaDescription || '';
+        if (!desc || !keywords.length) return false;
+        return keywords.some((keyword) => {
+          // Check for both exact match and partial matches
+          const keywordLower = keyword.toLowerCase();
+          const descLower = desc.toLowerCase();
+
+          // Direct inclusion check
+          if (descLower.includes(keywordLower)) return true;
+
+          // Check individual words for compound keywords
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => descLower.includes(word));
+        });
+      },
+      value: (() => {
+        const desc = content.metaDescription || '';
+        return desc || 'No meta description';
+      })(),
+      status: (() => {
+        const desc = content.metaDescription || '';
+        if (!desc) return 'missing';
+        if (!keywords.length) return 'unknown';
+
+        const hasKeyword = keywords.some((keyword) => {
+          const keywordLower = keyword.toLowerCase();
+          const descLower = desc.toLowerCase();
+          if (descLower.includes(keywordLower)) return true;
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => descLower.includes(word));
+        });
+
+        return hasKeyword ? 'complete' : 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const desc = content.metaDescription || '';
+        if (!desc) return 'Add a meta description first';
+        if (!keywords.length) return 'Cannot analyze without keywords';
+
+        const hasKeyword = keywords.some((keyword) => {
+          const keywordLower = keyword.toLowerCase();
+          const descLower = desc.toLowerCase();
+          if (descLower.includes(keywordLower)) return true;
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => descLower.includes(word));
+        });
+
+        if (!hasKeyword) {
+          return `Include relevant keywords like "${keywords
+            .slice(0, 2)
+            .join('", "')}" in your meta description`;
+        }
+        return null;
+      })(),
+    },
+    {
+      key: 'page_title_matches_google_business_profile',
+      label: 'Page title matches Google Business Profile',
+      points: 4,
+      check: () => {
+        const title = content.title || '';
+        if (!businessName) return false;
+
+        // Extract core business name (remove city/location suffixes)
+        const coreName = businessName
+          .replace(
+            /\s+(Dallas|Plano|Houston|Austin|San Antonio|Fort Worth|Arlington|Frisco|Irving|McKinney|Garland|Grand Prairie|Mesquite|Carrollton|Richardson|Denton|Lewisville|Tyler|Waco|College Station|Abilene|Beaumont|Brownsville|Corpus Christi|El Paso|Killeen|Laredo|Lubbock|Midland|Odessa|Pasadena|Pearland|Round Rock|Sugar Land|The Woodlands|Wichita Falls)$/i,
+            '',
+          )
+          .trim();
+
+        return title.toLowerCase().includes(coreName.toLowerCase());
+      },
+      value: (() => {
+        const title = content.title || '';
+        return title || 'No page title';
+      })(),
+      status: (() => {
+        const title = content.title || '';
+        if (!title) return 'missing';
+        if (!businessName) return 'unknown';
+
+        // Extract core business name (remove city/location suffixes)
+        const coreName = businessName
+          .replace(
+            /\s+(Dallas|Plano|Houston|Austin|San Antonio|Fort Worth|Arlington|Frisco|Irving|McKinney|Garland|Grand Prairie|Mesquite|Carrollton|Richardson|Denton|Lewisville|Tyler|Waco|College Station|Abilene|Beaumont|Brownsville|Corpus Christi|El Paso|Killeen|Laredo|Lubbock|Midland|Odessa|Pasadena|Pearland|Round Rock|Sugar Land|The Woodlands|Wichita Falls)$/i,
+            '',
+          )
+          .trim();
+
+        return title.toLowerCase().includes(coreName.toLowerCase())
+          ? 'complete'
+          : 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const title = content.title || '';
+        if (!title) return 'Add a page title to your website';
+        if (!businessName) return 'Cannot analyze without business name';
+
+        // Extract core business name (remove city/location suffixes)
+        const coreName = businessName
+          .replace(
+            /\s+(Dallas|Plano|Houston|Austin|San Antonio|Fort Worth|Arlington|Frisco|Irving|McKinney|Garland|Grand Prairie|Mesquite|Carrollton|Richardson|Denton|Lewisville|Tyler|Waco|College Station|Abilene|Beaumont|Brownsville|Corpus Christi|El Paso|Killeen|Laredo|Lubbock|Midland|Odessa|Pasadena|Pearland|Round Rock|Sugar Land|The Woodlands|Wichita Falls)$/i,
+            '',
+          )
+          .trim();
+
+        if (!title.toLowerCase().includes(coreName.toLowerCase())) {
+          return `Include your business name "${businessName}" in your page title`;
+        }
+        return null;
+      })(),
+    },
+    {
+      key: 'page_title_includes_service_area',
+      label: 'Page title includes the service area',
+      points: 4,
+      check: () => {
+        const title = content.title || '';
+        return serviceArea && title.toLowerCase().includes(serviceArea.toLowerCase());
+      },
+      value: (() => {
+        const title = content.title || '';
+        return title || 'No page title';
+      })(),
+      status: (() => {
+        const title = content.title || '';
+        if (!title) return 'missing';
+        if (!serviceArea) return 'unknown';
+        return title.toLowerCase().includes(serviceArea.toLowerCase())
+          ? 'complete'
+          : 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const title = content.title || '';
+        if (!title) return 'Add a page title to your website';
+        if (!serviceArea) return 'Cannot analyze without service area information';
+        if (!title.toLowerCase().includes(serviceArea.toLowerCase())) {
+          return `Include your service area "${serviceArea}" in your page title`;
+        }
+        return null;
+      })(),
+    },
+    {
+      key: 'page_title_includes_relevant_keyword',
+      label: 'Page title includes a relevant keyword',
+      points: 4,
+      check: () => {
+        const title = content.title || '';
+        if (!title || !keywords.length) return false;
+        return keywords.some((keyword) => {
+          // Check for both exact match and partial matches
+          const keywordLower = keyword.toLowerCase();
+          const titleLower = title.toLowerCase();
+
+          // Direct inclusion check
+          if (titleLower.includes(keywordLower)) return true;
+
+          // Check individual words for compound keywords
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => titleLower.includes(word));
+        });
+      },
+      value: (() => {
+        const title = content.title || '';
+        return title || 'No page title';
+      })(),
+      status: (() => {
+        const title = content.title || '';
+        if (!title) return 'missing';
+        if (!keywords.length) return 'unknown';
+
+        const hasKeyword = keywords.some((keyword) => {
+          const keywordLower = keyword.toLowerCase();
+          const titleLower = title.toLowerCase();
+          if (titleLower.includes(keywordLower)) return true;
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => titleLower.includes(word));
+        });
+
+        return hasKeyword ? 'complete' : 'needs_improvement';
+      })(),
+      recommendation: (() => {
+        const title = content.title || '';
+        if (!title) return 'Add a page title to your website';
+        if (!keywords.length) return 'Cannot analyze without keywords';
+
+        const hasKeyword = keywords.some((keyword) => {
+          const keywordLower = keyword.toLowerCase();
+          const titleLower = title.toLowerCase();
+          if (titleLower.includes(keywordLower)) return true;
+          const keywordWords = keywordLower.split(' ');
+          return keywordWords.some((word) => titleLower.includes(word));
+        });
+
+        if (!hasKeyword) {
+          return `Include relevant keywords like "${keywords
+            .slice(0, 2)
+            .join('", "')}" in your page title`;
+        }
         return null;
       })(),
     },
@@ -1582,7 +1694,7 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
 
     // Step 6: Analyze search results performance
     const searchResultsAnalysis = analyzeSearchResults(
-      serpAnalysis,
+      websiteAnalysis,
       businessProfile,
       finalKeywords,
       finalIndustry,
