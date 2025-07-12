@@ -8,6 +8,170 @@ export class SerpAnalysisService {
   static API_KEY = process.env.SERPAPI_KEY;
 
   /**
+   * Get business profile data from Google via SerpAPI
+   * @param {string} businessName - Business name
+   * @param {string} location - Business location
+   * @param {string} placeId - Google Place ID (optional)
+   * @returns {Promise<Object>} Business profile data from SerpAPI
+   */
+  static async getBusinessProfileFromSerp(businessName, location, placeId = null) {
+    try {
+      console.log('🔍 Fetching business profile from SerpAPI:', {
+        businessName,
+        location,
+        placeId,
+      });
+
+      if (!this.API_KEY) {
+        throw new Error('SerpAPI key is not configured');
+      }
+
+      // First try: Search for business name + location to get the business profile card
+      const searchQuery = `${businessName} ${location}`;
+      const supportedLocation = this.convertToSupportedLocation(location);
+
+      const searchParams = {
+        engine: 'google',
+        q: searchQuery,
+        location: supportedLocation,
+        hl: 'en',
+        gl: 'us',
+        api_key: this.API_KEY,
+      };
+
+      console.log('📊 SerpAPI business profile request:', {
+        ...searchParams,
+        api_key: '***masked***',
+      });
+
+      const response = await getJson(searchParams);
+
+      if (!response) {
+        throw new Error('No response from SerpAPI');
+      }
+
+      if (response.error) {
+        throw new Error(`SerpAPI error: ${response.error}`);
+      }
+
+      // Extract business profile data from knowledge graph or local results
+      const profileData = this.extractBusinessProfileFromSerp(response, businessName);
+
+      console.log('✅ Business profile extracted from SerpAPI:', {
+        hasDescription: !!profileData.description,
+        hasServiceOptions: !!profileData.service_options,
+        hasHours: !!profileData.hours,
+        hasSocialLinks: !!profileData.social_links,
+      });
+
+      return profileData;
+    } catch (error) {
+      console.error('❌ Failed to get business profile from SerpAPI:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Extract business profile data from SerpAPI response
+   * @param {Object} response - SerpAPI response
+   * @param {string} businessName - Business name to match
+   * @returns {Object} Extracted business profile data
+   */
+  static extractBusinessProfileFromSerp(response, businessName) {
+    const profileData = {
+      description: null,
+      service_options: [],
+      social_links: {},
+      hours: null,
+      attributes: [],
+    };
+
+    try {
+      // Check knowledge graph (right side panel info)
+      if (response.knowledge_graph) {
+        const kg = response.knowledge_graph;
+
+        // Extract description
+        if (kg.description) {
+          profileData.description = kg.description;
+        }
+
+        // Extract service options and attributes
+        if (kg.service_options) {
+          profileData.service_options = kg.service_options;
+        }
+
+        // Extract hours
+        if (kg.hours) {
+          profileData.hours = kg.hours;
+        }
+
+        // Extract social links
+        if (kg.profiles) {
+          kg.profiles.forEach((profile) => {
+            if (profile.name && profile.link) {
+              profileData.social_links[profile.name.toLowerCase()] = profile.link;
+            }
+          });
+        }
+      }
+
+      // Check local results for additional business info
+      if (response.local_results && Array.isArray(response.local_results)) {
+        const businessMatch = response.local_results.find(
+          (result) =>
+            result.title && result.title.toLowerCase().includes(businessName.toLowerCase()),
+        );
+
+        if (businessMatch) {
+          // Extract service options from local result
+          if (businessMatch.service_options) {
+            profileData.service_options = [
+              ...profileData.service_options,
+              ...businessMatch.service_options,
+            ];
+          }
+
+          // Extract hours
+          if (businessMatch.hours && !profileData.hours) {
+            profileData.hours = businessMatch.hours;
+          }
+
+          // Extract description if not already found
+          if (businessMatch.description && !profileData.description) {
+            profileData.description = businessMatch.description;
+          }
+        }
+      }
+
+      // Check answer box for business description
+      if (response.answer_box && response.answer_box.answer && !profileData.description) {
+        profileData.description = response.answer_box.answer;
+      }
+
+      // Check organic results for business website description
+      if (
+        response.organic_results &&
+        Array.isArray(response.organic_results) &&
+        !profileData.description
+      ) {
+        const businessWebsite = response.organic_results.find(
+          (result) =>
+            result.title && result.title.toLowerCase().includes(businessName.toLowerCase()),
+        );
+
+        if (businessWebsite && businessWebsite.snippet) {
+          profileData.description = businessWebsite.snippet;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error extracting business profile from SERP:', error.message);
+    }
+
+    return profileData;
+  }
+
+  /**
    * Analyze local rankings for a business
    * @param {string} businessName - Business name
    * @param {string} location - Business location

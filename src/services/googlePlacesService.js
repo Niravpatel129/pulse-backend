@@ -97,6 +97,18 @@ export class GooglePlacesService {
         'business_status',
         'vicinity',
         'url',
+        'editorial_summary',
+        'delivery',
+        'takeout',
+        'dine_in',
+        'curbside_pickup',
+        'serves_breakfast',
+        'serves_lunch',
+        'serves_dinner',
+        'serves_brunch',
+        'serves_beer',
+        'serves_wine',
+        'serves_vegetarian_food',
       ].join(',');
 
       const response = await axios.get(`${this.BASE_URL}/details/json`, {
