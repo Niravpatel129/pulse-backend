@@ -191,7 +191,6 @@ app.use(`${routesPrefix}/analytics`, analyticsRoutes);
 
 // Business Analysis
 app.use(`${routesPrefix}/analyze-google-business`, businessAnalysisRoutes);
-
 // Integrations
 app.use(`${routesPrefix}/integrations`, integrationRoutes);
 app.use(`${routesPrefix}/gmail`, gmailRoutes);

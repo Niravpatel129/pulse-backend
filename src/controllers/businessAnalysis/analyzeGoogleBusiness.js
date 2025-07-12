@@ -120,13 +120,51 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       industry,
     });
 
-    // Step 5: Compile final report
+    // Step 5: Calculate summary metrics
+    const totalIssues = [
+      ...scoringResult.seoIssues,
+      ...scoringResult.uxIssues,
+      ...scoringResult.localListingIssues,
+    ].length;
+
+    const criticalIssues = [
+      ...scoringResult.seoIssues,
+      ...scoringResult.uxIssues,
+      ...scoringResult.localListingIssues,
+    ].filter((issue) => issue.severity === 'critical').length;
+
+    // Convert scores to expected format (SEO/40, UX/40, Local/20)
+    const seoScoreFormatted = Math.round((scoringResult.seoScore / 100) * 40);
+    const uxScoreFormatted = Math.round((scoringResult.uxScore / 100) * 40);
+    const localScoreFormatted = Math.round((scoringResult.localListingScore / 100) * 20);
+
+    // Step 6: Compile final report
     const analysisReport = {
-      // Summary scores
+      // Summary scores (formatted to match expected output)
       summary_score: scoringResult.summaryScore,
-      seo_score: scoringResult.seoScore,
-      ux_score: scoringResult.uxScore,
-      local_listing_score: scoringResult.localListingScore,
+      seo_score: seoScoreFormatted,
+      ux_score: uxScoreFormatted,
+      local_listing_score: localScoreFormatted,
+
+      // Summary metrics for dashboard
+      summary_metrics: {
+        total_issues_found: totalIssues,
+        critical_issues: criticalIssues,
+        total_categories_reviewed: 3,
+        categories_needing_work: [
+          seoScoreFormatted < 32 ? 'SEO' : null,
+          uxScoreFormatted < 32 ? 'UX' : null,
+          localScoreFormatted < 16 ? 'Local Listings' : null,
+        ].filter(Boolean).length,
+        overall_health:
+          scoringResult.summaryScore >= 80
+            ? 'Excellent'
+            : scoringResult.summaryScore >= 60
+            ? 'Good'
+            : scoringResult.summaryScore >= 40
+            ? 'Fair'
+            : 'Poor',
+      },
 
       // Detailed analysis
       google_business_profile: {
@@ -234,6 +272,203 @@ export const analyzeGoogleBusiness = asyncHandler(async (req, res) => {
       ux_issues: scoringResult.uxIssues,
       local_listing_issues: scoringResult.localListingIssues,
       recommendations: recommendations,
+
+      // Market share and competitive intelligence (FOMO drivers)
+      competitive_intelligence: {
+        market_share_analysis: {
+          your_market_share: serpAnalysis?.competitors
+            ? Math.round(
+                (100 / (serpAnalysis.competitors.filter((c) => c.type === 'local').length + 1)) *
+                  (serpAnalysis.rankings_summary?.average_map_pack_position
+                    ? (4 - serpAnalysis.rankings_summary.average_map_pack_position) / 3
+                    : 0.1),
+              )
+            : 5,
+          top_competitor_market_share:
+            serpAnalysis?.competitors?.length > 0
+              ? Math.round(
+                  (100 / (serpAnalysis.competitors.filter((c) => c.type === 'local').length + 1)) *
+                    1.5,
+                )
+              : 25,
+          market_leader:
+            serpAnalysis?.competitors?.length > 0
+              ? serpAnalysis.competitors.filter((c) => c.type === 'local')[0]?.name
+              : 'Unknown',
+          your_ranking_among_peers: serpAnalysis?.competitors
+            ? serpAnalysis.competitors.filter((c) => c.type === 'local').length + 1
+            : 'Unknown',
+          total_competitors_in_market:
+            serpAnalysis?.competitors?.filter((c) => c.type === 'local').length || 0,
+        },
+        revenue_impact_analysis: {
+          estimated_monthly_lost_revenue: serpAnalysis?.rankings_summary
+            ? Math.round(
+                (serpAnalysis.rankings_summary.map_pack_appearances || 0) *
+                  500 *
+                  (1 -
+                    (serpAnalysis.rankings_summary.average_map_pack_position
+                      ? (4 - serpAnalysis.rankings_summary.average_map_pack_position) / 3
+                      : 0)),
+              )
+            : 0,
+          potential_monthly_revenue_gain: serpAnalysis?.rankings_summary
+            ? Math.round(
+                (keywords.length || 3) *
+                  800 *
+                  (serpAnalysis.rankings_summary.average_map_pack_position
+                    ? (serpAnalysis.rankings_summary.average_map_pack_position - 1) / 3
+                    : 0.8),
+              )
+            : 1200,
+          ad_spend_needed_to_compete: serpAnalysis?.competitors
+            ? Math.round(
+                serpAnalysis.competitors.filter((c) => c.type === 'local').length * 300 + 500,
+              )
+            : 800,
+          organic_vs_paid_cost_savings: '$2,400 - $4,800 per month',
+        },
+        competitor_advantages: serpAnalysis?.competitors
+          ? serpAnalysis.competitors
+              .filter((c) => c.type === 'local')
+              .slice(0, 3)
+              .map((competitor) => ({
+                name: competitor.name,
+                rating_advantage:
+                  competitor.rating > businessProfile.rating
+                    ? `${(competitor.rating - businessProfile.rating).toFixed(1)} stars higher`
+                    : null,
+                review_count_advantage:
+                  competitor.reviews > businessProfile.user_ratings_total
+                    ? `${competitor.reviews - businessProfile.user_ratings_total} more reviews`
+                    : null,
+                ranking_advantage:
+                  competitor.average_position <
+                  (serpAnalysis.rankings_summary?.average_map_pack_position || 10)
+                    ? `Ranks ${Math.round(
+                        (serpAnalysis.rankings_summary?.average_map_pack_position || 10) -
+                          competitor.average_position,
+                      )} positions higher`
+                    : null,
+                estimated_monthly_revenue_advantage:
+                  competitor.average_position <
+                  (serpAnalysis.rankings_summary?.average_map_pack_position || 10)
+                    ? `$${Math.round(
+                        ((serpAnalysis.rankings_summary?.average_map_pack_position || 10) -
+                          competitor.average_position) *
+                          400,
+                      )} more per month`
+                    : null,
+              }))
+          : [],
+        industry_benchmarks: {
+          average_rating_in_industry: industry === 'restaurant' ? 4.2 : 4.1,
+          your_rating_vs_industry: businessProfile.rating
+            ? businessProfile.rating >= 4.2
+              ? 'Above average'
+              : 'Below average'
+            : 'No rating',
+          average_reviews_in_industry: industry === 'restaurant' ? 150 : 120,
+          your_reviews_vs_industry: businessProfile.user_ratings_total
+            ? businessProfile.user_ratings_total >= 150
+              ? 'Above average'
+              : 'Below average'
+            : 'No reviews',
+          top_25_percent_rating: industry === 'restaurant' ? 4.5 : 4.4,
+          gap_to_top_quartile: businessProfile.rating
+            ? Math.max(0, (industry === 'restaurant' ? 4.5 : 4.4) - businessProfile.rating)
+            : 0,
+          businesses_outperforming_you: serpAnalysis?.competitors
+            ? serpAnalysis.competitors.filter(
+                (c) => c.type === 'local' && c.rating > businessProfile.rating,
+              ).length
+            : 0,
+        },
+        urgent_issues: [
+          ...(businessProfile.rating < 4.0
+            ? [
+                {
+                  severity: 'critical',
+                  issue: 'Low rating crisis',
+                  impact: 'Losing 60% of potential customers',
+                  urgency: 'Fix immediately - every day costs $200+ in lost revenue',
+                },
+              ]
+            : []),
+          ...(businessProfile.user_ratings_total < 50
+            ? [
+                {
+                  severity: 'high',
+                  issue: 'Insufficient social proof',
+                  impact: 'Customers choosing competitors with more reviews',
+                  urgency: 'Need 20+ reviews this month to stay competitive',
+                },
+              ]
+            : []),
+          ...((serpAnalysis?.rankings_summary?.map_pack_appearances || 0) === 0
+            ? [
+                {
+                  severity: 'critical',
+                  issue: 'Invisible in local search',
+                  impact: 'Missing 100% of local search traffic',
+                  urgency: 'Competitors are capturing your customers daily',
+                },
+              ]
+            : []),
+          ...(scoringResult.summaryScore < 60
+            ? [
+                {
+                  severity: 'high',
+                  issue: 'Poor overall digital presence',
+                  impact: 'Losing market share to better-optimized competitors',
+                  urgency: 'Every week delayed = more customers lost permanently',
+                },
+              ]
+            : []),
+        ],
+        growth_opportunities: [
+          {
+            opportunity: 'Capture competitor traffic',
+            potential_impact: serpAnalysis?.competitors
+              ? `${Math.round(
+                  serpAnalysis.competitors.filter((c) => c.type === 'local').length * 150,
+                )} additional monthly customers`
+              : '300 additional monthly customers',
+            action_needed: 'Improve local SEO rankings',
+            timeline: '2-3 months',
+            investment_required: '$500-1500/month',
+            roi_estimate: '300-500%',
+          },
+          {
+            opportunity: 'Review generation campaign',
+            potential_impact: `Increase conversion rate by ${
+              businessProfile.user_ratings_total < 100 ? '25-40%' : '15-20%'
+            }`,
+            action_needed: 'Systematic review collection',
+            timeline: '1-2 months',
+            investment_required: '$200-400/month',
+            roi_estimate: '400-600%',
+          },
+          {
+            opportunity: 'Website optimization',
+            potential_impact: websiteAnalysis
+              ? `Improve conversion rate by ${scoringResult.uxScore < 70 ? '30-50%' : '15-25%'}`
+              : 'Create professional website',
+            action_needed: websiteAnalysis ? 'Fix website issues' : 'Build optimized website',
+            timeline: '1-3 months',
+            investment_required: '$1000-3000',
+            roi_estimate: '200-400%',
+          },
+          {
+            opportunity: 'Social media presence',
+            potential_impact: 'Increase brand awareness by 40-60%',
+            action_needed: 'Active social media management',
+            timeline: 'Ongoing',
+            investment_required: '$300-600/month',
+            roi_estimate: '150-300%',
+          },
+        ],
+      },
 
       // Metadata
       analysis_metadata: {

@@ -423,7 +423,8 @@ export class WebsiteAnalysisService {
         // Check for testimonials or reviews
         const testimonialElements = Array.from(document.querySelectorAll('*')).filter((el) => {
           const text = el.textContent.toLowerCase();
-          const className = el.className.toLowerCase();
+          const className =
+            el.className && typeof el.className === 'string' ? el.className.toLowerCase() : '';
           return (
             text.includes('testimonial') ||
             text.includes('review') ||
@@ -435,7 +436,8 @@ export class WebsiteAnalysisService {
         // Check for FAQ sections
         const faqElements = Array.from(document.querySelectorAll('*')).filter((el) => {
           const text = el.textContent.toLowerCase();
-          const className = el.className.toLowerCase();
+          const className =
+            el.className && typeof el.className === 'string' ? el.className.toLowerCase() : '';
           return (
             text.includes('faq') ||
             text.includes('frequently asked') ||

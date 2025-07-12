@@ -139,11 +139,36 @@ export class SerpAnalysisService {
         api_key: this.API_KEY,
       };
 
+      console.log('📊 SerpAPI request params:', {
+        ...searchParams,
+        api_key: this.API_KEY ? '***masked***' : 'NOT_SET',
+      });
+
       const response = await getJson(searchParams);
+
+      console.log('📊 SerpAPI raw response:', {
+        hasResponse: !!response,
+        status: response?.search_metadata?.status,
+        error: response?.error,
+        organic_count: response?.organic_results?.length || 0,
+        local_count: response?.local_results?.length || 0,
+      });
 
       if (!response) {
         throw new Error('No response from SerpAPI');
       }
+
+      // Check for SerpAPI errors
+      if (response.error) {
+        throw new Error(`SerpAPI error: ${response.error}`);
+      }
+
+      console.log(`📊 SerpAPI response for "${keyword}":`, {
+        status: response.search_metadata?.status,
+        organic_results_count: response.organic_results?.length || 0,
+        local_results_count: response.local_results?.length || 0,
+        error: response.error,
+      });
 
       // Extract organic results
       const organicResults = response.organic_results || [];
